@@ -1,35 +1,30 @@
-import { build } from "bun";
+import { mkdirSync, existsSync } from "node:fs";
 
-const result = await build({
-  entrypoints: ["./src/index.ts"],
-  outdir: "./dist",
-  naming: "[name]",
-  target: "bun",
-  minify: true,
-  sourcemap: "external",
+const OUTDIR = "./dist";
+if (!existsSync(OUTDIR)) mkdirSync(OUTDIR);
+
+const proc = Bun.spawn([
+  "bun",
+  "build",
+  "--compile",
+  "--minify",
+  "--sourcemap=external",
+  "--target=bun",
+  "--outfile=./voice-mvp-api",
+  "./src/index.ts",
+], {
+  cwd: import.meta.dir,
+  stdout: "inherit",
+  stderr: "inherit",
 });
 
-if (!result.success) {
-  console.error("构建失败：");
-  for (const log of result.logs) {
-    console.error(log);
-  }
-  process.exit(1);
+const exitCode = await proc.exited;
+
+if (exitCode !== 0) {
+  console.error(`\n❌ 构建失败 (exit code: ${exitCode})`);
+  process.exit(exitCode);
 }
 
-console.info("构建产物：");
-for (const artifact of result.outputs) {
-  console.info(`  ${artifact.path} (${(artifact.size / 1024).toFixed(1)} KB)`);
-}
-
-const compileResult = Bun.write(
-  "./voice-mvp-api",
-  Bun.file(result.outputs[0].path),
-);
-
-await compileResult;
-
-const { chmod } = await import("node:fs/promises");
-await chmod("./voice-mvp-api", 0o755);
-
-console.info("\n✅ 单可执行文件已生成: ./voice-mvp-api");
+const { statSync } = await import("node:fs");
+const size = statSync("./voice-mvp-api").size;
+console.info(`\n✅ 单可执行文件已生成: ./voice-mvp-api (${(size / 1024 / 1024).toFixed(1)} MB)`);

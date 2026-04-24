@@ -104,11 +104,11 @@ function envBool(key: string, fallback: boolean): boolean {
 export function loadConfig(): AppConfig {
   const file = readConfigFile();
 
-  const server = file?.server ?? {};
-  const database = file?.database ?? {};
-  const minio = file?.minio ?? {};
-  const qwen = file?.qwen ?? {};
-  const cookie = file?.cookie ?? {};
+  const server: Partial<AppConfig["server"]> = file?.server ?? {};
+  const database: Partial<AppConfig["database"]> = file?.database ?? {};
+  const minio: Partial<AppConfig["minio"]> = file?.minio ?? {};
+  const qwen: Partial<AppConfig["qwen"]> = file?.qwen ?? {};
+  const cookie: Partial<AppConfig["cookie"]> = file?.cookie ?? {};
 
   const config: AppConfig = {
     server: {
@@ -148,7 +148,10 @@ export function loadConfig(): AppConfig {
 }
 
 export function buildDatabaseUrl(cfg: AppConfig["database"]): string {
-  return `postgresql://${cfg.user}:${cfg.password}@${cfg.host}:${cfg.port}/${cfg.name}?schema=${cfg.schema}`;
+  // 对用户名和密码做 URL 编码，防止 # $ ! @ : 等特殊字符破坏连接字符串解析
+  const user = encodeURIComponent(cfg.user);
+  const password = encodeURIComponent(cfg.password);
+  return `postgresql://${user}:${password}@${cfg.host}:${cfg.port}/${cfg.name}?schema=${cfg.schema}`;
 }
 
 export function ensureLogDir(logDir: string): void {
