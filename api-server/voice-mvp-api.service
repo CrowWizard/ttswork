@@ -1,0 +1,26 @@
+[Unit]
+Description=Voice MVP API Server (Bun)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=voice-mvp
+Group=voice-mvp
+WorkingDirectory=/opt/voice-mvp
+ExecStart=/opt/voice-mvp/voice-mvp-api
+Environment=CONFIG_PATH=/opt/voice-mvp/config.yaml
+Environment=NODE_ENV=production
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=voice-mvp-api
+
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

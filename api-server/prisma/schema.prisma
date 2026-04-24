@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EnrollmentStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum TtsJobStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+model AnonymousUser {
+  id                      String            @id
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  activeVoiceEnrollmentId String?           @unique
+  activeVoiceEnrollment   VoiceEnrollment?  @relation("ActiveVoice", fields: [activeVoiceEnrollmentId], references: [id])
+  voiceEnrollments        VoiceEnrollment[] @relation("UserVoiceEnrollments")
+  ttsJobs                 TtsJob[]
+}
+
+model VoiceEnrollment {
+  id                String           @id @default(cuid())
+  userId            String
+  status            EnrollmentStatus @default(PENDING)
+  durationSeconds   Float
+  originalFilename  String?
+  inputContentType  String
+  voiceId           String?          @unique
+  errorMessage      String?
+  isInvalidated     Boolean          @default(false)
+  bucket            String
+  objectKey         String
+  minioUri          String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  user              AnonymousUser    @relation("UserVoiceEnrollments", fields: [userId], references: [id], onDelete: Cascade)
+  activatedByUsers  AnonymousUser[]  @relation("ActiveVoice")
+  ttsJobs           TtsJob[]
+
+  @@index([userId, createdAt])
+}
+
+model TtsJob {
+  id               String       @id @default(cuid())
+  userId           String
+  voiceEnrollmentId String
+  voiceIdSnapshot  String
+  text             String
+  status           TtsJobStatus @default(PENDING)
+  outputContentType String?
+  errorMessage     String?
+  bucket           String?
+  objectKey        String?
+  minioUri         String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  user             AnonymousUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voiceEnrollment  VoiceEnrollment @relation(fields: [voiceEnrollmentId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+}

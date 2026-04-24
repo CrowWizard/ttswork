@@ -1,0 +1,30 @@
+server:
+  port: 3001
+  logLevel: "info"
+  logDir: "/var/log/voice-mvp"
+
+database:
+  host: "127.0.0.1"
+  port: 5432
+  name: "voice_mvp"
+  user: "voice_mvp"
+  password: "your_password"
+  schema: "public"
+
+minio:
+  endpoint: "127.0.0.1"
+  port: 9000
+  useSSL: false
+  accessKey: "minioadmin"
+  secretKey: "minioadmin"
+  bucket: "voice-mvp"
+
+qwen:
+  mockMode: true
+  apiKey: ""
+  enrollUrl: ""
+  ttsUrl: ""
+
+cookie:
+  secure: false
+  maxAge: 31536000
