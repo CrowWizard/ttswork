@@ -47,3 +47,11 @@ next-env.d.ts
 # Prisma
 prisma/dev.db
 prisma/dev.db-journal
+
+# API Server 构建产物
+api-server/voice-mvp-api
+api-server/dist/
+api-server/node_modules/
+api-server/bun.lockb
+api-server/config.yaml
+api-server/index.js.map

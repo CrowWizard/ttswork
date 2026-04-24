@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { loadConfig, buildDatabaseUrl, ensureLogDir } from "./lib/config";
-import { prisma } from "./lib/prisma";
+import { initPrisma } from "./lib/prisma";
 import { createHealthRoutes } from "./routes/health";
 import { createVoiceProfileRoutes } from "./routes/voice-profile";
 import { createVoiceEnrollRoutes } from "./routes/voice-enroll";
@@ -18,7 +18,8 @@ console.info(`[config] minio=${cfg.minio.endpoint}:${cfg.minio.port}/${cfg.minio
 console.info(`[config] qwen.mockMode=${cfg.qwen.mockMode}`);
 console.info(`[config] log.dir=${cfg.server.logDir}`);
 
-process.env.DATABASE_URL = buildDatabaseUrl(cfg.database);
+// 先设置 DATABASE_URL，再初始化 PrismaClient（延迟初始化避免模块加载时序问题）
+initPrisma(buildDatabaseUrl(cfg.database));
 
 ensureLogDir(cfg.server.logDir);
 
