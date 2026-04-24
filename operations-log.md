@@ -1,0 +1,30 @@
+# operations-log
+
+- 2026-04-24 15:08 +08:00：初始化 Next.js 15 + React 19 + TypeScript + Tailwind CSS 项目骨架与基础配置。
+- 2026-04-24 15:10 +08:00：建立 Prisma 数据模型，覆盖匿名用户、建声记录、TTS 任务与 active voice 约束。
+- 2026-04-24 15:14 +08:00：实现 MinIO、Qwen Mock/Live、音频时长解析、匿名 Cookie 会话与接口层。
+- 2026-04-24 15:18 +08:00：实现单页前端录音与 TTS 工作台，并补充 README、.env.example、docker-compose.yml。
+- 2026-04-24 15:24 +08:00：修复 ESLint 配置告警与 Next typedRoutes 配置迁移，重新执行 Prisma generate、lint、typecheck、build。
+- 2026-04-24 15:25 +08:00：尝试启动 docker compose 进行本地依赖联调，但当前环境未安装 docker，已记录为验证限制。
+- 2026-04-24 15:32 +08:00：改为复用本机 PostgreSQL 与 MinIO；创建项目数据库角色与数据库、同步 Prisma schema，并将 README 调整为本机服务优先。
+- 2026-04-24 15:34 +08:00：基于本机 PostgreSQL + MinIO 完成健康检查与端到端联调，验证建声、active voice、TTS 与下载链路可用。
+- 2026-04-24 16:34 +08:00：实现录音真实时长判定、active voice 回放与作废、VoiceEnrollment 作废标记、TTS 防御性校验，并同步更新 README。
+- 2026-04-24 16:42 +08:00：补强回放与作废接口约束，只允许操作当前启用声纹；修复 mock voiceId 唯一性冲突，并完成作废后阻断回放/TTS 的本机回归验证。
+- 2026-04-24 16:55 +08:00：修正 Qwen 声音复刻请求结构，切换 enrollment 模型名为 `qwen-voice-enrollment`，并统一 `target_model` / TTS 模型为 `qwen3-tts-vc-2026-01-22`；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 17:10 +08:00：为 Qwen 建声请求补充 `preferred_name`，当前无用户名时使用 `voice-${Date.now()}` 生成时间戳命名；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 17:14 +08:00：为 `liveEnrollVoice` 增加建声请求与响应日志，打印请求地址、目标模型、preferred_name 及截断后的音频 data 摘要，避免日志被完整 base64 音频淹没；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 17:21 +08:00：新增 `.vscode/launch.json`，提供 Next.js 服务端、浏览器与全栈三套 VSCode 调试配置，便于本地断点排查接口与页面逻辑。
+- 2026-04-24 17:28 +08:00：排查 VSCode 服务端断点不可用问题，确认后台已有非调试 Next 进程占用 3000 端口并停止；将 `.vscode/launch.json` 的服务端/全栈调试改为 `node` 直启 `next/dist/bin/next`，补充 `envFile`、`skipFiles` 与 `autoAttachChildProcesses`，提升 `lib/qwen.ts` 等服务端源码断点命中稳定性。
+- 2026-04-24 17:30 +08:00：修复 VSCode `node` 调试参数误配问题，将 `launch.json` 中 Next.js 服务端/全栈配置的 `runtimeArgs: ["dev"]` 更正为 `args: ["dev"]`，避免 Node 将 `dev` 误识别为脚本路径导致 `MODULE_NOT_FOUND`。
+- 2026-04-24 17:34 +08:00：按页面精简需求移除前端“最近建声记录”展示区块，仅调整 `components/voice-studio.tsx` 的渲染层，不改动建声数据获取与后端接口。
+- 2026-04-24 17:52 +08:00：为 Qwen 建声与 TTS 请求新增服务端 `curl` 日志输出，使用 `$QWEN_API_KEY` 占位避免泄露密钥；同时在录音按钮上方增加前端实时说话时长显示，便于对照 5 秒门槛；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 17:58 +08:00：将录音最小时长门槛从 5 秒调整为 10 秒，前后端统一改为按“按住录音按钮的实际计时”校验并入库，不再依赖 Blob 媒体时长解析；同时将 Qwen 建声与 TTS 失败的对外提示统一收敛为“接口繁忙”；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 18:01 +08:00：将录音最小时长恢复为 5 秒；优化录音按钮交互，松开后立即进入“上传并建立声纹中...”禁用态，并持续到服务端返回结果，避免 `MediaRecorder.onstop` 异步间隙触发重复点击；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 18:03 +08:00：移除 Qwen 建声与 TTS 的 `curl` 日志输出，避免控制台噪声；同时将建声请求中的 `preferred_name` 固定为 `guanyu`；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 18:10 +08:00：新增音频 MIME 白名单，仅允许 `audio/wav`、`audio/mpeg`、`audio/mp4`；前端录音仅尝试这三种 MediaRecorder 输出，后端与 Qwen 建声侧同步校验并按对应扩展名入库，确保上传内容符合 `data:<mediatype>;base64,<data>` 格式约束；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 18:16 +08:00：前端建声区新增 MP3 文件上传入口，选中文件后先读取音频时长并复用现有建声接口提交；上传期间按钮保持禁用并显示“上传并建立声纹中...”，页面文案同步更新为支持录音与 MP3 上传；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 18:18 +08:00：按需求撤回 MP3 文件上传入口，前端建声重新收敛为录音流程；录音 MIME 改为仅接受 `audio/mpeg`，从页面侧直接生成并上传 MP3，若浏览器不支持 `MediaRecorder(audio/mpeg)` 则直接提示更换浏览器；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 18:24 +08:00：按需求恢复前端录音的兼容优先策略，优先使用 `audio/webm;codecs=opus` / `audio/webm` / `audio/mp4` 录制；录音结束后在浏览器端解码并转成 `audio/wav` 再上传，确保服务端收到的建声文件统一为 WAV，同时不再强制浏览器原生录制 MP3；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 18:48 +08:00：修复 Qwen TTS 播放链路，识别到接口当前返回 `application/json` 包裹的音频元数据而非直接音频字节；改为在服务端先解析 JSON，再从 `output.audio.url` 或 `output.audio.data` 拉取/解码真实音频并按实际 `content-type` 入库，避免前端 `<audio>` 读取到 JSON 假文件导致无法播放；本地执行 `npm run typecheck` 通过。
+- 2026-04-24 19:30 +08:00：实现前后端分离部署架构。API 层从 Next.js Route Handlers 提取为独立 Hono + Bun 应用（`api-server/`），编译为单可执行文件 `voice-mvp-api`（96MB）；前端配置 `output: "export"` 导出纯静态文件（852KB），可由 Nginx/CDN 托管。移除 Next.js 项目中的 `app/api/` 目录（API 已迁至 `api-server/`）。附赠 Nginx 反代配置示例。
+- 2026-04-24 19:35 +08:00：添加 Makefile（dev/build/install/clean 一键操作）、更新 .vscode 调试配置适配前后端分离（含 Bun API 调试 + 全栈联合调试）、创建 systemd service 文件和部署脚本 deploy.sh。API 全量配置外部化：支持 YAML 配置文件（`config.yaml`）+ 环境变量覆盖，搜索路径为 `CONFIG_PATH` 环境变量 → `./config.yaml` → `./config.yml` → `/etc/voice-mvp/config.yaml`，覆盖端口/数据库/MinIO/Qwen/Cookie/日志目录。确认 Rocky 9 编译产物依赖 GLIBC 2.25，CentOS 7（GLIBC 2.17）需在目标机器上重新编译。
