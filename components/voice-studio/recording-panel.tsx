@@ -24,21 +24,25 @@ function RecordingElapsedStatus({ recording, recordStartedAt }: { recording: boo
 
 function TaskHintList() {
   return (
-    <div className="grid gap-3 text-sm text-text-secondary sm:grid-cols-3">
-      <div className="rounded-xl border border-border-subtle bg-surface-muted p-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 1</div>
-        <div className="mt-1 font-medium text-text-primary">录一段清晰语音</div>
-        <p className="mt-1 leading-5">保持环境安静，说满 {MIN_RECORD_SECONDS} 秒后松开按钮。</p>
-      </div>
-      <div className="rounded-xl border border-border-subtle bg-surface-muted p-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 2</div>
-        <div className="mt-1 font-medium text-text-primary">确认 active voice</div>
-        <p className="mt-1 leading-5">建声成功后先回放，确认音色可用再继续合成。</p>
-      </div>
-      <div className="rounded-xl border border-border-subtle bg-surface-muted p-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 3</div>
-        <div className="mt-1 font-medium text-text-primary">输入文本生成</div>
-        <p className="mt-1 leading-5">建议先用短句测试，再生成较长内容。</p>
+    <div>
+      <div className="rounded-xl border border-border-subtle bg-surface-muted sm:grid sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 sm:grid-cols-3">
+        <div className="p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 1</div>
+          <div className="mt-1 font-medium text-text-primary">录一段清晰语音</div>
+          <p className="mt-1 leading-5">保持环境安静，说满 {MIN_RECORD_SECONDS} 秒后松开按钮。</p>
+        </div>
+
+        <div className="border-t border-border-subtle p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 2</div>
+          <div className="mt-1 font-medium text-text-primary">确认 active voice</div>
+          <p className="mt-1 leading-5">建声成功后先回放，确认音色可用再继续合成。</p>
+        </div>
+
+        <div className="border-t border-border-subtle p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 3</div>
+          <div className="mt-1 font-medium text-text-primary">输入文本生成</div>
+          <p className="mt-1 leading-5">建议先用短句测试，再生成较长内容。</p>
+        </div>
       </div>
     </div>
   );

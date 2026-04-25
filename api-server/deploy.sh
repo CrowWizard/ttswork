@@ -63,13 +63,44 @@ sync_database() {
     (
       cd "$SOURCE_DIR" &&
       DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<'SQL'
-ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "tokenHash" TEXT;
-ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3);
-ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'AnonymousUser'
+      AND column_name = 'tokenHash'
+  ) THEN
+    ALTER TABLE "AnonymousUser" ADD COLUMN "tokenHash" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'AnonymousUser'
+      AND column_name = 'expiresAt'
+  ) THEN
+    ALTER TABLE "AnonymousUser" ADD COLUMN "expiresAt" TIMESTAMP(3);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'AnonymousUser'
+      AND column_name = 'lastSeenAt'
+  ) THEN
+    ALTER TABLE "AnonymousUser"
+      ADD COLUMN "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  END IF;
+END
+$$;
 SQL
     ) || {
       echo "  ❌ AnonymousUser 补列失败，已中止后续 prisma db push"
-      echo "  请先确认数据库连接、表存在性与 ALTER TABLE 权限"
+      echo "  请先确认数据库连接、表存在性、schema 指向与 ALTER TABLE 权限"
       return 1
     }
 
