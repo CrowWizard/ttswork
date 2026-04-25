@@ -62,6 +62,17 @@ function buildTemplateParam(cfg: AppConfig) {
 }
 
 function createSmsClient(cfg: AppConfig) {
+  const openApiDefault = (OpenApi as { default?: unknown }).default;
+
+  console.info(
+    `[sms] sdk.inspect ` +
+    `OpenApi.Config=${typeof OpenApi.Config} ` +
+    `OpenApi.default=${typeof openApiDefault} ` +
+    `OpenApi.default.Config=${typeof (openApiDefault as { Config?: unknown } | undefined)?.Config} ` +
+    `Dypnsapi=${typeof Dypnsapi}`,
+  );
+  console.info(`[sms] sdk.keys openapi=${Object.keys(OpenApi).join(",")}`);
+
   const openApiConfig = new OpenApi.Config({
     accessKeyId: cfg.sms.accessKeyId,
     accessKeySecret: cfg.sms.accessKeySecret,
