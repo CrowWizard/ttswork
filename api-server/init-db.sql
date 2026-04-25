@@ -34,11 +34,15 @@ CREATE TYPE "TtsJobStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
 -- 5. 创建表（无外键约束，关联关系由应用层保证）
 CREATE TABLE IF NOT EXISTS "AnonymousUser" (
     "id" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "activeVoiceEnrollmentId" TEXT,
 
     CONSTRAINT "AnonymousUser_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "AnonymousUser_tokenHash_key" UNIQUE ("tokenHash"),
     CONSTRAINT "AnonymousUser_activeVoiceEnrollmentId_key" UNIQUE ("activeVoiceEnrollmentId")
 );
 
@@ -81,6 +85,9 @@ CREATE TABLE IF NOT EXISTS "TtsJob" (
 );
 
 -- 6. 创建索引
+CREATE INDEX IF NOT EXISTS "AnonymousUser_expiresAt_idx"
+    ON "AnonymousUser"("expiresAt");
+
 CREATE INDEX IF NOT EXISTS "VoiceEnrollment_userId_createdAt_idx"
     ON "VoiceEnrollment"("userId", "createdAt");
 
