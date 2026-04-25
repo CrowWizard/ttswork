@@ -8,15 +8,6 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/voice-mvp}"
 BACKUP_DIR="${BACKUP_DIR:-/opt/voice-mvp-backups}"
 FRONTEND_OUTPUT_DIR="${FRONTEND_OUTPUT_DIR:-/var/www/voice-mvp}"
 
-run_bun_install() {
-  if [ "${STRICT_LOCKFILE:-false}" = "true" ]; then
-    bun install --frozen-lockfile
-    return
-  fi
-
-  bun install
-}
-
 echo "=== Voice MVP 自动更新脚本 ==="
 
 if ! command -v git &>/dev/null; then
@@ -35,10 +26,18 @@ echo "[1/7] 拉取最新代码"
 git pull --ff-only
 
 echo "[2/7] 安装前端依赖"
-run_bun_install
+if [ "${STRICT_LOCKFILE:-false}" = "true" ]; then
+  bun install --frozen-lockfile
+else
+  bun install
+fi
 
 echo "[3/7] 安装 API 依赖"
-(cd "$API_DIR" && run_bun_install)
+if [ "${STRICT_LOCKFILE:-false}" = "true" ]; then
+  (cd "$API_DIR" && bun install --frozen-lockfile)
+else
+  (cd "$API_DIR" && bun install)
+fi
 
 echo "[4/7] 生成 Prisma Client"
 bunx prisma generate
