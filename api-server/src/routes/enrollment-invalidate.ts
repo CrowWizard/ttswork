@@ -1,26 +1,28 @@
 import { Hono } from "hono";
 import type { AppConfig } from "../lib/config";
+import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { prisma } from "../lib/prisma";
-import { ensureAnonymousUserCookie } from "../lib/session";
-import { ensureAnonymousUserRecord } from "../lib/user";
 
 export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
   const enrollmentInvalidate = new Hono();
 
   enrollmentInvalidate.post("/:enrollmentId/invalidate", async (c) => {
-    const userId = await ensureAnonymousUserCookie(c, cfg.cookie);
-    await ensureAnonymousUserRecord(userId);
+    const currentUser = await requireCurrentUser(c, cfg);
+
+    if (!currentUser) {
+      return unauthorizedResponse(c);
+    }
 
     const enrollmentId = c.req.param("enrollmentId");
     const enrollment = await prisma.voiceEnrollment.findFirst({
       where: {
         id: enrollmentId,
-        userId,
+        userId: currentUser.id,
       },
     });
-    const user = await prisma.anonymousUser.findUnique({
-      where: { id: userId },
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
       select: { activeVoiceEnrollmentId: true },
     });
 
@@ -33,9 +35,9 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
     }
 
     if (enrollment.isInvalidated) {
-      await prisma.anonymousUser.updateMany({
+      await prisma.user.updateMany({
         where: {
-          id: userId,
+          id: currentUser.id,
           activeVoiceEnrollmentId: enrollment.id,
         },
         data: {
@@ -60,9 +62,9 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
         data: { isInvalidated: true },
       });
 
-      await tx.anonymousUser.updateMany({
+      await tx.user.updateMany({
         where: {
-          id: userId,
+          id: currentUser.id,
           activeVoiceEnrollmentId: enrollment.id,
         },
         data: {

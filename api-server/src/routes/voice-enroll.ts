@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { EnrollmentStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
+import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
 import { isRecordDurationAccepted } from "../lib/audio";
 import { getAudioExtension, isSupportedAudioMimeType, normalizeSupportedAudioMimeType } from "../lib/audio-format";
 import { errorResponse } from "../lib/http";
@@ -9,15 +10,16 @@ import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } 
 import { uploadBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
 import { enrollVoice } from "../lib/qwen";
-import { ensureAnonymousUserCookie } from "../lib/session";
-import { ensureAnonymousUserRecord } from "../lib/user";
 
 export function createVoiceEnrollRoutes(cfg: AppConfig) {
   const voiceEnroll = new Hono();
 
   voiceEnroll.post("/", async (c) => {
-    const userId = await ensureAnonymousUserCookie(c, cfg.cookie);
-    await ensureAnonymousUserRecord(userId);
+    const currentUser = await requireCurrentUser(c, cfg);
+
+    if (!currentUser) {
+      return unauthorizedResponse(c);
+    }
 
     const formData = await c.req.formData();
     const audioFile = formData.get(INPUT_AUDIO_FIELD);
@@ -35,7 +37,7 @@ export function createVoiceEnrollRoutes(cfg: AppConfig) {
     const mimeType = normalizeSupportedAudioMimeType(rawMimeType);
 
     console.info("[voice enroll] received file", {
-      userId,
+      userId: currentUser.id,
       name: audioFile.name,
       type: audioFile.type,
       normalizedMimeType: mimeType,
@@ -45,7 +47,7 @@ export function createVoiceEnrollRoutes(cfg: AppConfig) {
 
     if (!isSupportedAudioMimeType(rawMimeType)) {
       console.warn("[voice enroll] unsupported mime type", {
-        userId,
+        userId: currentUser.id,
         name: audioFile.name,
         type: audioFile.type,
         normalizedMimeType: mimeType,
@@ -63,7 +65,7 @@ export function createVoiceEnrollRoutes(cfg: AppConfig) {
     }
 
     const extension = getAudioExtension(mimeType);
-    const inputObjectKey = `voices/${userId}/${Date.now()}-${randomUUID()}.${extension}`;
+    const inputObjectKey = `voices/${currentUser.id}/${Date.now()}-${randomUUID()}.${extension}`;
     const storedInput = await uploadBuffer(cfg.minio, {
       objectKey: inputObjectKey,
       buffer: audioBuffer,
@@ -72,7 +74,7 @@ export function createVoiceEnrollRoutes(cfg: AppConfig) {
 
     const enrollment = await prisma.voiceEnrollment.create({
       data: {
-        userId,
+        userId: currentUser.id,
         status: EnrollmentStatus.PENDING,
         durationSeconds,
         originalFilename: audioFile.name,
@@ -96,8 +98,8 @@ export function createVoiceEnrollRoutes(cfg: AppConfig) {
           },
         });
 
-        await tx.anonymousUser.update({
-          where: { id: userId },
+        await tx.user.update({
+          where: { id: currentUser.id },
           data: {
             activeVoiceEnrollmentId: readyEnrollment.id,
           },

@@ -10,8 +10,12 @@
     "prisma:push": "bunx prisma db push"
   },
   "dependencies": {
-    "@prisma/client": "^7.8.0",
+    "@alicloud/dypnsapi20170525": "^2.0.0",
+    "@alicloud/openapi-client": "^0.4.15",
+    "@alicloud/tea-util": "^1.4.11",
     "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "dotenv": "^16.6.1",
     "hono": "^4.7.9",
     "minio": "^8.0.6",
     "yaml": "^2.8.3",

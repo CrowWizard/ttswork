@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse as parseDotenv } from "dotenv";
 import { defineConfig } from "prisma/config";
 
 type DatabaseConfig = {
@@ -10,6 +12,33 @@ type DatabaseConfig = {
   password?: string;
   schema?: string;
 };
+
+const API_SERVER_DIR = fileURLToPath(new URL(".", import.meta.url));
+
+function loadEnvFiles() {
+  const candidates = [resolve(API_SERVER_DIR, "../.env"), resolve(API_SERVER_DIR, ".env")];
+  const mergedEnv: Record<string, string> = {};
+  const loadedPaths: string[] = [];
+
+  for (const envPath of candidates) {
+    if (!existsSync(envPath)) {
+      continue;
+    }
+
+    Object.assign(mergedEnv, parseDotenv(readFileSync(envPath, "utf-8")));
+    loadedPaths.push(envPath);
+  }
+
+  for (const [key, value] of Object.entries(mergedEnv)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+
+  return loadedPaths;
+}
+
+const loadedEnvPaths = loadEnvFiles();
 
 function findConfigPath() {
   const paths = [
@@ -85,6 +114,10 @@ function buildDatabaseUrl() {
 }
 
 const databaseUrl = buildDatabaseUrl();
+
+console.info(
+  `[prisma-config] cwd=${process.cwd()} envFiles=${loadedEnvPaths.join(",") || "none"} configFile=${findConfigPath() ?? "none"} dbHost=${process.env.DB_HOST ?? readDatabaseConfig().host ?? "127.0.0.1"} dbName=${process.env.DB_NAME ?? readDatabaseConfig().name ?? "voice_mvp"} dbUser=${process.env.DB_USER ?? readDatabaseConfig().user ?? "voice_mvp"} dbPasswordSet=${Boolean(process.env.DB_PASSWORD ?? readDatabaseConfig().password)}`,
+);
 
 export default defineConfig({
   schema: "prisma/schema.prisma",

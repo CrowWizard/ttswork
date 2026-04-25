@@ -40,3 +40,26 @@
 - 2026-04-25 12:12 +08:00：修复服务器执行 Prisma 命令时 `/opt/ttswork/prisma.config.ts` 因缺少 `DATABASE_URL` 加载失败的问题；根项目与 API 的 `prisma.config.ts` 现在优先使用环境变量，其次从 `CONFIG_PATH`、当前目录、`api-server/config.yaml`、`/opt/voice-mvp/config.yaml`、`/etc/voice-mvp/config.yaml` 读取 `database` 段并组合 PostgreSQL 连接串；为避免根项目额外依赖，配置文件使用轻量 YAML database 段解析；本地执行根项目/API 的 `bunx prisma generate` 与 typecheck 通过。
 - 2026-04-25 12:14 +08:00：修复 `update.sh` 在 `set -u` 下执行空数组展开导致 `BUN_INSTALL_ARGS[@]: unbound variable` 的问题，改为 `run_bun_install` 函数按 `STRICT_LOCKFILE=true` 显式选择是否追加 `--frozen-lockfile`；本地执行脚本语法检查通过。
 - 2026-04-25 12:16 +08:00：进一步消除 `update.sh` 中可能触发旧 Bash/子 shell 行为差异的安装封装函数，改为在前端和 API 依赖安装处直接用 `if [ "${STRICT_LOCKFILE:-false}" = "true" ]` 内联选择 `bun install` 或 `bun install --frozen-lockfile`；本地确认脚本中已无 `BUN_INSTALL_ARGS` 与 `run_bun_install` 残留，语法检查通过。
+- 2026-04-25 12:26 +08:00：修复 Prisma 7 执行 `db push` 时不再支持 `--skip-generate` 导致的 `unknown or unexpected option` 报错；部署脚本数据库同步命令与手动提示均改为 `bunx prisma db push --accept-data-loss`；本地执行脚本语法检查并用 `bunx prisma db push --help` 确认参数兼容。
+- 2026-04-25 13:54 +08:00：按手机号账号方案重构后端基础设施：Prisma 主体从 `AnonymousUser` 切换为 `User + Session + SmsVerification`，新增会话 Cookie、密码哈希、阿里云短信 `mock/live` 双实现与 `/api/auth/*` 路由，并将语音/TTS 业务接口统一改为显式登录态校验；同步更新 `.env.example`、`api-server/config.example.yaml` 与 README 的认证配置说明。
+- 2026-04-25 13:59 +08:00：为 `.env.example` 中新增的会话 Cookie 与阿里云短信配置逐项补充中文注释，说明默认值含义、本地/生产差异与真实密钥注意事项。
+- 2026-04-25 14:05 +08:00：为 Next.js 开发环境新增 `/api/:path*` rewrite，将前端开发服务器的 API 请求转发到 `http://127.0.0.1:3001/api/:path*`，并在生产构建中保持空 rewrite 以兼容静态导出部署。
+- 2026-04-25 14:09 +08:00：更新 VS Code 调试配置：API 调试改为读取根目录 `.env` 并通过 Bun inspector 运行 `api-server/src/index.ts`，全栈调试改为 compound 同时启动 API 与 Next dev，浏览器入口统一使用 `http://127.0.0.1:3000`。
+- 2026-04-25 14:17 +08:00：简化未登录认证页面：默认只展示短信登录，移除密码登录 tab 与右侧能力介绍，在登录表单底部提供“免费注册”切换入口；注册成功继续沿用后端自动创建会话，前端直接进入已登录工作台。
+- 2026-04-25 14:21 +08:00：按“短信登录即注册”规则调整认证链路：`/api/auth/sms/send` 的登录场景允许未注册手机号发送验证码，`/api/auth/login/sms` 在验证码通过后自动 `upsert` 用户并创建会话；前端未登录页只保留单一“登录/短信登录”表单，不再展示注册入口。
+- 2026-04-25 14:26 +08:00：根据阿里云短信控制台信息更新示例配置：签名为“速通互联验证码”，模板 Code 为 `100001`，模板变量仍使用 `{"code":"##code##","min":"5"}`，登录/注册短信方案名统一为“登录/注册模板”。
+- 2026-04-25 14:48 +08:00：针对 Prisma `db push` 添加外键时报 `VoiceEnrollment_userId_fkey` 失败的问题，将 `api-server/prisma/schema.prisma` 切换为 `relationMode = "prisma"`，保留 Prisma 关系查询能力但禁止数据库层创建外键；同步更新 `api-server/drop-fk.sql`，覆盖当前 `User`、`Session`、`VoiceEnrollment`、`TtsJob` 的全部外键清理命令。
+- 2026-04-25 14:50 +08:00：修复 `relationMode = "prisma"` 下 Prisma 校验不接受 `NoAction` 的问题，将关系字段的引用动作统一调整为 `Restrict` / `Cascade` 组合，并为 `TtsJob.voiceEnrollmentId` 显式补充索引，避免失去数据库外键隐式索引后查询退化。
+- 2026-04-25 14:53 +08:00：定位到服务器是在仓库根目录执行 `bun run prisma:push`，实际读取的是根目录 `prisma/schema.prisma` 而非 `api-server/prisma/schema.prisma`；已将根目录 schema 同步切换为 `relationMode = "prisma"` 并调整引用动作与索引，避免根目录脚本继续向数据库补建外键。
+- 2026-04-25 14:58 +08:00：修复 `api-server` 对仓库根 `.env` 读取不稳定的问题：为运行时 `src/lib/config.ts` 与 `api-server/prisma.config.ts` 显式补充 `../.env` 与 `api-server/.env` 的加载逻辑，优先级为外部环境变量 > `api-server/.env` > 根目录 `.env`；同时增加脱敏配置来源日志，便于定位当前工作目录与实际命中的配置文件。
+55 - 2026-04-25 16:23 +08:00：实现首页认证与个人设置改造计划（方案A）：
+   - 扩展 Prisma SmsScene 枚举，新增 PASSWORD_CHANGE 场景
+   - 扩展 SMS 模块与配置，支持 password_change 短信场景
+   - 新增密码设置/修改的 validation schema
+   - 新增 /api/auth/password/set 与 /api/auth/password/change 接口
+   - 扩展 /api/auth/sms/send 端点，支持 password_change 场景并校验登录态
+   - 重构 VoiceStudio 组件：移除整页阻塞 authLoading，改为后台检查+局部切换；首页同时支持短信登录与用户名密码登录；添加注册链接
+   - 新增独立注册页 app/register/page.tsx，支持手机号+验证码+可选密码注册
+   - 新增个人设置页 app/settings/page.tsx，支持无密码账号设置密码、已设密码账号短信校验后修改密码
+   - 首页右上角账号区域增加“个人设置”入口
+   - 所有变更保持静态导出部署兼容，lint/typecheck/build 通过

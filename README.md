@@ -4,12 +4,13 @@
 
 这是一个基于 Next.js 15、React 19、TypeScript、Tailwind CSS、Prisma、PostgreSQL 与 MinIO 的单页语音 MVP。
 
-- 匿名用户通过 `httpOnly` Cookie 识别，无需登录。
+- 用户通过手机号注册登录，支持短信验证码与手机号密码两种登录方式。
 - 录音建声要求不少于 5 秒，前端会基于最终 Blob 读取真实时长，服务端再以 0.2 秒容差兜底校验。
 - 原始录音与 TTS 结果统一保存到 MinIO。
 - 数据库只保存稳定的 MinIO 元数据：`bucket`、`objectKey`、`minioUri`。
-- 每个匿名用户只保留一个当前 `active voice`，并支持回放与作废。
+- 每个登录用户只保留一个当前 `active voice`，并支持回放与作废。
 - `QWEN_MOCK_MODE=true` 时，无需外网即可本地完成建声与 TTS 演示。
+- `SMS_MOCK_MODE=true` 时，验证码由服务端本地模拟生成，便于本机联调。
 
 ## 技术栈
 
@@ -25,10 +26,17 @@
 ## 接口清单
 
 - `GET /api/health`
+- `POST /api/auth/sms/send`
+- `POST /api/auth/register`
+- `POST /api/auth/login/password`
+- `POST /api/auth/login/sms`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
 - `GET /api/voice/profile`
 - `POST /api/voice/enroll`
 - `GET /api/voice/enrollments/[enrollmentId]/audio`
 - `POST /api/voice/enrollments/[enrollmentId]/invalidate`
+- `GET /api/tts`
 - `POST /api/tts`
 - `GET /api/tts/[jobId]/download`
 
@@ -61,6 +69,18 @@ cp .env.example .env
 - MinIO 可通过 `.env` 中的 AK/SK 访问
 
 如果你本机尚未准备这些服务，也可以使用仓库里的 `docker-compose.yml` 作为备用方案。
+
+### 3.1 认证与短信配置
+
+- 默认 `SMS_MOCK_MODE=true`，发送验证码接口会返回 `debugCode`，方便本地直接验证注册/登录链路。
+- 需要接入真实阿里云短信时，至少补齐以下配置：
+  - `SMS_ACCESS_KEY_ID`
+  - `SMS_ACCESS_KEY_SECRET`
+  - `SMS_SIGN_NAME`
+  - `SMS_TEMPLATE_CODE`
+  - `SMS_REGISTER_SCHEME_NAME`
+  - `SMS_LOGIN_SCHEME_NAME`
+- `SMS_TEMPLATE_PARAM` 默认按 `{"code":"##code##","min":"5"}` 组织，若你的模板变量名不同，需要同步调整该配置。
 
 ### 4. 生成 Prisma Client 并同步数据库
 
@@ -139,7 +159,9 @@ bun run dev
 
 ## 数据模型摘要
 
-- `AnonymousUser`：匿名用户与当前 `activeVoiceEnrollmentId`
+- `User`：手机号账号、可选密码与当前 `activeVoiceEnrollmentId`
+- `Session`：数据库会话与 HttpOnly 登录 Cookie
+- `SmsVerification`：短信发送与校验状态追踪
 - `VoiceEnrollment`：录音建声记录、原始音频 MinIO 元数据、生成的 `voiceId`、`isInvalidated`
 - `TtsJob`：文本转语音任务、`voiceIdSnapshot`、输出音频 MinIO 元数据
 

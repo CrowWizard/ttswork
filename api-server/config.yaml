@@ -8,7 +8,7 @@ database:
   port: 5432
   name: "voice_mvp"
   user: "voice_mvp"
-  password: "your_password"
+  password: "123456"
   schema: "public"
 
 minio:
@@ -27,4 +27,26 @@ qwen:
 
 cookie:
   secure: false
-  maxAge: 31536000
+  maxAge: 2592000
+  sameSite: "Lax"
+
+auth:
+  sessionCookieName: "voice_session"
+  sessionTtlSeconds: 2592000
+  sessionTouchIntervalSeconds: 300
+
+sms:
+  mockMode: false
+  accessKeyId: ""
+  accessKeySecret: ""
+  endpoint: "dypnsapi.aliyuncs.com"
+  signName: "速通互联验证码"
+  templateCode: "100001"
+  templateParam: '{"code":"##code##","min":"5"}'
+  registerSchemeName: "register"
+  loginSchemeName: "login"
+  codeLength: 6
+  validTimeSeconds: 300
+  intervalSeconds: 60
+  codeType: 1
+  returnVerifyCode: false

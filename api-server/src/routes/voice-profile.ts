@@ -1,18 +1,20 @@
 import { Hono } from "hono";
 import type { AppConfig } from "../lib/config";
+import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
 import { prisma } from "../lib/prisma";
-import { ensureAnonymousUserCookie } from "../lib/session";
-import { ensureAnonymousUserRecord } from "../lib/user";
 
 export function createVoiceProfileRoutes(cfg: AppConfig) {
   const voiceProfile = new Hono();
 
   voiceProfile.get("/", async (c) => {
-    const userId = await ensureAnonymousUserCookie(c, cfg.cookie);
-    await ensureAnonymousUserRecord(userId);
+    const currentUser = await requireCurrentUser(c, cfg);
 
-    const profile = await prisma.anonymousUser.findUnique({
-      where: { id: userId },
+    if (!currentUser) {
+      return unauthorizedResponse(c);
+    }
+
+    const profile = await prisma.user.findUnique({
+      where: { id: currentUser.id },
       include: {
         activeVoiceEnrollment: true,
         voiceEnrollments: {
@@ -23,7 +25,7 @@ export function createVoiceProfileRoutes(cfg: AppConfig) {
     });
 
     return c.json({
-      userId,
+      userId: currentUser.id,
       activeVoice: profile?.activeVoiceEnrollment
         ? {
             id: profile.activeVoiceEnrollment.id,

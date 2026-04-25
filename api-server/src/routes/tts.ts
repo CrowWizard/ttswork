@@ -2,13 +2,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { Prisma, TtsJobStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
+import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { uploadBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
-import { ensureAnonymousUserCookie } from "../lib/session";
 import { synthesizeSpeech } from "../lib/qwen";
 import { ttsRequestSchema } from "../lib/validation";
-import { ensureAnonymousUserRecord } from "../lib/user";
 
 export function createTtsRoutes(cfg: AppConfig) {
   const tts = new Hono();
@@ -16,11 +15,14 @@ export function createTtsRoutes(cfg: AppConfig) {
   const TTS_HISTORY_LIMIT = 3;
 
   tts.get("/", async (c) => {
-    const userId = await ensureAnonymousUserCookie(c, cfg.cookie);
-    await ensureAnonymousUserRecord(userId);
+    const currentUser = await requireCurrentUser(c, cfg);
+
+    if (!currentUser) {
+      return unauthorizedResponse(c);
+    }
 
     const jobs = await prisma.ttsJob.findMany({
-      where: { userId, status: TtsJobStatus.READY },
+      where: { userId: currentUser.id, status: TtsJobStatus.READY },
       orderBy: { createdAt: "desc" },
       take: TTS_HISTORY_LIMIT,
       select: {
@@ -46,8 +48,11 @@ export function createTtsRoutes(cfg: AppConfig) {
   class ActiveVoiceChangedError extends Error {}
 
   tts.post("/", async (c) => {
-    const userId = await ensureAnonymousUserCookie(c, cfg.cookie);
-    await ensureAnonymousUserRecord(userId);
+    const currentUser = await requireCurrentUser(c, cfg);
+
+    if (!currentUser) {
+      return unauthorizedResponse(c);
+    }
 
     const body = await c.req.json().catch(() => null);
     const parsedBody = ttsRequestSchema.safeParse(body);
@@ -61,8 +66,8 @@ export function createTtsRoutes(cfg: AppConfig) {
     try {
       job = await prisma.$transaction(
         async (tx) => {
-          const user = await tx.anonymousUser.findUnique({
-            where: { id: userId },
+          const user = await tx.user.findUnique({
+            where: { id: currentUser.id },
             include: { activeVoiceEnrollment: true },
           });
 
@@ -76,11 +81,11 @@ export function createTtsRoutes(cfg: AppConfig) {
             throw new ActiveVoiceChangedError("当前 active voice 已发生变化，请重试");
           }
 
-          return tx.ttsJob.create({
-            data: {
-              userId,
-              voiceEnrollmentId: activeVoice.id,
-              voiceIdSnapshot: activeVoice.voiceId,
+            return tx.ttsJob.create({
+              data: {
+                userId: currentUser.id,
+                voiceEnrollmentId: activeVoice.id,
+                voiceIdSnapshot: activeVoice.voiceId,
               text: parsedBody.data.text,
               status: TtsJobStatus.PENDING,
             },
@@ -107,7 +112,7 @@ export function createTtsRoutes(cfg: AppConfig) {
       });
 
       const extension = qwenResult.extension || "wav";
-      const outputObjectKey = `tts/${userId}/${Date.now()}-${randomUUID()}.${extension}`;
+      const outputObjectKey = `tts/${currentUser.id}/${Date.now()}-${randomUUID()}.${extension}`;
       const storedOutput = await uploadBuffer(cfg.minio, {
         objectKey: outputObjectKey,
         buffer: qwenResult.audioBuffer,

@@ -1,5 +1,7 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parse as parseDotenv } from "dotenv";
 import { parse as parseYaml } from "yaml";
 
 export type AppConfig = {
@@ -33,10 +35,60 @@ export type AppConfig = {
   cookie: {
     secure: boolean;
     maxAge: number;
+    sameSite: "Lax" | "Strict" | "None";
+  };
+  auth: {
+    sessionCookieName: string;
+    sessionTtlSeconds: number;
+    sessionTouchIntervalSeconds: number;
+  };
+  sms: {
+    mockMode: boolean;
+    accessKeyId: string;
+    accessKeySecret: string;
+    endpoint: string;
+    signName: string;
+    templateCode: string;
+    templateParam: string;
+    registerSchemeName: string;
+    loginSchemeName: string;
+    passwordChangeSchemeName: string;
+    codeLength: number;
+    validTimeSeconds: number;
+    intervalSeconds: number;
+    codeType: number;
+    returnVerifyCode: boolean;
   };
 };
 
 import { statSync } from "node:fs";
+
+const API_SERVER_DIR = fileURLToPath(new URL("../../", import.meta.url));
+
+function loadEnvFiles(): string[] {
+  const candidates = [resolve(API_SERVER_DIR, "../.env"), resolve(API_SERVER_DIR, ".env")];
+  const loadedPaths: string[] = [];
+  const mergedEnv: Record<string, string> = {};
+
+  for (const envPath of candidates) {
+    if (!isRegularFile(envPath)) {
+      continue;
+    }
+
+    Object.assign(mergedEnv, parseDotenv(readFileSync(envPath, "utf-8")));
+    loadedPaths.push(envPath);
+  }
+
+  for (const [key, value] of Object.entries(mergedEnv)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+
+  return loadedPaths;
+}
+
+const LOADED_ENV_PATHS = loadEnvFiles();
 
 function isRegularFile(p: string): boolean {
   try {
@@ -101,6 +153,16 @@ function envBool(key: string, fallback: boolean): boolean {
   return raw === "true" || raw === "1";
 }
 
+function envSameSite(key: string, fallback: AppConfig["cookie"]["sameSite"]): AppConfig["cookie"]["sameSite"] {
+  const raw = process.env[key];
+
+  if (raw === "Strict" || raw === "None" || raw === "Lax") {
+    return raw;
+  }
+
+  return fallback;
+}
+
 export function loadConfig(): AppConfig {
   const file = readConfigFile();
 
@@ -109,6 +171,8 @@ export function loadConfig(): AppConfig {
   const minio: Partial<AppConfig["minio"]> = file?.minio ?? {};
   const qwen: Partial<AppConfig["qwen"]> = file?.qwen ?? {};
   const cookie: Partial<AppConfig["cookie"]> = file?.cookie ?? {};
+  const auth: Partial<AppConfig["auth"]> = file?.auth ?? {};
+  const sms: Partial<AppConfig["sms"]> = file?.sms ?? {};
 
   const config: AppConfig = {
     server: {
@@ -140,9 +204,43 @@ export function loadConfig(): AppConfig {
     },
     cookie: {
       secure: envBool("COOKIE_SECURE", cookie.secure ?? false),
-      maxAge: envInt("COOKIE_MAX_AGE", cookie.maxAge ?? 31536000),
+      maxAge: envInt("COOKIE_MAX_AGE", cookie.maxAge ?? auth.sessionTtlSeconds ?? 2592000),
+      sameSite: envSameSite("COOKIE_SAME_SITE", cookie.sameSite ?? "Lax"),
+    },
+    auth: {
+      sessionCookieName: envString("AUTH_SESSION_COOKIE_NAME", auth.sessionCookieName ?? "voice_session"),
+      sessionTtlSeconds: envInt("AUTH_SESSION_TTL_SECONDS", auth.sessionTtlSeconds ?? 2592000),
+      sessionTouchIntervalSeconds: envInt(
+        "AUTH_SESSION_TOUCH_INTERVAL_SECONDS",
+        auth.sessionTouchIntervalSeconds ?? 300,
+      ),
+    },
+    sms: {
+      mockMode: envBool("SMS_MOCK_MODE", sms.mockMode ?? true),
+      accessKeyId: envString("SMS_ACCESS_KEY_ID", sms.accessKeyId ?? ""),
+      accessKeySecret: envString("SMS_ACCESS_KEY_SECRET", sms.accessKeySecret ?? ""),
+      endpoint: envString("SMS_ENDPOINT", sms.endpoint ?? "dypnsapi.aliyuncs.com"),
+      signName: envString("SMS_SIGN_NAME", sms.signName ?? ""),
+      templateCode: envString("SMS_TEMPLATE_CODE", sms.templateCode ?? ""),
+      templateParam: envString("SMS_TEMPLATE_PARAM", sms.templateParam ?? ""),
+      registerSchemeName: envString("SMS_REGISTER_SCHEME_NAME", sms.registerSchemeName ?? "register"),
+      loginSchemeName: envString("SMS_LOGIN_SCHEME_NAME", sms.loginSchemeName ?? "login"),
+      passwordChangeSchemeName: envString("SMS_PASSWORD_CHANGE_SCHEME_NAME", sms.passwordChangeSchemeName ?? "password_change"),
+      codeLength: envInt("SMS_CODE_LENGTH", sms.codeLength ?? 6),
+      validTimeSeconds: envInt("SMS_VALID_TIME_SECONDS", sms.validTimeSeconds ?? 300),
+      intervalSeconds: envInt("SMS_INTERVAL_SECONDS", sms.intervalSeconds ?? 60),
+      codeType: envInt("SMS_CODE_TYPE", sms.codeType ?? 1),
+      returnVerifyCode: envBool("SMS_RETURN_VERIFY_CODE", sms.returnVerifyCode ?? false),
     },
   };
+
+  // 用脱敏摘要固定记录配置来源，避免启动目录变化时误判配置未生效。
+  console.info(
+    `[config] cwd=${process.cwd()} envFiles=${LOADED_ENV_PATHS.join(",") || "none"} configFile=${findConfigFile() ?? "none"}`,
+  );
+  console.info(
+    `[config] dbHost=${config.database.host} dbPort=${config.database.port} dbName=${config.database.name} dbUser=${config.database.user} dbPasswordSet=${config.database.password.length > 0}`,
+  );
 
   return config;
 }
