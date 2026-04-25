@@ -38,3 +38,4 @@
 - 2026-04-25 12:01 +08:00：为避免服务器运行 `update.sh` 后本地生成/更新 `bun.lock` 导致下次 `git pull --ff-only` 需要合并，已将 `bun.lock` 加入 `.gitignore` 并从 Git 索引移除，后续不再提交该锁文件。
 - 2026-04-25 12:04 +08:00：继续清理 Git 中残留的 Bun 锁文件，将 `**/bun.lock` 加入 `.gitignore`，并从 Git 索引移除 `api-server/bun.lock`，避免 API 子目录的 Bun lock 继续出现在远程仓库。
 - 2026-04-25 12:12 +08:00：修复服务器执行 Prisma 命令时 `/opt/ttswork/prisma.config.ts` 因缺少 `DATABASE_URL` 加载失败的问题；根项目与 API 的 `prisma.config.ts` 现在优先使用环境变量，其次从 `CONFIG_PATH`、当前目录、`api-server/config.yaml`、`/opt/voice-mvp/config.yaml`、`/etc/voice-mvp/config.yaml` 读取 `database` 段并组合 PostgreSQL 连接串；为避免根项目额外依赖，配置文件使用轻量 YAML database 段解析；本地执行根项目/API 的 `bunx prisma generate` 与 typecheck 通过。
+- 2026-04-25 12:14 +08:00：修复 `update.sh` 在 `set -u` 下执行空数组展开导致 `BUN_INSTALL_ARGS[@]: unbound variable` 的问题，改为 `run_bun_install` 函数按 `STRICT_LOCKFILE=true` 显式选择是否追加 `--frozen-lockfile`；本地执行脚本语法检查通过。
