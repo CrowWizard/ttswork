@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { StatusMessage } from "@/components/ui/status-message";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -12,8 +13,20 @@ export default function RegisterPage() {
   const [sendingSms, setSendingSms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [smsCountdown, setSmsCountdown] = useState(0);
-  const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: "error" | "success"; title?: string; text: string } | null>(null);
   const [debugCode, setDebugCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (smsCountdown <= 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setSmsCountdown((value) => (value <= 1 ? 0 : value - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [smsCountdown]);
 
   async function sendSmsCode() {
     if (sendingSms || smsCountdown > 0) {
@@ -52,11 +65,13 @@ export default function RegisterPage() {
       setDebugCode(payload.debugCode ?? null);
       setMessage({
         type: "success",
-        text: payload.debugCode ? `验证码已发送，当前调试验证码：${payload.debugCode}` : "验证码已发送，请查收短信",
+        title: "验证码已发送",
+        text: payload.debugCode ? "当前为 Mock 短信模式，请查看下方调试验证码。" : "请查收短信并继续注册。",
       });
     } catch (error) {
       setMessage({
         type: "error",
+        title: "验证码发送失败",
         text: error instanceof Error ? error.message : "验证码发送失败",
       });
     } finally {
@@ -98,11 +113,12 @@ export default function RegisterPage() {
         throw new Error(payload.error ?? "注册失败");
       }
 
-      setMessage({ type: "success", text: "注册成功，正在跳转..." });
+      setMessage({ type: "success", title: "注册成功", text: "正在进入语音复刻工作台。" });
       router.push("/");
     } catch (error) {
       setMessage({
         type: "error",
+        title: "注册失败",
         text: error instanceof Error ? error.message : "注册失败",
       });
     } finally {
@@ -111,47 +127,57 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-cream via-white to-mist px-4 py-8 sm:px-6 sm:py-10">
+    <main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10">
       <div className="mx-auto flex w-full max-w-md flex-col gap-8">
-        <section className="w-full rounded-[28px] border border-orange-100 bg-white p-6 shadow-soft sm:p-8">
+        <section className="app-card w-full p-6 sm:p-8">
           <div className="text-center">
             <h1 className="text-2xl font-semibold">注册账号</h1>
-            <p className="mt-2 text-sm text-slate-500">创建账号，开启语音建声之旅</p>
+            <p className="mt-2 text-sm text-text-muted">创建账号后即可进入语音复刻工作台</p>
           </div>
 
-          <form onSubmit={handleRegister} className="mt-6 space-y-4">
+          <div className="mt-6 rounded-xl border border-border-subtle bg-surface-muted p-4 text-sm text-text-secondary">
+            <div className="font-medium text-text-primary">注册后会自动登录</div>
+            <p className="mt-1 leading-6">手机号用于接收验证码和找回账号；密码可以稍后在个人设置中补充。</p>
+          </div>
+
+          <form onSubmit={handleRegister} className="mt-5 space-y-4">
             <div>
-              <label className="text-sm font-medium text-slate-700" htmlFor="reg-phone">
+              <label className="text-sm font-medium text-text-secondary" htmlFor="reg-phone">
                 手机号
               </label>
               <input
-                id="reg-phone"
-                type="tel"
-                className="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm outline-none transition focus:border-slate-400"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 11))}
-                placeholder="请输入 11 位手机号"
-                inputMode="numeric"
-                required
-              />
+                 id="reg-phone"
+                 type="tel"
+                 className="app-input"
+                 value={phoneNumber}
+                 onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                 placeholder="请输入 11 位手机号"
+                 inputMode="numeric"
+                 autoComplete="tel"
+                 required
+                 aria-required="true"
+               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700" htmlFor="reg-code">
+              <label className="text-sm font-medium text-text-secondary" htmlFor="reg-code">
                 验证码
               </label>
               <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-                <input
-                  id="reg-code"
-                  className="min-w-0 flex-1 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm outline-none transition focus:border-slate-400"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.trim())}
-                  placeholder="请输入短信验证码"
-                  required
-                />
+                 <input
+                   id="reg-code"
+                   className="app-input min-w-0 flex-1"
+                   value={code}
+                   onChange={(e) => setCode(e.target.value.trim())}
+                   placeholder="请输入短信验证码"
+                   inputMode="numeric"
+                   autoComplete="one-time-code"
+                   required
+                   aria-required="true"
+                 />
                 <button
                   type="button"
-                  className="rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="app-button-secondary"
                   onClick={() => void sendSmsCode()}
                   disabled={sendingSms || smsCountdown > 0 || phoneNumber.length !== 11}
                 >
@@ -161,53 +187,48 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700" htmlFor="reg-password">
+              <label className="text-sm font-medium text-text-secondary" htmlFor="reg-password">
                 密码（可选）
-                <span className="ml-2 text-xs text-slate-400">至少 8 位</span>
+                <span className="ml-2 text-xs text-text-muted">至少 8 位</span>
               </label>
-              <input
-                id="reg-password"
-                type="password"
-                className="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm outline-none transition focus:border-slate-400"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="留空则仅可使用短信登录"
-              />
-              <p className="mt-1 text-xs text-slate-400">
+               <input
+                 id="reg-password"
+                 type="password"
+                 className="app-input"
+                 value={password}
+                 onChange={(e) => setPassword(e.target.value)}
+                 placeholder="留空则仅可使用短信登录"
+                 autoComplete="new-password"
+                 minLength={8}
+               />
+              <p className="mt-1 text-xs text-text-muted">
                 设置密码后可使用密码登录，未设置密码仅可使用短信验证码登录
               </p>
             </div>
 
             {message ? (
-              <div
-                className={`rounded-2xl px-4 py-3 text-sm ${
-                  message.type === "error"
-                    ? "border border-rose-200 bg-rose-50 text-rose-700"
-                    : "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {message.text}
-              </div>
+              <StatusMessage message={message.text} type={message.type} title={message.title} />
             ) : null}
 
             {debugCode ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                当前为短信 Mock 模式，调试验证码：{debugCode}
-              </div>
+              <StatusMessage message={`调试验证码：${debugCode}`} type="warning" title="Mock 短信模式" />
             ) : null}
 
             <button
               type="submit"
-              className="w-full rounded-3xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="app-button-primary w-full"
               disabled={submitting || phoneNumber.length !== 11 || !code}
             >
               {submitting ? "注册中..." : "注册"}
             </button>
+            <p className="text-center text-xs leading-5 text-text-muted">
+              提交即创建账号会话，本地不会展示或保存短信验证码以外的调试信息。
+            </p>
           </form>
 
           <div className="mt-6 text-center">
-            <span className="text-sm text-slate-500">已有账号？</span>{" "}
-            <Link href="/" className="text-sm font-medium text-slate-700 underline underline-offset-4 transition hover:text-slate-900">
+            <span className="text-sm text-text-muted">已有账号？</span>{" "}
+            <Link href="/" className="text-sm font-medium text-text-secondary underline underline-offset-4 transition hover:text-text-primary">
               立即登录
             </Link>
           </div>

@@ -32,17 +32,25 @@ enum SmsVerificationStatus {
 }
 
 model User {
-  id                      String            @id @default(cuid())
-  phoneNumber             String            @unique
-  passwordHash            String?
-  phoneVerifiedAt         DateTime?
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
-  activeVoiceEnrollmentId String?           @unique
-  activeVoiceEnrollment   VoiceEnrollment?  @relation("ActiveVoice", fields: [activeVoiceEnrollmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  voiceEnrollments        VoiceEnrollment[] @relation("UserVoiceEnrollments")
-  ttsJobs                 TtsJob[]
-  sessions                Session[]
+  id                      String  @id @default(cuid())
+  phoneNumber              String  @unique
+  passwordHash           String?
+  phoneVerifiedAt        DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  activeVoiceEnrollmentId String? @unique
+}
+
+model AnonymousUser {
+  id                      String   @id @default(cuid())
+  tokenHash               String   @unique
+  expiresAt               DateTime
+  lastSeenAt              DateTime @default(now())
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  activeVoiceEnrollmentId String?  @unique
+
+  @@index([expiresAt])
 }
 
 model Session {
@@ -53,70 +61,68 @@ model Session {
   lastSeenAt DateTime @default(now())
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict)
 
   @@index([userId, expiresAt])
 }
 
 model SmsVerification {
-  id                String                @id @default(cuid())
-  phoneNumber       String
+  id                 String                 @id @default(cuid())
+  phoneNumber        String
   scene             SmsScene
-  provider          String
-  providerBizId     String?
+  provider         String
+  providerBizId    String?
   providerRequestId String?
-  providerOutId     String
-  codeHash          String?
-  status            SmsVerificationStatus @default(SENT)
-  verifyAttempts    Int                   @default(0)
-  expiresAt         DateTime
-  verifiedAt        DateTime?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  providerOutId    String
+  codeHash         String?
+  status           SmsVerificationStatus @default(SENT)
+  verifyAttempts   Int                    @default(0)
+  expiresAt       DateTime
+  verifiedAt      DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   @@index([phoneNumber, scene, createdAt])
   @@index([status, expiresAt])
 }
 
 model VoiceEnrollment {
-  id               String           @id @default(cuid())
-  userId           String
-  status           EnrollmentStatus @default(PENDING)
-  durationSeconds  Float
-  originalFilename String?
+  id                String           @id @default(cuid())
+  userId            String?
+  anonymousUserId   String?
+  status            EnrollmentStatus @default(PENDING)
+  durationSeconds   Float
+  originalFilename  String?
   inputContentType String
-  voiceId          String?          @unique
+  voiceId           String?          @unique
   errorMessage     String?
-  isInvalidated    Boolean          @default(false)
+  isInvalidated   Boolean          @default(false)
   bucket           String
-  objectKey        String
-  minioUri         String
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  user             User             @relation("UserVoiceEnrollments", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  activatedByUsers User[]           @relation("ActiveVoice")
-  ttsJobs          TtsJob[]
+  objectKey       String
+  minioUri        String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([userId, createdAt])
+  @@index([anonymousUserId, createdAt])
 }
 
 model TtsJob {
-  id                String          @id @default(cuid())
-  userId            String
-  voiceEnrollmentId String
+  id                 String          @id @default(cuid())
+  userId             String?
+  anonymousUserId    String?
+  voiceEnrollmentId  String?
   voiceIdSnapshot   String
-  text              String
-  status            TtsJobStatus    @default(PENDING)
+  text             String
+  status           TtsJobStatus    @default(PENDING)
   outputContentType String?
-  errorMessage      String?
-  bucket            String?
-  objectKey         String?
-  minioUri          String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  user              User            @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  voiceEnrollment   VoiceEnrollment @relation(fields: [voiceEnrollmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  errorMessage    String?
+  bucket          String?
+  objectKey       String?
+  minioUri       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([userId, createdAt])
+  @@index([anonymousUserId, createdAt])
   @@index([voiceEnrollmentId])
 }

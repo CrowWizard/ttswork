@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppConfig } from "../lib/config";
-import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
+import { requireCurrentUser, resolveAnonymousUser, unauthorizedResponse } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { getObjectBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
@@ -10,8 +10,9 @@ export function createEnrollmentAudioRoutes(cfg: AppConfig) {
 
   enrollmentAudio.get("/:enrollmentId/audio", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
+    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg);
 
-    if (!currentUser) {
+    if (!currentUser && !anonymousUser) {
       return unauthorizedResponse(c);
     }
 
@@ -19,20 +20,11 @@ export function createEnrollmentAudioRoutes(cfg: AppConfig) {
     const enrollment = await prisma.voiceEnrollment.findFirst({
       where: {
         id: enrollmentId,
-        userId: currentUser.id,
+        ...(currentUser ? { userId: currentUser.id } : { anonymousUserId: anonymousUser?.id }),
       },
     });
-    const user = await prisma.user.findUnique({
-      where: { id: currentUser.id },
-      select: { activeVoiceEnrollmentId: true },
-    });
-
     if (!enrollment) {
       return errorResponse(c, "建声记录不存在", 404);
-    }
-
-    if (user?.activeVoiceEnrollmentId !== enrollment.id) {
-      return errorResponse(c, "当前仅允许回放正在启用的声纹", 409);
     }
 
     if (enrollment.status !== "READY") {

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-25T09:46:30.000Z",
+  "title": "Design System: 语音复刻工作台",
+  "extensions": {
+    "colorMeta": {
+      "cream": { "role": "neutral", "displayName": "暖白基底", "canonical": "#fffaf5", "tonalRamp": ["oklch(18% 0.01 75)", "oklch(28% 0.01 75)", "oklch(40% 0.01 75)", "oklch(52% 0.01 75)", "oklch(64% 0.01 75)", "oklch(76% 0.01 75)", "oklch(88% 0.01 75)", "#fffaf5"] },
+      "surface": { "role": "neutral", "displayName": "暖白表面", "canonical": "#fffdf9", "tonalRamp": ["oklch(18% 0.008 75)", "oklch(30% 0.008 75)", "oklch(42% 0.008 75)", "oklch(54% 0.008 75)", "oklch(66% 0.008 75)", "oklch(78% 0.008 75)", "oklch(90% 0.008 75)", "#fffdf9"] },
+      "surface-muted": { "role": "neutral", "displayName": "柔砂分区", "canonical": "#f8f4ee", "tonalRamp": ["oklch(18% 0.012 75)", "oklch(30% 0.012 75)", "oklch(42% 0.012 75)", "oklch(54% 0.012 75)", "oklch(66% 0.012 75)", "oklch(78% 0.012 75)", "oklch(90% 0.012 75)", "#f8f4ee"] },
+      "mist": { "role": "neutral", "displayName": "冷雾背景", "canonical": "#eef4ff", "tonalRamp": ["oklch(18% 0.018 255)", "oklch(30% 0.018 255)", "oklch(42% 0.018 255)", "oklch(54% 0.018 255)", "oklch(66% 0.018 255)", "oklch(78% 0.018 255)", "oklch(90% 0.018 255)", "#eef4ff"] },
+      "action-primary": { "role": "primary", "displayName": "任务墨黑", "canonical": "#0f172a", "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"] },
+      "warning": { "role": "secondary", "displayName": "录音琥珀", "canonical": "#b45309", "tonalRamp": ["#451a03", "#78350f", "#92400e", "#b45309", "#d97706", "#f59e0b", "#fcd34d", "#fffbeb"] },
+      "success": { "role": "secondary", "displayName": "完成绿", "canonical": "#047857", "tonalRamp": ["#022c22", "#064e3b", "#065f46", "#047857", "#059669", "#10b981", "#6ee7b7", "#ecfdf5"] },
+      "danger": { "role": "tertiary", "displayName": "阻断玫红", "canonical": "#be123c", "tonalRamp": ["#4c0519", "#881337", "#9f1239", "#be123c", "#e11d48", "#fb7185", "#fecdd3", "#fff1f2"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "页面主标题", "purpose": "页面顶层标题，只用于工作台、注册、设置等路由主标题。" },
+      "headline": { "displayName": "任务区标题", "purpose": "主要任务模块标题。" },
+      "title": { "displayName": "分区标题", "purpose": "卡片内部小标题与账号信息分区。" },
+      "body": { "displayName": "正文说明", "purpose": "表单说明、状态解释、空态说明。" },
+      "label": { "displayName": "元信息标签", "purpose": "active voice、当前账号等低层级标签。" }
+    },
+    "shadows": [
+      { "name": "soft", "value": "0 24px 60px rgba(31, 41, 55, 0.08)", "purpose": "旧大卡片柔阴影，后续谨慎使用。" },
+      { "name": "card", "value": "0 18px 42px rgba(15, 23, 42, 0.08)", "purpose": "页面主任务卡。" },
+      { "name": "panel", "value": "0 10px 24px rgba(15, 23, 42, 0.05)", "purpose": "卡片内部轻分组。" }
+    ],
+    "motion": [
+      { "name": "state-transition", "value": "transition-property: color, background-color, border-color, box-shadow, transform; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "按钮、输入框、链接的状态反馈。" }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "用于提交登录、注册、设置密码和生成语音的主操作。",
+      "html": "<button class=\"ds-btn-primary\">生成语音</button>",
+      "css": ".ds-btn-primary { min-height: 44px; border: 0; border-radius: 24px; background: #0f172a; color: #ffffff; padding: 16px 20px; font: 600 14px/1.35 Inter, 'Noto Sans SC', sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: #1e293b; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fcd34d, 0 0 0 4px #fffdf9; } .ds-btn-primary:disabled { cursor: not-allowed; opacity: .6; background: #94a3b8; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "用于发送验证码、返回工作台等次级动作。",
+      "html": "<button class=\"ds-btn-secondary\">发送验证码</button>",
+      "css": ".ds-btn-secondary { min-height: 44px; border: 1px solid #e5ddd2; border-radius: 24px; background: #ffffff; color: #475569; padding: 16px 20px; font: 600 14px/1.35 Inter, 'Noto Sans SC', sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-secondary:hover { background: #f8f4ee; } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fcd34d, 0 0 0 4px #fffdf9; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "手机号、验证码、密码和 TTS 文本输入的默认字段样式。",
+      "html": "<label class=\"ds-field\"><span>手机号</span><input class=\"ds-input\" placeholder=\"请输入 11 位手机号\" /></label>",
+      "css": ".ds-field { display: grid; gap: 8px; color: #475569; font: 500 14px/1.35 Inter, 'Noto Sans SC', sans-serif; } .ds-input { width: 100%; border: 1px solid #e5ddd2; border-radius: 24px; background: #ffffff; color: #1f2937; padding: 16px; font: 400 14px/1.5 Inter, 'Noto Sans SC', sans-serif; transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-input::placeholder { color: #64748b; } .ds-input:focus-visible { outline: none; border-color: #fcd34d; box-shadow: 0 0 0 2px #fcd34d, 0 0 0 4px #fffdf9; }"
+    },
+    {
+      "name": "Task Card",
+      "kind": "card",
+      "refersTo": "card-default",
+      "description": "承载工作台主任务、注册表单和设置分区的主容器。",
+      "html": "<section class=\"ds-card\"><h2>1. 建声录音</h2><p>可通过按住按钮或使用键盘操作开始录音。</p></section>",
+      "css": ".ds-card { border: 1px solid #e5ddd2; border-radius: 24px; background: #ffffff; color: #1f2937; padding: 32px; box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08); font-family: Inter, 'Noto Sans SC', sans-serif; } .ds-card h2 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 600; } .ds-card p { margin: 12px 0 0; color: #64748b; font-size: 14px; line-height: 1.6; }"
+    },
+    {
+      "name": "Status Message",
+      "kind": "custom",
+      "refersTo": "status-message",
+      "description": "用于成功、错误、信息和警告反馈的语义状态块。",
+      "html": "<div class=\"ds-status-success\" role=\"status\" aria-live=\"polite\">语音合成完成，可直接播放或下载。</div>",
+      "css": ".ds-status-success { border: 1px solid rgba(4, 120, 87, .2); border-radius: 16px; background: #ecfdf5; color: #047857; padding: 12px 16px; font: 400 14px/1.5 Inter, 'Noto Sans SC', sans-serif; } .ds-status-success:focus-visible { outline: none; box-shadow: 0 0 0 2px #fcd34d, 0 0 0 4px #fffdf9; }"
+    },
+    {
+      "name": "Recording Control",
+      "kind": "custom",
+      "refersTo": "recording-control",
+      "description": "工作台签名控件，支持按住录音和键盘切换录音。",
+      "html": "<button class=\"ds-record\" aria-pressed=\"false\">开始录音（至少 5 秒）</button>",
+      "css": ".ds-record { width: 100%; border: 0; border-radius: 24px; background: #fffbeb; color: #78350f; padding: 32px 24px; font: 600 18px/1.35 Inter, 'Noto Sans SC', sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-record:hover { background: #fef3c7; } .ds-record:focus-visible { outline: none; box-shadow: 0 0 0 2px #fcd34d, 0 0 0 4px #fffdf9; } .ds-record[aria-pressed='true'] { background: #e11d48; color: #ffffff; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "安静的任务台",
+    "overview": "这套界面服务一个工作台式 MVP：用户登录后完成个人建声与文本转语音，注册页只负责账号创建，设置页只负责密码管理。视觉系统必须保持专业、直接、低情绪，避免把当前产品伪装成品牌故事、营销首页或复杂账户中心。",
+    "keyCharacteristics": ["任务优先", "单用户视角", "低干扰浅色", "直接反馈", "卡片克制"],
+    "rules": [
+      { "name": "The ≤10% Accent Rule", "body": "琥珀、绿色、玫红都属于状态色，不是装饰色；任一屏幕中状态色面积必须很小，只服务焦点、结果或错误。", "section": "colors" },
+      { "name": "The No Pure White Canvas Rule", "body": "页面背景禁止使用纯白大面积铺底；使用暖白基底承载任务，再让白面只出现在卡片和输入区域。", "section": "colors" },
+      { "name": "The No Personality Type Rule", "body": "在品牌事实未确认前，禁止用强装饰字体制造品牌感；层级只能通过字号、字重、行距和信息位置建立。", "section": "typography" },
+      { "name": "The Shadow Has a Job Rule", "body": "阴影只能表达任务容器层级；如果一个区域已经有背景色和边框，就不要再额外加重阴影。", "section": "elevation" },
+      { "name": "The No Glass Rule", "body": "禁止把半透明白卡和 backdrop blur 当作默认容器。当前产品需要清晰表单和音频控件，不需要玻璃拟态装饰。", "section": "elevation" }
+    ],
+    "dos": ["Do 先组织任务链路，再组织装饰。", "Do 使用 app-card、app-panel、app-input、app-button-primary、app-button-secondary 作为默认界面基元。", "Do 让关键状态直接说明任务是否可继续。"],
+    "donts": ["Don't 把首页扩展为宣传首页、品牌故事页、行业方案页或销售导向 landing page。", "Don't 出现多用户、团队、组织、审批、协作相关 UI 暗示。", "Don't 使用玻璃拟态、渐变文字、hero metric 模板、重复同尺寸图标卡片网格或装饰性大面积渐变。"]
+  }
+}

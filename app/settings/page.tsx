@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { StatusMessage } from "@/components/ui/status-message";
 
 type AuthUser = {
   id: string;
@@ -22,7 +23,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [smsCode, setSmsCode] = useState("");
-  const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: "error" | "success"; title?: string; text: string } | null>(null);
   const [debugCode, setDebugCode] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"set" | "change">("set");
 
@@ -67,7 +68,7 @@ export default function SettingsPage() {
       setUser(payload.user);
       setActiveTab(payload.user.hasPassword ? "change" : "set");
     } catch (error) {
-      setMessage({ type: "error", text: error instanceof Error ? error.message : "获取用户信息失败" });
+      setMessage({ type: "error", title: "账号信息加载失败", text: error instanceof Error ? error.message : "获取用户信息失败" });
     } finally {
       setLoading(false);
     }
@@ -109,11 +110,13 @@ export default function SettingsPage() {
       setDebugCode(payload.debugCode ?? null);
       setMessage({
         type: "success",
-        text: payload.debugCode ? `验证码已发送，当前调试验证码：${payload.debugCode}` : "验证码已发送，请查收短信",
+        title: "验证码已发送",
+        text: payload.debugCode ? "当前为 Mock 短信模式，请查看下方调试验证码。" : "请查收短信后继续修改密码。",
       });
     } catch (error) {
       setMessage({
         type: "error",
+        title: "验证码发送失败",
         text: error instanceof Error ? error.message : "验证码发送失败",
       });
     } finally {
@@ -151,11 +154,12 @@ export default function SettingsPage() {
 
       setUser(payload.user);
       setNewPassword("");
-      setMessage({ type: "success", text: "密码设置成功" });
+      setMessage({ type: "success", title: "密码设置成功", text: "后续可使用手机号和密码登录。" });
       setActiveTab("change");
     } catch (error) {
       setMessage({
         type: "error",
+        title: "密码设置失败",
         text: error instanceof Error ? error.message : "设置密码失败",
       });
     } finally {
@@ -168,7 +172,7 @@ export default function SettingsPage() {
     if (!user) return;
 
     if (newPassword !== confirmPassword) {
-      setMessage({ type: "error", text: "两次输入的密码不一致" });
+      setMessage({ type: "error", title: "密码确认不一致", text: "请重新输入并确认新密码。" });
       return;
     }
 
@@ -202,10 +206,11 @@ export default function SettingsPage() {
       setNewPassword("");
       setConfirmPassword("");
       setSmsCountdown(0);
-      setMessage({ type: "success", text: "密码修改成功" });
+      setMessage({ type: "success", title: "密码修改成功", text: "下次登录可使用新密码。" });
     } catch (error) {
       setMessage({
         type: "error",
+        title: "密码修改失败",
         text: error instanceof Error ? error.message : "修改密码失败",
       });
     } finally {
@@ -215,11 +220,19 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-cream via-white to-mist px-4 py-8 sm:px-6 sm:py-10">
+      <main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
-          <section className="w-full rounded-[28px] border border-white/70 bg-white/85 p-6 shadow-soft backdrop-blur sm:rounded-[32px] sm:p-8">
+          <section className="app-card w-full p-6 sm:p-8" aria-busy="true">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">个人设置</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-500">加载中...</p>
+            <p className="mt-3 text-sm leading-6 text-text-muted">正在准备账号信息、密码状态与安全操作入口。</p>
+            <div className="mt-6 grid gap-3 animate-pulse">
+              <div className="h-14 rounded-xl bg-surface-muted" />
+              <div className="h-14 rounded-xl bg-surface-muted" />
+              <div className="h-24 rounded-xl bg-surface-muted" />
+            </div>
+            <p className="mt-4 text-sm leading-6 text-text-muted" role="status" aria-live="polite" aria-atomic="true">
+              正在加载账号信息与密码设置项...
+            </p>
           </section>
         </div>
       </main>
@@ -231,97 +244,96 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-cream via-white to-mist px-4 py-8 sm:px-6 sm:py-10">
+    <main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
-        <section className="w-full rounded-[28px] border border-white/70 bg-white/85 p-6 shadow-soft backdrop-blur sm:rounded-[32px] sm:p-8">
+        <section className="app-card w-full p-6 sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">个人设置</h1>
-              <p className="mt-3 text-sm leading-6 text-slate-500">管理您的账号信息</p>
+              <p className="mt-3 text-sm leading-6 text-text-muted">管理您的账号信息与密码登录方式</p>
             </div>
             <Link
               href="/"
-              className="inline-flex rounded-3xl border border-slate-200 bg-white/90 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              className="app-button-secondary inline-flex px-5 py-3"
             >
               返回工作台
             </Link>
           </div>
+
+          <div className="mt-6 rounded-xl border border-border-subtle bg-surface-muted p-4 text-sm text-text-secondary">
+            <div className="font-medium text-text-primary">安全提示</div>
+            <p className="mt-1 leading-6">修改密码前会校验当前登录态；已设置密码的账号还需要短信验证码确认。</p>
+          </div>
         </section>
 
-        <section className="w-full rounded-[28px] border border-slate-100 bg-white p-6 shadow-soft sm:p-8">
+        <section className="app-card w-full p-6 sm:p-8">
           <div className="mb-6">
             <h2 className="text-lg font-semibold">账号信息</h2>
             <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <span className="text-sm text-slate-600">手机号</span>
-                <span className="font-medium text-slate-800">{user.phoneNumber}</span>
+              <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border-subtle bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="shrink-0 text-sm text-text-secondary">手机号</span>
+                <span className="min-w-0 break-all font-medium text-text-primary sm:text-right">{user.phoneNumber}</span>
               </div>
-              <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <span className="text-sm text-slate-600">密码状态</span>
+              <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border-subtle bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="shrink-0 text-sm text-text-secondary">密码状态</span>
                 <span
-                  className={`font-medium ${
-                    user.hasPassword ? "text-emerald-700" : "text-amber-700"
+                  className={`min-w-0 font-medium sm:text-right ${
+                    user.hasPassword ? "text-success" : "text-warning"
                   }`}
                 >
                   {user.hasPassword ? "已设置" : "未设置"}
                 </span>
               </div>
-              <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <span className="text-sm text-slate-600">手机号验证</span>
-                <span className="font-medium text-emerald-700">已验证</span>
+              <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border-subtle bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="shrink-0 text-sm text-text-secondary">手机号验证</span>
+                <span className="min-w-0 font-medium text-success sm:text-right">已验证</span>
               </div>
-              <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <span className="text-sm text-slate-600">注册时间</span>
-                <span className="font-medium text-slate-800">
+              <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border-subtle bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="shrink-0 text-sm text-text-secondary">注册时间</span>
+                <span className="min-w-0 font-medium text-text-primary sm:text-right">
                   {new Date(user.createdAt).toLocaleDateString()}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="border-t border-slate-100 pt-6">
+          <div className="border-t border-border-subtle pt-6">
             <h2 className="text-lg font-semibold">密码管理</h2>
 
             {!user.hasPassword ? (
               <div className="mt-6">
-                <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50 p-4">
-                  <p className="text-sm text-amber-800">
+                <div className="mb-4 rounded-xl border border-warning-border bg-warning-surface p-4">
+                  <p className="text-sm text-warning">
                     您的账号尚未设置密码。设置密码后，您可以使用手机号+密码的方式登录。
                   </p>
                 </div>
 
                 <form onSubmit={handleSetPassword} className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium text-slate-700" htmlFor="new-password">
+                    <label className="text-sm font-medium text-text-secondary" htmlFor="new-password">
                       设置密码
                     </label>
-                    <input
-                      id="new-password"
-                      type="password"
-                      className="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm outline-none transition focus:border-slate-400"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="至少 8 位字符"
-                      minLength={8}
-                      required
-                    />
+                     <input
+                       id="new-password"
+                       type="password"
+                       className="app-input"
+                       value={newPassword}
+                       onChange={(e) => setNewPassword(e.target.value)}
+                       placeholder="至少 8 位字符"
+                       autoComplete="new-password"
+                       minLength={8}
+                       required
+                       aria-required="true"
+                     />
                   </div>
 
                   {message ? (
-                    <div
-                      className={`rounded-2xl px-4 py-3 text-sm ${
-                        message.type === "error"
-                          ? "border border-rose-200 bg-rose-50 text-rose-700"
-                          : "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      {message.text}
-                    </div>
+                    <StatusMessage message={message.text} type={message.type} title={message.title} />
                   ) : null}
 
                   <button
                     type="submit"
-                    className="w-full rounded-3xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    className="app-button-primary w-full"
                     disabled={saving || newPassword.length < 8}
                   >
                     {saving ? "设置中..." : "设置密码"}
@@ -330,13 +342,13 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div className="mt-6">
-                <div className="mb-4 flex rounded-xl border border-slate-100 bg-slate-50 p-1">
+                <div className="mb-4 flex rounded-xl border border-border-subtle bg-surface-muted p-1">
                   <button
                     type="button"
                     className={`flex-1 rounded-xl px-4 py-2 text-sm font-medium transition ${
                       activeTab === "change"
-                        ? "bg-white shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
+                        ? "bg-surface-selected"
+                        : "text-text-muted hover:text-text-secondary"
                     }`}
                     onClick={() => setActiveTab("change")}
                   >
@@ -346,28 +358,31 @@ export default function SettingsPage() {
 
                 {activeTab === "change" && (
                   <form onSubmit={handleChangePassword} className="space-y-4">
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                      <p className="text-sm text-slate-600">
+                    <div className="rounded-xl border border-border-subtle bg-surface-muted p-4">
+                      <p className="text-sm text-text-secondary">
                         为保障账号安全，修改密码前需要验证手机号。
                       </p>
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-slate-700" htmlFor="sms-code-change">
+                      <label className="text-sm font-medium text-text-secondary" htmlFor="sms-code-change">
                         短信验证码
                       </label>
                       <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-                        <input
-                          id="sms-code-change"
-                          className="min-w-0 flex-1 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm outline-none transition focus:border-slate-400"
-                          value={smsCode}
-                          onChange={(e) => setSmsCode(e.target.value.trim())}
-                          placeholder="请输入验证码"
-                          required
-                        />
+                         <input
+                           id="sms-code-change"
+                           className="app-input min-w-0 flex-1"
+                           value={smsCode}
+                           onChange={(e) => setSmsCode(e.target.value.trim())}
+                           placeholder="请输入验证码"
+                           inputMode="numeric"
+                           autoComplete="one-time-code"
+                           required
+                           aria-required="true"
+                         />
                         <button
                           type="button"
-                          className="rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="app-button-secondary"
                           onClick={() => void sendSmsForPasswordChange()}
                           disabled={smsSending || smsCountdown > 0}
                         >
@@ -381,58 +396,52 @@ export default function SettingsPage() {
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-slate-700" htmlFor="new-password-change">
+                      <label className="text-sm font-medium text-text-secondary" htmlFor="new-password-change">
                         新密码
                       </label>
-                      <input
-                        id="new-password-change"
-                        type="password"
-                        className="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm outline-none transition focus:border-slate-400"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="至少 8 位字符"
-                        minLength={8}
-                        required
-                      />
+                       <input
+                         id="new-password-change"
+                         type="password"
+                         className="app-input"
+                         value={newPassword}
+                         onChange={(e) => setNewPassword(e.target.value)}
+                         placeholder="至少 8 位字符"
+                         autoComplete="new-password"
+                         minLength={8}
+                         required
+                         aria-required="true"
+                       />
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-slate-700" htmlFor="confirm-password">
+                      <label className="text-sm font-medium text-text-secondary" htmlFor="confirm-password">
                         确认新密码
                       </label>
-                      <input
-                        id="confirm-password"
-                        type="password"
-                        className="mt-2 w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm outline-none transition focus:border-slate-400"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="再次输入新密码"
-                        minLength={8}
-                        required
-                      />
+                       <input
+                         id="confirm-password"
+                         type="password"
+                         className="app-input"
+                         value={confirmPassword}
+                         onChange={(e) => setConfirmPassword(e.target.value)}
+                         placeholder="再次输入新密码"
+                         autoComplete="new-password"
+                         minLength={8}
+                         required
+                         aria-required="true"
+                       />
                     </div>
 
                     {message ? (
-                      <div
-                        className={`rounded-2xl px-4 py-3 text-sm ${
-                          message.type === "error"
-                            ? "border border-rose-200 bg-rose-50 text-rose-700"
-                            : "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                        }`}
-                      >
-                        {message.text}
-                      </div>
+                      <StatusMessage message={message.text} type={message.type} title={message.title} />
                     ) : null}
 
                     {debugCode ? (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        当前为短信 Mock 模式，调试验证码：{debugCode}
-                      </div>
+                      <StatusMessage message={`调试验证码：${debugCode}`} type="warning" title="Mock 短信模式" />
                     ) : null}
 
                     <button
                       type="submit"
-                      className="w-full rounded-3xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      className="app-button-primary w-full"
                       disabled={
                         saving ||
                         !smsCode ||

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppConfig } from "../lib/config";
-import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
+import { requireCurrentUser, resolveAnonymousUser } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 export function createVoiceProfileRoutes(cfg: AppConfig) {
@@ -8,48 +8,59 @@ export function createVoiceProfileRoutes(cfg: AppConfig) {
 
   voiceProfile.get("/", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
+    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
 
-    if (!currentUser) {
-      return unauthorizedResponse(c);
+    if (!currentUser && !anonymousUser) {
+      return c.json({
+        userId: null,
+        anonymousUserId: null,
+        activeVoice: null,
+        recentEnrollments: [],
+      });
     }
 
-    const profile = await prisma.user.findUnique({
-      where: { id: currentUser.id },
-      include: {
-        activeVoiceEnrollment: true,
-        voiceEnrollments: {
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        },
-      },
+    const activeVoiceEnrollmentId = currentUser
+      ? (await prisma.user.findUnique({ where: { id: currentUser.id } }))?.activeVoiceEnrollmentId
+      : anonymousUser?.activeVoiceEnrollmentId;
+
+    const activeEnrollment = activeVoiceEnrollmentId
+      ? await prisma.voiceEnrollment.findUnique({
+          where: { id: activeVoiceEnrollmentId },
+        })
+      : null;
+
+    const recentEnrollments = await prisma.voiceEnrollment.findMany({
+      where: currentUser ? { userId: currentUser.id } : { anonymousUserId: anonymousUser?.id },
+      orderBy: { createdAt: "desc" },
+      take: 5,
     });
 
     return c.json({
-      userId: currentUser.id,
-      activeVoice: profile?.activeVoiceEnrollment
+      userId: currentUser?.id ?? null,
+      anonymousUserId: anonymousUser?.id ?? null,
+      activeVoice: activeEnrollment
         ? {
-            id: profile.activeVoiceEnrollment.id,
-            voiceId: profile.activeVoiceEnrollment.voiceId,
-            status: profile.activeVoiceEnrollment.status,
-            durationSeconds: profile.activeVoiceEnrollment.durationSeconds,
-            createdAt: profile.activeVoiceEnrollment.createdAt,
+            id: activeEnrollment.id,
+            voiceId: activeEnrollment.voiceId,
+            status: activeEnrollment.status,
+            durationSeconds: activeEnrollment.durationSeconds,
+            createdAt: activeEnrollment.createdAt,
             playbackUrl:
-              profile.activeVoiceEnrollment.status === "READY" && !profile.activeVoiceEnrollment.isInvalidated
-                ? `/api/voice/enrollments/${profile.activeVoiceEnrollment.id}/audio`
+              activeEnrollment.status === "READY" && !activeEnrollment.isInvalidated
+                ? `/api/voice/enrollments/${activeEnrollment.id}/audio`
                 : null,
-            isInvalidated: profile.activeVoiceEnrollment.isInvalidated,
+            isInvalidated: activeEnrollment.isInvalidated,
           }
         : null,
-      recentEnrollments:
-        profile?.voiceEnrollments.map((item) => ({
-          id: item.id,
-          status: item.status,
-          voiceId: item.voiceId,
-          durationSeconds: item.durationSeconds,
-          createdAt: item.createdAt,
-          errorMessage: item.errorMessage,
-          isInvalidated: item.isInvalidated,
-        })) ?? [],
+      recentEnrollments: recentEnrollments.map((item) => ({
+        id: item.id,
+        status: item.status,
+        voiceId: item.voiceId,
+        durationSeconds: item.durationSeconds,
+        createdAt: item.createdAt,
+        errorMessage: item.errorMessage,
+        isInvalidated: item.isInvalidated,
+      })),
     });
   });
 

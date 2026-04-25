@@ -1,7 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { Hono } from "hono";
 import type { AppConfig } from "../lib/config";
-import { createUserSession, destroyCurrentSession, requireCurrentUser, unauthorizedResponse } from "../lib/auth";
+import {
+  createUserSession,
+  destroyCurrentSession,
+  migrateAnonymousDataToUser,
+  requireCurrentUser,
+  unauthorizedResponse,
+} from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { hashPassword, verifyPassword } from "../lib/password";
 import { prisma } from "../lib/prisma";
@@ -109,6 +115,7 @@ export function createAuthRoutes(cfg: AppConfig) {
         },
       });
 
+      await migrateAnonymousDataToUser(c, cfg, user.id);
       await createUserSession(c, cfg, user.id);
 
       return c.json({ user: buildAuthUser(user) }, 201);
@@ -145,6 +152,7 @@ export function createAuthRoutes(cfg: AppConfig) {
       return errorResponse(c, "手机号或密码错误", 401);
     }
 
+    await migrateAnonymousDataToUser(c, cfg, user.id);
     await createUserSession(c, cfg, user.id);
 
     return c.json({ user: buildAuthUser(user) });
@@ -179,6 +187,7 @@ export function createAuthRoutes(cfg: AppConfig) {
       },
     });
 
+    await migrateAnonymousDataToUser(c, cfg, user.id);
     await createUserSession(c, cfg, user.id);
 
     return c.json({ user: buildAuthUser(user) });
