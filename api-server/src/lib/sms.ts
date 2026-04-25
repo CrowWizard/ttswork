@@ -63,15 +63,23 @@ function buildTemplateParam(cfg: AppConfig) {
 
 function createSmsClient(cfg: AppConfig) {
   const openApiDefault = (OpenApi as { default?: unknown }).default;
+  const dypnsapiCtor = (typeof Dypnsapi === "function"
+    ? Dypnsapi
+    : (Dypnsapi as { default?: unknown }).default) as (new (config: OpenApi.Config) => Dypnsapi) | undefined;
 
   console.info(
     `[sms] sdk.inspect ` +
     `OpenApi.Config=${typeof OpenApi.Config} ` +
     `OpenApi.default=${typeof openApiDefault} ` +
     `OpenApi.default.Config=${typeof (openApiDefault as { Config?: unknown } | undefined)?.Config} ` +
-    `Dypnsapi=${typeof Dypnsapi}`,
+    `Dypnsapi=${typeof Dypnsapi} ` +
+    `Dypnsapi.default=${typeof (Dypnsapi as { default?: unknown }).default}`,
   );
   console.info(`[sms] sdk.keys openapi=${Object.keys(OpenApi).join(",")}`);
+
+  if (typeof dypnsapiCtor !== "function") {
+    throw new SmsServiceError("短信 SDK 初始化失败：Dypnsapi 构造器不可用", 500);
+  }
 
   const openApiConfig = new OpenApi.Config({
     accessKeyId: cfg.sms.accessKeyId,
@@ -80,7 +88,7 @@ function createSmsClient(cfg: AppConfig) {
     protocol: "https",
   });
 
-  return new Dypnsapi(openApiConfig);
+  return new dypnsapiCtor(openApiConfig);
 }
 
 function hashVerificationCode(phoneNumber: string, scene: SmsSceneValue, code: string) {
