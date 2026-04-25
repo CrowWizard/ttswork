@@ -59,13 +59,13 @@ sync_database() {
 
   if command -v bunx &>/dev/null; then
     echo "  执行 prisma db push ..."
-    (cd "$SOURCE_DIR" && DATABASE_URL="$DATABASE_URL" bunx prisma db push --skip-generate --accept-data-loss 2>&1) || {
+    (cd "$SOURCE_DIR" && DATABASE_URL="$DATABASE_URL" bunx prisma db push --accept-data-loss 2>&1) || {
       echo "  ⚠️  数据库同步失败，请手动执行:"
-      echo "  cd $SOURCE_DIR && DATABASE_URL='<database-url>' bunx prisma db push --skip-generate"
+      echo "  cd $SOURCE_DIR && DATABASE_URL='<database-url>' bunx prisma db push --accept-data-loss"
     }
   else
     echo "  ⚠️  未找到 bunx，请手动安装 Bun 后执行:"
-    echo "  cd $SOURCE_DIR && DATABASE_URL='<database-url>' bunx prisma db push --skip-generate"
+    echo "  cd $SOURCE_DIR && DATABASE_URL='<database-url>' bunx prisma db push --accept-data-loss"
   fi
 }
 

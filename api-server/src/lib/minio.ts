@@ -1,8 +1,6 @@
 import { Client } from "minio";
 import type { AppConfig } from "./config";
 
-const clients = new WeakMap<AppConfig, Client>();
-
 export function getMinioClient(cfg: AppConfig["minio"]): Client {
   return new Client({
     endPoint: cfg.endpoint,

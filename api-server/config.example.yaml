@@ -27,4 +27,26 @@ qwen:
 
 cookie:
   secure: false
-  maxAge: 31536000
+  maxAge: 2592000
+  sameSite: "Lax"
+
+auth:
+  sessionCookieName: "voice_session"
+  sessionTtlSeconds: 2592000
+  sessionTouchIntervalSeconds: 300
+
+sms:
+  mockMode: true
+  accessKeyId: ""
+  accessKeySecret: ""
+  endpoint: "dypnsapi.aliyuncs.com"
+  signName: "速通互联验证码"
+  templateCode: "100001"
+  templateParam: '{"code":"##code##","min":"5"}'
+  registerSchemeName: "登录/注册模板"
+  loginSchemeName: "登录/注册模板"
+  codeLength: 6
+  validTimeSeconds: 300
+  intervalSeconds: 60
+  codeType: 1
+  returnVerifyCode: false

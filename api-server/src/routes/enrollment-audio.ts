@@ -1,27 +1,29 @@
 import { Hono } from "hono";
 import type { AppConfig } from "../lib/config";
+import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { getObjectBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
-import { ensureAnonymousUserCookie } from "../lib/session";
-import { ensureAnonymousUserRecord } from "../lib/user";
 
 export function createEnrollmentAudioRoutes(cfg: AppConfig) {
   const enrollmentAudio = new Hono();
 
   enrollmentAudio.get("/:enrollmentId/audio", async (c) => {
-    const userId = await ensureAnonymousUserCookie(c, cfg.cookie);
-    await ensureAnonymousUserRecord(userId);
+    const currentUser = await requireCurrentUser(c, cfg);
+
+    if (!currentUser) {
+      return unauthorizedResponse(c);
+    }
 
     const enrollmentId = c.req.param("enrollmentId");
     const enrollment = await prisma.voiceEnrollment.findFirst({
       where: {
         id: enrollmentId,
-        userId,
+        userId: currentUser.id,
       },
     });
-    const user = await prisma.anonymousUser.findUnique({
-      where: { id: userId },
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
       select: { activeVoiceEnrollmentId: true },
     });
 

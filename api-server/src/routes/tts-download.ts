@@ -1,23 +1,25 @@
 import { Hono } from "hono";
 import type { AppConfig } from "../lib/config";
+import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { getObjectBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
-import { ensureAnonymousUserCookie } from "../lib/session";
-import { ensureAnonymousUserRecord } from "../lib/user";
 
 export function createTtsDownloadRoutes(cfg: AppConfig) {
   const ttsDownload = new Hono();
 
   ttsDownload.get("/:jobId/download", async (c) => {
-    const userId = await ensureAnonymousUserCookie(c, cfg.cookie);
-    await ensureAnonymousUserRecord(userId);
+    const currentUser = await requireCurrentUser(c, cfg);
+
+    if (!currentUser) {
+      return unauthorizedResponse(c);
+    }
 
     const jobId = c.req.param("jobId");
     const job = await prisma.ttsJob.findFirst({
       where: {
         id: jobId,
-        userId,
+        userId: currentUser.id,
       },
     });
 
