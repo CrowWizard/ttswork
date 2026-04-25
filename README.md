@@ -65,8 +65,8 @@ cp .env.example .env
 ### 4. 生成 Prisma Client 并同步数据库
 
 ```bash
-npx prisma generate
-npx prisma db push
+bunx prisma generate
+bunx prisma db push
 ```
 
 ### 5. 启动开发环境
@@ -122,19 +122,19 @@ prisma/
 建议依次执行：
 
 ```bash
-npm install
-npx prisma generate
-npm run lint
-npm run typecheck
-npm run build
+bun install
+bunx prisma generate
+bun run lint
+bun run typecheck
+bun run build
 ```
 
 如需使用容器方式快速补齐本地依赖，再补充：
 
 ```bash
 docker compose up -d
-npx prisma db push
-npm run dev
+bunx prisma db push
+bun run dev
 ```
 
 ## 数据模型摘要

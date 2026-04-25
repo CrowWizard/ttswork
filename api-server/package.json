@@ -5,10 +5,13 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "build": "bun run build.ts",
-    "start": "./voice-mvp-api"
+    "start": "./voice-mvp-api",
+    "prisma:generate": "bunx prisma generate",
+    "prisma:push": "bunx prisma db push"
   },
   "dependencies": {
-    "@prisma/client": "^6.7.0",
+    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "hono": "^4.7.9",
     "minio": "^8.0.6",
     "yaml": "^2.8.3",
@@ -16,7 +19,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "prisma": "^6.7.0",
+    "prisma": "^7.8.0",
     "typescript": "^5.8.3"
   }
 }

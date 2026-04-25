@@ -27,11 +27,11 @@ install-frontend:
 	bun install
 
 install-api:
-	cd api-server && bun install && bun run --bun prisma generate
+	cd api-server && bun install && bunx prisma generate
 
 prisma-generate:
 	bunx prisma generate
-	cd api-server && bun run --bun prisma generate
+	cd api-server && bunx prisma generate
 
 prisma-migrate:
 	bunx prisma migrate dev
@@ -44,7 +44,7 @@ build-frontend: install-frontend
 	@echo "前端静态文件已输出到 out/ ($$(du -sh out/ | cut -f1))"
 
 build-api: install-api
-	cd api-server && bun build --compile ./src/index.ts --outfile ./voice-mvp-api --target bun
+	cd api-server && bun run build
 	@echo ""
 	@echo "API 单可执行文件已输出到 api-server/voice-mvp-api ($$(ls -lh api-server/voice-mvp-api | awk '{print $$5}'))"
 
