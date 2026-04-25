@@ -36,3 +36,4 @@
 - 2026-04-25 11:40 +08:00：继续精简自动更新脚本：`/opt/voice-mvp` 不再接收 `package.json` 与 `package-lock.json`，数据库同步改为在 API 源码目录用 `SOURCE_DIR` 执行 `bunx prisma db push`；合并“构建 API 单文件”和“更新 API 文件”为同一步，整体步骤从 8 步收敛为 7 步；删除新生成的 `api-server/package-lock.json` 并加入 `.gitignore`，保留根目录 `bun.lock` 作为 Bun 统一依赖锁文件；本地执行脚本语法与残留检索通过。
 - 2026-04-25 11:59 +08:00：修复服务器执行 `update.sh` 时 `bun install --frozen-lockfile` 因 lockfile 需要更新而失败的问题；自动更新脚本默认使用普通 `bun install` 允许服务器刷新 `bun.lock`，如需严格锁文件校验可设置 `STRICT_LOCKFILE=true` 后再运行；本地执行脚本语法检查通过。
 - 2026-04-25 12:01 +08:00：为避免服务器运行 `update.sh` 后本地生成/更新 `bun.lock` 导致下次 `git pull --ff-only` 需要合并，已将 `bun.lock` 加入 `.gitignore` 并从 Git 索引移除，后续不再提交该锁文件。
+- 2026-04-25 12:04 +08:00：继续清理 Git 中残留的 Bun 锁文件，将 `**/bun.lock` 加入 `.gitignore`，并从 Git 索引移除 `api-server/bun.lock`，避免 API 子目录的 Bun lock 继续出现在远程仓库。
