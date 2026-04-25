@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { Prisma, TtsJobStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
-import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
+import { requireCurrentUser, resolveAnonymousUser } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { uploadBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
@@ -13,16 +13,20 @@ export function createTtsRoutes(cfg: AppConfig) {
   const tts = new Hono();
 
   const TTS_HISTORY_LIMIT = 3;
+  const ANONYMOUS_TTS_TEXT_LIMIT = 30;
 
   tts.get("/", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
+    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
 
-    if (!currentUser) {
-      return unauthorizedResponse(c);
+    if (!currentUser && !anonymousUser) {
+      return c.json([]);
     }
 
     const jobs = await prisma.ttsJob.findMany({
-      where: { userId: currentUser.id, status: TtsJobStatus.READY },
+      where: currentUser
+        ? { userId: currentUser.id, status: TtsJobStatus.READY }
+        : { anonymousUserId: anonymousUser?.id, status: TtsJobStatus.READY },
       orderBy: { createdAt: "desc" },
       take: TTS_HISTORY_LIMIT,
       select: {
@@ -49,10 +53,8 @@ export function createTtsRoutes(cfg: AppConfig) {
 
   tts.post("/", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
-
-    if (!currentUser) {
-      return unauthorizedResponse(c);
-    }
+    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
+    const ownerId = currentUser?.id ?? anonymousUser?.id;
 
     const body = await c.req.json().catch(() => null);
     const parsedBody = ttsRequestSchema.safeParse(body);
@@ -61,31 +63,62 @@ export function createTtsRoutes(cfg: AppConfig) {
       return errorResponse(c, parsedBody.error.issues[0]?.message ?? "请求参数无效");
     }
 
+    if (!ownerId) {
+      return errorResponse(c, "无法建立匿名会话", 500);
+    }
+
+    if (!currentUser) {
+      if (parsedBody.data.text.length > ANONYMOUS_TTS_TEXT_LIMIT) {
+        return errorResponse(c, `匿名免费语音最多支持 ${ANONYMOUS_TTS_TEXT_LIMIT} 字，请先登录`, 401);
+      }
+    }
+
     let job;
 
     try {
       job = await prisma.$transaction(
         async (tx) => {
-          const user = await tx.user.findUnique({
-            where: { id: currentUser.id },
-            include: { activeVoiceEnrollment: true },
-          });
+          const activeVoiceEnrollmentId = currentUser
+            ? (await tx.user.findUnique({ where: { id: currentUser.id } }))?.activeVoiceEnrollmentId
+            : anonymousUser?.activeVoiceEnrollmentId;
 
-          const activeVoice = user?.activeVoiceEnrollment;
+          if (!currentUser && !activeVoiceEnrollmentId) {
+            return tx.ttsJob.create({
+              data: {
+                anonymousUserId: anonymousUser?.id,
+                voiceIdSnapshot: cfg.qwen.trialVoiceId,
+                text: parsedBody.data.text,
+                status: TtsJobStatus.PENDING,
+              },
+            });
+          }
+
+          if (!activeVoiceEnrollmentId) {
+            throw new ActiveVoiceUnavailableError("当前没有可用的 active voice");
+          }
+
+          const activeVoice = await tx.voiceEnrollment.findUnique({
+            where: { id: activeVoiceEnrollmentId },
+          });
 
           if (!activeVoice || !activeVoice.voiceId || activeVoice.isInvalidated) {
             throw new ActiveVoiceUnavailableError("当前没有可用的 active voice");
           }
 
-          if (user.activeVoiceEnrollmentId !== activeVoice.id) {
+          if (currentUser && activeVoice.userId !== currentUser.id) {
             throw new ActiveVoiceChangedError("当前 active voice 已发生变化，请重试");
           }
 
-            return tx.ttsJob.create({
-              data: {
-                userId: currentUser.id,
-                voiceEnrollmentId: activeVoice.id,
-                voiceIdSnapshot: activeVoice.voiceId,
+          if (anonymousUser && activeVoice.anonymousUserId !== anonymousUser.id) {
+            throw new ActiveVoiceChangedError("当前 active voice 已发生变化，请重试");
+          }
+
+          return tx.ttsJob.create({
+            data: {
+              userId: currentUser?.id,
+              anonymousUserId: anonymousUser?.id,
+              voiceEnrollmentId: activeVoice.id,
+              voiceIdSnapshot: activeVoice.voiceId,
               text: parsedBody.data.text,
               status: TtsJobStatus.PENDING,
             },
@@ -112,7 +145,7 @@ export function createTtsRoutes(cfg: AppConfig) {
       });
 
       const extension = qwenResult.extension || "wav";
-      const outputObjectKey = `tts/${currentUser.id}/${Date.now()}-${randomUUID()}.${extension}`;
+      const outputObjectKey = `tts/${ownerId}/${Date.now()}-${randomUUID()}.${extension}`;
       const storedOutput = await uploadBuffer(cfg.minio, {
         objectKey: outputObjectKey,
         buffer: qwenResult.audioBuffer,

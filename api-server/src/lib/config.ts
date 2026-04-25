@@ -31,6 +31,7 @@ export type AppConfig = {
     apiKey: string;
     enrollUrl: string;
     ttsUrl: string;
+    trialVoiceId: string;
   };
   cookie: {
     secure: boolean;
@@ -201,6 +202,7 @@ export function loadConfig(): AppConfig {
       apiKey: envString("QWEN_API_KEY", qwen.apiKey ?? ""),
       enrollUrl: envString("QWEN_ENROLL_URL", qwen.enrollUrl ?? ""),
       ttsUrl: envString("QWEN_TTS_URL", qwen.ttsUrl ?? ""),
+      trialVoiceId: envString("QWEN_TRIAL_VOICE_ID", qwen.trialVoiceId ?? "Cherry"),
     },
     cookie: {
       secure: envBool("COOKIE_SECURE", cookie.secure ?? false),

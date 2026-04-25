@@ -20,7 +20,7 @@ minio:
   bucket: "voice-mvp"
 
 qwen:
-  mockMode: true
+  mockMode: false
   apiKey: ""
   enrollUrl: ""
   ttsUrl: ""

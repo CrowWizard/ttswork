@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Voice MVP",
-  description: "手机号登录建声与 TTS MVP",
+  title: "语音复刻工作台",
+  description: "支持手机号登录、建声管理与文本转语音的语音工作台。",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

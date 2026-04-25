@@ -24,6 +24,7 @@ qwen:
   apiKey: ""
   enrollUrl: ""
   ttsUrl: ""
+  trialVoiceId: "Cherry"
 
 cookie:
   secure: false
