@@ -59,29 +59,52 @@ sync_database() {
 
   if command -v bunx &>/dev/null; then
     echo "  执行 AnonymousUser 兼容性回填"
-    if ! (
+    echo "    [1/3] 补齐 AnonymousUser 缺失列"
+    (
       cd "$SOURCE_DIR" &&
       DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<'SQL'
 ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "tokenHash" TEXT;
 ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3);
 ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+SQL
+    ) || {
+      echo "  ❌ AnonymousUser 补列失败，已中止后续 prisma db push"
+      echo "  请先确认数据库连接、表存在性与 ALTER TABLE 权限"
+      return 1
+    }
 
+    echo "    [2/3] 回填 AnonymousUser 历史数据"
+    (
+      cd "$SOURCE_DIR" &&
+      DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<'SQL'
 UPDATE "AnonymousUser"
 SET
   "tokenHash" = COALESCE("tokenHash", md5("id" || clock_timestamp()::text || random()::text)),
   "expiresAt" = COALESCE("expiresAt", CURRENT_TIMESTAMP),
   "lastSeenAt" = COALESCE("lastSeenAt", CURRENT_TIMESTAMP)
 WHERE "tokenHash" IS NULL OR "expiresAt" IS NULL OR "lastSeenAt" IS NULL;
+SQL
+    ) || {
+      echo "  ❌ AnonymousUser 历史数据回填失败，已中止后续 prisma db push"
+      echo "  请先检查新列是否已创建，或手动执行回填 SQL 诊断"
+      return 1
+    }
 
+    echo "    [3/3] 创建 AnonymousUser 索引"
+    (
+      cd "$SOURCE_DIR" &&
+      DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<'SQL'
 CREATE UNIQUE INDEX IF NOT EXISTS "AnonymousUser_tokenHash_key"
   ON "AnonymousUser"("tokenHash");
 
 CREATE INDEX IF NOT EXISTS "AnonymousUser_expiresAt_idx"
   ON "AnonymousUser"("expiresAt");
 SQL
-    ); then
-      echo "  ⚠️  AnonymousUser 兼容性回填失败，请先检查数据库连接或表权限"
-    fi
+    ) || {
+      echo "  ❌ AnonymousUser 索引创建失败，已中止后续 prisma db push"
+      echo "  请先检查现有脏数据是否导致唯一索引创建失败"
+      return 1
+    }
 
     echo "  执行 prisma db push ..."
     (cd "$SOURCE_DIR" && DATABASE_URL="$DATABASE_URL" bunx prisma db push --accept-data-loss 2>&1) || {
