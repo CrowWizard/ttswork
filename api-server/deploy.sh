@@ -58,6 +58,31 @@ sync_database() {
   echo "  已生成 $INSTALL_DIR/.env（host=${DB_HOST} port=${DB_PORT} db=${DB_NAME}）"
 
   if command -v bunx &>/dev/null; then
+    echo "  执行 AnonymousUser 兼容性回填"
+    if ! (
+      cd "$SOURCE_DIR" &&
+      DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<'SQL'
+ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "tokenHash" TEXT;
+ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMP(3);
+ALTER TABLE "AnonymousUser" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+UPDATE "AnonymousUser"
+SET
+  "tokenHash" = COALESCE("tokenHash", md5("id" || clock_timestamp()::text || random()::text)),
+  "expiresAt" = COALESCE("expiresAt", CURRENT_TIMESTAMP),
+  "lastSeenAt" = COALESCE("lastSeenAt", CURRENT_TIMESTAMP)
+WHERE "tokenHash" IS NULL OR "expiresAt" IS NULL OR "lastSeenAt" IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "AnonymousUser_tokenHash_key"
+  ON "AnonymousUser"("tokenHash");
+
+CREATE INDEX IF NOT EXISTS "AnonymousUser_expiresAt_idx"
+  ON "AnonymousUser"("expiresAt");
+SQL
+    ); then
+      echo "  ⚠️  AnonymousUser 兼容性回填失败，请先检查数据库连接或表权限"
+    fi
+
     echo "  执行 prisma db push ..."
     (cd "$SOURCE_DIR" && DATABASE_URL="$DATABASE_URL" bunx prisma db push --accept-data-loss 2>&1) || {
       echo "  ⚠️  数据库同步失败，请手动执行:"
