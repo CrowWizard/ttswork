@@ -158,10 +158,10 @@ bash scripts/init-minio.sh
 
 ```bash
 # 开发环境（创建迁移文件并应用）
-npx prisma migrate dev --name init
+bunx prisma migrate dev --name init
 
 # 生产环境（仅应用已有迁移）
-npx prisma migrate deploy
+bunx prisma migrate deploy
 ```
 
 ---
@@ -310,7 +310,7 @@ scp -r api-server/ centos7:/opt/voice-mvp-src/
 # 3. 在 CentOS 7 上编译
 cd /opt/voice-mvp-src
 bun install
-bun run --bun prisma generate
+bunx prisma generate
 bun build --compile ./src/index.ts --outfile ./voice-mvp-api --target bun
 
 # 4. 编译产物可以直接在当前 CentOS 7 上运行

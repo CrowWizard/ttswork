@@ -53,5 +53,6 @@ api-server/voice-mvp-api
 api-server/dist/
 api-server/node_modules/
 api-server/bun.lockb
+api-server/package-lock.json
 api-server/config.yaml
 api-server/index.js.map

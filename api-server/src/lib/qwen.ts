@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { isSupportedAudioMimeType } from "./audio-format";
+import { isSupportedAudioMimeType, normalizeSupportedAudioMimeType } from "./audio-format";
 import type { AppConfig } from "./config";
 
 export type VoiceEnrollmentResult = {
@@ -156,13 +156,14 @@ async function fetchTtsAudioFromPayload(payload: any): Promise<{ audioBuffer: Bu
 async function liveEnrollVoice(cfg: AppConfig["qwen"], audioBuffer: Buffer, mimeType: string) {
   const url = assertEnv("QWEN_ENROLL_URL", cfg.enrollUrl);
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
+  const normalizedMimeType = normalizeSupportedAudioMimeType(mimeType);
 
-  if (!isSupportedAudioMimeType(mimeType)) {
+  if (!isSupportedAudioMimeType(normalizedMimeType)) {
     throw new Error("Qwen 建声只支持 WAV、MP3、M4A");
   }
 
   const base64Audio = audioBuffer.toString("base64");
-  const audioData = `data:${mimeType};base64,${base64Audio}`;
+  const audioData = `data:${normalizedMimeType};base64,${base64Audio}`;
   const preferredName = buildPreferredName();
   const requestPayload = {
     model: "qwen-voice-enrollment",
@@ -185,7 +186,7 @@ async function liveEnrollVoice(cfg: AppConfig["qwen"], audioBuffer: Buffer, mime
         audio: {
           data: `${audioData.slice(0, 80)}...`,
           bytes: audioBuffer.byteLength,
-          mimeType,
+          mimeType: normalizedMimeType,
         },
       },
     },

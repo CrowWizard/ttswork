@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { EnrollmentStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
 import { isRecordDurationAccepted } from "../lib/audio";
-import { getAudioExtension, isSupportedAudioMimeType } from "../lib/audio-format";
+import { getAudioExtension, isSupportedAudioMimeType, normalizeSupportedAudioMimeType } from "../lib/audio-format";
 import { errorResponse } from "../lib/http";
 import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "../lib/constants";
 import { uploadBuffer } from "../lib/minio";
@@ -31,9 +31,27 @@ export function createVoiceEnrollRoutes(cfg: AppConfig) {
       return errorResponse(c, "缺少录音时长");
     }
 
-    const mimeType = audioFile.type || "application/octet-stream";
+    const rawMimeType = audioFile.type || "application/octet-stream";
+    const mimeType = normalizeSupportedAudioMimeType(rawMimeType);
 
-    if (!isSupportedAudioMimeType(mimeType)) {
+    console.info("[voice enroll] received file", {
+      userId,
+      name: audioFile.name,
+      type: audioFile.type,
+      normalizedMimeType: mimeType,
+      size: audioFile.size,
+      recordDurationValue,
+    });
+
+    if (!isSupportedAudioMimeType(rawMimeType)) {
+      console.warn("[voice enroll] unsupported mime type", {
+        userId,
+        name: audioFile.name,
+        type: audioFile.type,
+        normalizedMimeType: mimeType,
+        size: audioFile.size,
+      });
+
       return errorResponse(c, "录音格式仅支持 WAV、MP3、M4A", 400);
     }
 

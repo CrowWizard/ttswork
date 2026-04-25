@@ -46,6 +46,10 @@ function formatDuration(durationSeconds: number) {
   return `${durationSeconds.toFixed(1)} 秒`;
 }
 
+function buildAudioFilename(jobId: string) {
+  return `tts-${jobId}.wav`;
+}
+
 function pickRecordingMimeType() {
   if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
     return "audio/webm;codecs=opus";
@@ -171,6 +175,13 @@ export function VoiceStudio() {
     formData.append(INPUT_AUDIO_FIELD, audioFile, audioFile.name);
     formData.append(RECORD_DURATION_SECONDS_FIELD, durationSeconds.toFixed(3));
 
+    console.info("[voice enroll] submit audio", {
+      name: audioFile.name,
+      type: audioFile.type,
+      size: audioFile.size,
+      durationSeconds,
+    });
+
     try {
       const response = await fetch("/api/voice/enroll", {
         method: "POST",
@@ -228,6 +239,14 @@ export function VoiceStudio() {
 
         const audioBlob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType });
         const recordDurationSeconds = finalRecordDurationRef.current;
+
+        console.info("[voice enroll] recorded blob", {
+          sourceMimeType: mediaRecorder.mimeType,
+          blobType: audioBlob.type,
+          size: audioBlob.size,
+          durationSeconds: recordDurationSeconds,
+          chunkCount: chunksRef.current.length,
+        });
 
         if (!isRecordDurationAccepted(recordDurationSeconds)) {
           setRecordError(`录音不足 ${MIN_RECORD_SECONDS} 秒，请按住按钮说满 ${MIN_RECORD_SECONDS} 秒。`);
@@ -319,17 +338,17 @@ export function VoiceStudio() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-cream via-white to-mist px-6 py-10">
+    <main className="min-h-screen bg-gradient-to-br from-cream via-white to-mist px-4 py-8 sm:px-6 sm:py-10">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <section className="rounded-[32px] border border-white/70 bg-white/85 p-6 sm:p-8 shadow-soft backdrop-blur">
+        <section className="w-full rounded-[28px] border border-white/70 bg-white/85 p-6 shadow-soft backdrop-blur sm:rounded-[32px] sm:p-8">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">语音复刻工作台</h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">
             按住录音按钮录制你的声音，松开后自动建立声纹。随后输入任意文字即可用你的声音合成语音。
           </p>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[28px] border border-orange-100 bg-white p-8 shadow-soft">
+        <section className="grid w-full gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="w-full rounded-[28px] border border-orange-100 bg-white p-6 shadow-soft sm:p-8">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="text-2xl font-semibold">1. 建声录音</h2>
@@ -399,7 +418,7 @@ export function VoiceStudio() {
 
           </div>
 
-          <div className="rounded-[28px] border border-sky-100 bg-white p-8 shadow-soft">
+          <div className="w-full rounded-[28px] border border-sky-100 bg-white p-6 shadow-soft sm:p-8">
             <h2 className="text-2xl font-semibold">2. 文本转语音</h2>
 
             <label className="mt-6 block text-sm font-medium text-slate-700" htmlFor="tts-text">
@@ -427,6 +446,13 @@ export function VoiceStudio() {
                 <div className="text-sm text-emerald-800">任务已完成：{ttsResult.jobId}</div>
                 <div className="mt-1 text-sm text-emerald-800">voiceIdSnapshot：{ttsResult.voiceIdSnapshot}</div>
                 <audio className="mt-4 w-full" controls src={ttsResult.downloadUrl} />
+                <a
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                  href={ttsResult.downloadUrl}
+                  download={buildAudioFilename(ttsResult.jobId)}
+                >
+                  下载生成语音
+                </a>
               </div>
             ) : null}
 
@@ -440,7 +466,14 @@ export function VoiceStudio() {
                         <div className="line-clamp-2 text-sm text-slate-700">{item.text}</div>
                         <div className="shrink-0 text-xs text-slate-400">{new Date(item.createdAt).toLocaleString()}</div>
                       </div>
-                      <audio className="mt-2 w-full h-8 sm:h-auto" controls src={item.downloadUrl} />
+                      <audio className="mt-2 h-8 w-full sm:h-auto" controls src={item.downloadUrl} />
+                      <a
+                        className="mt-3 inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 sm:w-auto"
+                        href={item.downloadUrl}
+                        download={buildAudioFilename(item.jobId)}
+                      >
+                        下载
+                      </a>
                     </div>
                   ))}
                 </div>
