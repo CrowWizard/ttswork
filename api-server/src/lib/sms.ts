@@ -20,6 +20,14 @@ export class SmsServiceError extends Error {
   }
 }
 
+function maskPhoneNumber(phoneNumber: string) {
+  if (phoneNumber.length < 7) {
+    return phoneNumber;
+  }
+
+  return `${phoneNumber.slice(0, 3)}****${phoneNumber.slice(-4)}`;
+}
+
 function getSceneEnum(scene: SmsSceneValue) {
   switch (scene) {
     case "register":
@@ -148,6 +156,8 @@ async function createVerificationRecord(params: {
 }
 
 export async function sendSmsVerification(cfg: AppConfig, phoneNumber: string, scene: SmsSceneValue) {
+  console.info(`[sms] send.start scene=${scene} phone=${maskPhoneNumber(phoneNumber)} mockMode=${cfg.sms.mockMode}`);
+
   const latest = await prisma.smsVerification.findFirst({
     where: {
       phoneNumber,
@@ -182,6 +192,11 @@ export async function sendSmsVerification(cfg: AppConfig, phoneNumber: string, s
   }
 
   if (!cfg.sms.accessKeyId || !cfg.sms.accessKeySecret || !cfg.sms.signName || !cfg.sms.templateCode) {
+    console.error(
+      `[sms] send.config_incomplete scene=${scene} phone=${maskPhoneNumber(phoneNumber)} ` +
+      `accessKeyId=${Boolean(cfg.sms.accessKeyId)} accessKeySecret=${Boolean(cfg.sms.accessKeySecret)} ` +
+      `signName=${Boolean(cfg.sms.signName)} templateCode=${Boolean(cfg.sms.templateCode)}`,
+    );
     throw new SmsServiceError("短信服务配置不完整", 500);
   }
 
@@ -210,7 +225,16 @@ export async function sendSmsVerification(cfg: AppConfig, phoneNumber: string, s
 
     const body = response.body;
 
+    console.info(
+      `[sms] send.response scene=${scene} phone=${maskPhoneNumber(phoneNumber)} ` +
+      `success=${body?.success} code=${body?.code ?? "UNKNOWN"} requestId=${body?.model?.requestId ?? ""}`,
+    );
+
     if (!body?.success || body.code !== "OK") {
+      console.error(
+        `[sms] send.failed_response scene=${scene} phone=${maskPhoneNumber(phoneNumber)} ` +
+        `code=${body?.code ?? "UNKNOWN"} message=${body?.message ?? "send failed"}`,
+      );
       throw mapAliyunSendError(`${body?.code ?? "UNKNOWN"}:${body?.message ?? "send failed"}`);
     }
 
@@ -224,6 +248,11 @@ export async function sendSmsVerification(cfg: AppConfig, phoneNumber: string, s
       expiresAt,
     });
   } catch (error) {
+    console.error(
+      `[sms] send.exception scene=${scene} phone=${maskPhoneNumber(phoneNumber)} ` +
+      `${error instanceof Error ? error.message : String(error)}`,
+    );
+
     if (error instanceof SmsServiceError) {
       throw error;
     }
