@@ -212,7 +212,7 @@ components:
 - **Error / Disabled:** 错误通过 StatusMessage 与危险色表面表达；disabled 控件透明度降低并显示禁用鼠标状态。
 
 ### Navigation
-- **Style, typography, default/hover/active states, mobile treatment.** 当前没有全局导航。页面间移动只通过“个人设置”“返回工作台”“立即登录”等内联链接和按钮完成；这些链接必须保持任务语义，不扩展成营销导航。
+- **Style, typography, default/hover/active states, mobile treatment.** 当前不使用全局导航栏，仅在主工作区顶部提供轻量模块切换，用于在“语音工作台”和“B站视频分析”之间切换。`register`、`settings` 等次级页面仍通过“个人设置”“返回工作台”“立即登录”等内联链接和按钮完成移动；这些入口必须保持任务语义，不扩展成营销导航或后台导航。
 
 ### Status Message
 状态消息是本系统的关键组件。错误使用 `role="alert"` 与 assertive live region；成功、信息、警告使用 `role="status"` 与 polite live region。视觉上使用 16px 圆角、状态色边框、状态色浅表面和状态色文字，并保持标题/正文两级信息结构。
