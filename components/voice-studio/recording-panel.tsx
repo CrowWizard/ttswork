@@ -23,8 +23,23 @@ function RecordingElapsedStatus({ recording, recordStartedAt }: { recording: boo
 
 function TaskHintList() {
   return (
-    <div>
-      <div className="rounded-xl border border-border-subtle bg-surface-muted sm:grid sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 sm:grid-cols-3">
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-2 sm:hidden">
+        <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-center">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">Step 1</div>
+          <div className="mt-1 text-sm font-medium text-text-primary">录音</div>
+        </div>
+        <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-center">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">Step 2</div>
+          <div className="mt-1 text-sm font-medium text-text-primary">建声</div>
+        </div>
+        <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-center">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">Step 3</div>
+          <div className="mt-1 text-sm font-medium text-text-primary">生成</div>
+        </div>
+      </div>
+
+      <div className="hidden rounded-xl border border-border-subtle bg-surface-muted sm:grid sm:grid-cols-3 sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0">
         <div className="p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 1</div>
           <div className="mt-1 font-medium text-text-primary">录一段清晰语音</div>
@@ -52,15 +67,15 @@ export function RecordingPanel({
   profile,
   recording,
   recordStartedAt,
-    uploading,
-    creatingPureVoice,
-    creatingSceneVoice,
-    invalidatingVoiceId,
-    deletingRecordingId,
-    selectedRecordingId,
-    onSelectRecording,
-    onDeleteRecording,
-    workspaceError,
+  uploading,
+  creatingPureVoice,
+  creatingSceneVoice,
+  invalidatingVoiceId,
+  deletingRecordingId,
+  selectedRecordingId,
+  onSelectRecording,
+  onDeleteRecording,
+  workspaceError,
   workspaceNotice,
   onRecordButtonMouseDown,
   onRecordButtonMouseUp,
@@ -70,9 +85,9 @@ export function RecordingPanel({
   onRecordButtonTouchCancel,
   onRecordButtonKeyDown,
   onCreatePureVoice,
-    onCreateSceneVoice,
-    onInvalidateVoice,
-  }: RecordingPanelProps) {
+  onCreateSceneVoice,
+  onInvalidateVoice,
+}: RecordingPanelProps) {
   const activePureVoice = profile?.activeVoices.pure ?? null;
   const activeSceneVoice = profile?.activeVoices.scene ?? null;
 
@@ -168,11 +183,11 @@ export function RecordingPanel({
         )}
       </div>
 
-      <div className="mt-5">
-        <TaskHintList />
-      </div>
-
       <div className="mt-8 flex flex-col gap-4">
+        <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+          三步完成：录音上传 - 建立声纹 - 输入文本生成语音。
+        </div>
+
         <p id="recording-help" className="text-center text-sm text-text-muted">
           鼠标或触屏按住开始、松开结束。
         </p>
@@ -181,14 +196,14 @@ export function RecordingPanel({
           <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
             录音已结束，正在上传到 MinIO。
           </p>
-          ) : deletingRecordingId ? (
-            <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
-              正在删除录音素材。
-            </p>
-          ) : invalidatingVoiceId ? (
-            <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
-              正在作废当前声纹。
-            </p>
+        ) : deletingRecordingId ? (
+          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
+            正在删除录音素材。
+          </p>
+        ) : invalidatingVoiceId ? (
+          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
+            正在作废当前声纹。
+          </p>
         ) : (
           <RecordingElapsedStatus recording={recording} recordStartedAt={recordStartedAt} />
         )}
@@ -225,6 +240,8 @@ export function RecordingPanel({
           <VoiceCard title="纯粹版声纹" voice={activePureVoice} />
           <VoiceCard title="场景版声纹" voice={activeSceneVoice} />
         </div>
+
+        <TaskHintList />
 
         {workspaceError ? <StatusMessage message={workspaceError} type="error" title="建声操作失败" /> : null}
         {workspaceNotice ? <StatusMessage message={workspaceNotice.text} type={workspaceNotice.type} title={workspaceNotice.title} /> : null}

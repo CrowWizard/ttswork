@@ -46,7 +46,7 @@ export function AuthPanel({
   const smsButtonLabel = sendingSms ? "发送中..." : smsCountdown > 0 ? `${smsCountdown}s 后重发` : "发送验证码";
 
   return (
-    <section className="app-card mx-auto w-full max-w-md p-6 sm:p-8">
+    <section className="mx-auto w-full max-w-md">
       <div className="space-y-6">
         {/* Tab切换 */}
         <div

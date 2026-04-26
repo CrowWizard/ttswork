@@ -4,7 +4,7 @@ import { isRecordDurationAccepted } from "@/lib/audio";
 import { convertBlobToWavFile } from "@/lib/audio-browser";
 import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
 import type { AuthMode, AuthUser, StatusState, TtsHistoryItem, TtsResult, TtsSceneItem, VoiceProfileKind, VoiceProfileResponse } from "./types";
-import { pickRecordingMimeType, readJsonSafely } from "./utils";
+import { pickRecordingMimeType, readJsonSafely, toUserFacingErrorMessage } from "./utils";
 
 export function useVoiceStudioState() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -63,13 +63,13 @@ export function useVoiceStudioState() {
     setRecording(false);
     setRecordStartedAt(null);
     setUploading(false);
-      setCreatingPureVoice(false);
-      setCreatingSceneVoice(false);
-      setInvalidatingVoiceId(null);
-      setDeletingRecordingId(null);
-      setTtsLoading(false);
-      setTtsResult(null);
-      setTtsHistory([]);
+    setCreatingPureVoice(false);
+    setCreatingSceneVoice(false);
+    setInvalidatingVoiceId(null);
+    setDeletingRecordingId(null);
+    setTtsLoading(false);
+    setTtsResult(null);
+    setTtsHistory([]);
   }, [clearWorkspaceFeedback]);
 
   const handleUnauthorized = useCallback(
@@ -97,8 +97,8 @@ export function useVoiceStudioState() {
         return;
       }
 
-      const data = (await response.json()) as TtsHistoryItem[];
-      setTtsHistory(data);
+      const data = await readJsonSafely(response);
+      setTtsHistory(Array.isArray(data) ? (data as TtsHistoryItem[]) : []);
     } catch {}
   }, [handleUnauthorized]);
 
@@ -113,8 +113,8 @@ export function useVoiceStudioState() {
         return;
       }
 
-      const data = (await response.json()) as TtsSceneItem[];
-      setScenes(data);
+      const data = await readJsonSafely(response);
+      setScenes(Array.isArray(data) ? (data as TtsSceneItem[]) : []);
     } catch {}
   }, []);
 
@@ -132,22 +132,22 @@ export function useVoiceStudioState() {
         return;
       }
 
-      const data = (await response.json()) as VoiceProfileResponse & { error?: string };
+      const data = (await readJsonSafely(response)) as VoiceProfileResponse & { error?: string };
 
       if (!response.ok) {
         throw new Error(data.error ?? "加载声纹信息失败");
       }
 
-        setProfile(data);
-        setSelectedRecordingId((current) => {
-          if (!current) {
-            return data.recordings[0]?.id ?? null;
-          }
+      setProfile(data);
+      setSelectedRecordingId((current) => {
+        if (!current) {
+          return data.recordings[0]?.id ?? null;
+        }
 
-          return data.recordings.some((item) => item.id === current) ? current : (data.recordings[0]?.id ?? null);
-        });
+        return data.recordings.some((item) => item.id === current) ? current : (data.recordings[0]?.id ?? null);
+      });
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "加载声纹信息失败");
+      setWorkspaceError(toUserFacingErrorMessage(error, "加载声纹信息失败，请稍后重试"));
     } finally {
       setLoadingProfile(false);
     }
@@ -290,7 +290,7 @@ export function useVoiceStudioState() {
       setAuthMessage({
         type: "error",
         title: "验证码发送失败",
-        text: error instanceof Error ? error.message : "验证码发送失败",
+        text: toUserFacingErrorMessage(error, "验证码发送失败，请稍后重试"),
       });
     } finally {
       setSendingSms(false);
@@ -328,7 +328,7 @@ export function useVoiceStudioState() {
       setAuthMessage({
         type: "error",
         title: "短信登录失败",
-        text: error instanceof Error ? error.message : "登录失败",
+        text: toUserFacingErrorMessage(error, "登录失败，请检查验证码后重试"),
       });
     } finally {
       setAuthSubmitting(false);
@@ -365,7 +365,7 @@ export function useVoiceStudioState() {
       setAuthMessage({
         type: "error",
         title: "密码登录失败",
-        text: error instanceof Error ? error.message : "登录失败",
+        text: toUserFacingErrorMessage(error, "登录失败，请检查手机号和密码后重试"),
       });
     } finally {
       setAuthSubmitting(false);
@@ -416,7 +416,7 @@ export function useVoiceStudioState() {
       setSelectedRecordingId(payload.recordingId ?? null);
       setWorkspaceNotice({ type: "success", title: "录音上传完成", text: "录音已存入 MinIO，可继续建立纯粹版或场景版声纹。" });
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "上传录音失败");
+      setWorkspaceError(toUserFacingErrorMessage(error, "上传录音失败，请稍后重试"));
     } finally {
       setUploading(false);
     }
@@ -478,7 +478,7 @@ export function useVoiceStudioState() {
           const audioFile = await convertBlobToWavFile(audioBlob);
           await uploadRecording(audioFile, recordDurationSeconds);
         } catch (error) {
-          setWorkspaceError(error instanceof Error ? error.message : "录音处理失败");
+          setWorkspaceError(toUserFacingErrorMessage(error, "录音处理失败，请重新录制"));
           setUploading(false);
         }
       };
@@ -488,7 +488,7 @@ export function useVoiceStudioState() {
       setRecording(true);
     } catch (error) {
       stopRecordTimer();
-      setWorkspaceError(error instanceof Error ? error.message : "无法访问麦克风");
+      setWorkspaceError(toUserFacingErrorMessage(error, "无法访问麦克风，请检查浏览器权限后重试"));
     }
   }, [recording, uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, clearWorkspaceFeedback, uploadRecording]);
 
@@ -549,7 +549,7 @@ export function useVoiceStudioState() {
         text: payload.voiceId ? `当前声纹 ID：${payload.voiceId}` : "声纹已可用于后续文本转语音。",
       });
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "建立声纹失败");
+      setWorkspaceError(toUserFacingErrorMessage(error, "建立声纹失败，请稍后重试"));
     } finally {
       if (profileKind === "PURE") {
         setCreatingPureVoice(false);
@@ -582,7 +582,7 @@ export function useVoiceStudioState() {
       await refreshProfile();
       setWorkspaceNotice({ type: "info", title: "录音素材已删除", text: "后续建声将只能使用当前列表中保留的最新录音素材。" });
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "删除录音素材失败");
+      setWorkspaceError(toUserFacingErrorMessage(error, "删除录音素材失败，请稍后重试"));
     } finally {
       setDeletingRecordingId(null);
     }
@@ -612,7 +612,7 @@ export function useVoiceStudioState() {
       await refreshProfile();
       setWorkspaceNotice({ type: "info", title: "声纹已作废", text: "如需继续使用，请重新基于录音建立新的声纹。" });
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "作废声纹失败");
+      setWorkspaceError(toUserFacingErrorMessage(error, "作废声纹失败，请稍后重试"));
     } finally {
       setInvalidatingVoiceId(null);
     }
@@ -661,7 +661,7 @@ export function useVoiceStudioState() {
         void refreshTtsHistory();
       }
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "语音合成失败");
+      setWorkspaceError(toUserFacingErrorMessage(error, "语音合成失败，请稍后重试"));
     } finally {
       setTtsLoading(false);
     }

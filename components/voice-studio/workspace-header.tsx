@@ -2,18 +2,25 @@ import Link from "next/link";
 import type { WorkspaceHeaderProps } from "./types";
 
 export function WorkspaceHeader({ authResolving, authUser, onLogout }: WorkspaceHeaderProps) {
+  const guestNotice = authResolving
+    ? "正在检查登录状态..."
+    : authUser
+      ? "支持按住录音建声，也支持键盘按一次开始、再按一次结束。建立声纹后即可输入文本生成语音。"
+      : "未登录用户可试用 1 次，单次最多 30 字；登录后可解锁完整使用。";
+
   return (
     <section className="app-card w-full p-6 sm:p-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">语音复刻工作台</h1>
-          <p className="mt-3 text-sm leading-6 text-text-muted">
-            {authResolving
-              ? "正在检查登录状态..."
-              : authUser
-              ? "支持按住录音建声，也支持键盘按一次开始、再按一次结束。建立声纹后即可输入文本生成语音。"
-              : "未登录用户可试用1次，限30字内。点击右上角登录后可无限使用。"}
-          </p>
+          <p className="mt-3 text-sm leading-6 text-text-muted">{guestNotice}</p>
+
+          {!authUser ? (
+            <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-2xl border border-info-border bg-info-surface px-4 py-3 text-sm text-info">
+              <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold tracking-[0.12em]">TRY</span>
+              <span>先试 1 次 30 字短句，登录后继续录音建声与无限生成。</span>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-3">

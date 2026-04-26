@@ -18,6 +18,7 @@ export function TtsPanel({
 }: TtsPanelProps) {
   const trimmedLength = ttsText.trim().length;
   const selectedScene = scenes.find((item) => item.key === selectedSceneKey) ?? null;
+  const sceneSelectionDisabled = isAuthenticated && !hasSceneVoice && scenes.length > 0;
   const helperText = isAuthenticated
     ? selectedSceneKey
       ? hasSceneVoice
@@ -34,6 +35,17 @@ export function TtsPanel({
     : isAuthenticated
       ? "生成语音"
       : "生成语音";
+  const selectedSceneSummary = selectedScene
+    ? {
+        badge: "已选场景",
+        title: selectedScene.label,
+        body: selectedScene.instruction,
+      }
+    : {
+        badge: "当前模式",
+        title: "纯粹版语音",
+        body: "不携带 instruction，直接使用纯粹版声纹生成语音。",
+      };
 
   return (
     <div className="app-card w-full p-6 sm:p-8">
@@ -49,32 +61,51 @@ export function TtsPanel({
         </span>
       </div>
 
-      <label className="mt-6 block text-sm font-medium text-text-secondary" htmlFor="tts-text">
-        输入文本
-      </label>
-      <label className="mt-4 block text-sm font-medium text-text-secondary" htmlFor="tts-scene">
+      <label className="mt-6 block text-sm font-medium text-text-secondary" htmlFor="tts-scene">
         场景选择
       </label>
-      <select
-        id="tts-scene"
-        className="app-input mt-3"
-        value={selectedSceneKey}
-        onChange={(event) => onSceneChange(event.target.value)}
-        disabled={isAuthenticated && !hasSceneVoice && scenes.length > 0}
-      >
-        <option value="">不使用场景，生成纯粹版语音</option>
-        {scenes.map((item) => (
-          <option key={item.key} value={item.key}>
-            {item.label}
-          </option>
-        ))}
-      </select>
-      {selectedScene ? (
-        <p className="mt-2 text-xs leading-5 text-text-muted">instruction：{selectedScene.instruction}</p>
-      ) : null}
+      <div className="mt-3 rounded-[20px] border border-border-subtle bg-surface-selected p-2 shadow-panel transition hover:border-border-strong focus-within:border-action-secondary">
+        <div className="relative">
+          <select
+            id="tts-scene"
+            className="min-h-[56px] w-full appearance-none rounded-[18px] border border-border-subtle bg-surface-elevated py-4 pl-4 pr-16 text-sm font-medium text-text-primary shadow-control transition hover:border-border-strong focus:border-action-secondary disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-muted"
+            value={selectedSceneKey}
+            onChange={(event) => onSceneChange(event.target.value)}
+            disabled={sceneSelectionDisabled}
+            aria-describedby="tts-scene-summary"
+          >
+            <option value="">不使用场景，生成纯粹版语音</option>
+            {scenes.map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="pointer-events-none absolute inset-y-2 right-2 flex items-center rounded-2xl border border-border-subtle bg-surface-muted px-3 text-text-secondary shadow-control">
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        <div id="tts-scene-summary" className="mt-2 rounded-[18px] border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-border-subtle bg-surface-elevated px-2.5 py-1 text-[11px] font-semibold tracking-[0.08em] text-text-muted">
+              {selectedSceneSummary.badge}
+            </span>
+            <span className="font-medium text-text-primary">{selectedSceneSummary.title}</span>
+          </div>
+          <p className="mt-2 leading-6 text-text-muted">{selectedSceneSummary.body}</p>
+        </div>
+      </div>
+
       {isAuthenticated && !hasSceneVoice ? (
         <p className="mt-2 text-xs leading-5 text-danger">若要选择场景，请先到左侧建立场景版声纹。</p>
       ) : null}
+      <label className="mt-5 block text-sm font-medium text-text-secondary" htmlFor="tts-text">
+        输入文本
+      </label>
       <textarea
         id="tts-text"
         className="app-input mt-3 min-h-44 resize-y"

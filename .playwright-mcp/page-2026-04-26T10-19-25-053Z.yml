@@ -1,0 +1,94 @@
+- generic [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e82]:
+      - generic [ref=e83]:
+        - heading "登录后无限使用" [level=2] [ref=e84]
+        - paragraph [ref=e85]: 未登录可试用1次，限30字内
+      - generic [ref=e87]:
+        - tablist "登录方式" [ref=e88]:
+          - tab "短信登录" [selected] [ref=e89] [cursor=pointer]
+          - tab "密码登录" [ref=e90] [cursor=pointer]
+        - generic [ref=e91]:
+          - text: 手机号
+          - generic [ref=e92]:
+            - img [ref=e93]
+            - textbox "手机号" [ref=e95]:
+              - /placeholder: 请输入 11 位手机号
+        - tabpanel "短信登录" [ref=e96]:
+          - generic [ref=e97]:
+            - text: 验证码
+            - generic [ref=e98]:
+              - img [ref=e99]
+              - textbox "验证码" [ref=e101]:
+                - /placeholder: 请输入验证码
+              - button "发送验证码" [disabled] [ref=e102]
+          - button "登录" [ref=e103] [cursor=pointer]
+        - link "还没有账号？立即注册" [ref=e105] [cursor=pointer]:
+          - /url: /register
+      - button "取消" [ref=e106] [cursor=pointer]
+    - generic [ref=e3]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - heading "语音复刻工作台" [level=1] [ref=e7]
+          - paragraph [ref=e8]: 未登录用户可试用1次，限30字内。点击右上角登录后可无限使用。
+        - generic [ref=e9]:
+          - button "登录" [active] [ref=e10] [cursor=pointer]
+          - img [ref=e12]
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - heading "1. 建声录音" [level=2] [ref=e17]
+            - generic [ref=e18]: 先上传录音，再建立声纹
+          - generic [ref=e19]:
+            - generic [ref=e20]:
+              - generic [ref=e21]: 当前录音素材
+              - generic [ref=e22]: 仅显示最新 3 份
+            - generic [ref=e23]:
+              - paragraph [ref=e65]: 还没有上传录音，请先录制至少 5 秒语音。
+              - paragraph [ref=e66]: 上传后的录音会存入 MinIO，并作为后续建立纯粹版/场景版声纹的素材。
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e28]: Step 1
+              - generic [ref=e29]: 录一段清晰语音
+              - paragraph [ref=e30]: 保持环境安静，说满 5 秒后松开按钮。
+            - generic [ref=e31]:
+              - generic [ref=e32]: Step 2
+              - generic [ref=e33]: 选择录音建立声纹
+              - paragraph [ref=e34]: 从最新三份录音素材中选择一份，再建立纯粹版或场景版声纹。
+            - generic [ref=e35]:
+              - generic [ref=e36]: Step 3
+              - generic [ref=e37]: 输入文本生成
+              - paragraph [ref=e38]: 建议先用短句测试，再生成较长内容。
+          - generic [ref=e39]:
+            - paragraph [ref=e40]: 鼠标或触屏按住开始、松开结束。
+            - paragraph [ref=e41]: 可通过按住按钮或使用键盘操作开始录音，至少录制 5 秒。
+            - button "开始录音（至少 5 秒）" [ref=e42] [cursor=pointer]
+            - generic [ref=e43]:
+              - button "2. 建立纯粹版声纹" [disabled] [ref=e44]
+              - button "2. 建立场景版声纹" [disabled] [ref=e45]
+            - generic [ref=e46]:
+              - generic [ref=e107]: 纯粹版声纹尚未建立。
+              - generic [ref=e108]: 场景版声纹尚未建立。
+            - alert [ref=e69]:
+              - generic [ref=e70]: 建声操作失败
+              - generic [ref=e71]: Unexpected token 'I', "Internal S"... is not valid JSON
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - heading "2. 文本转语音" [level=2] [ref=e52]
+              - paragraph [ref=e53]: 未登录时也必须先建立纯粹版声纹，才可进行文本转语音。
+            - generic [ref=e54]: 0/500
+          - generic [ref=e55]: 输入文本
+          - generic [ref=e56]: 场景选择
+          - combobox "场景选择" [ref=e57]:
+            - option "不使用场景，生成纯粹版语音" [selected]
+          - textbox "输入文本" [ref=e58]:
+            - /placeholder: 欢迎使用语音复刻工作台
+          - button "生成语音" [disabled] [ref=e59]
+          - generic [ref=e60]:
+            - generic [ref=e61]: 等待第一条历史语音
+            - paragraph [ref=e62]: 生成成功后，最近的语音任务会在这里保留播放和下载入口。
+            - paragraph [ref=e63]: 如果还没有 active voice，请先完成左侧建声录音。
+  - button "Open Next.js Dev Tools" [ref=e77] [cursor=pointer]:
+    - img [ref=e78]
+  - alert [ref=e64]
