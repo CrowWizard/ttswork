@@ -99,7 +99,7 @@ npm run dev
 
 ## Qwen 集成说明
 
-项目中所有第三方建声与 TTS 请求都统一封装在 `lib/qwen.ts`。
+项目中所有第三方建声与 TTS 请求都统一封装在 `api-server/src/lib/qwen.ts`。
 
 ### 默认 Mock 模式
 
@@ -117,7 +117,7 @@ npm run dev
 - `QWEN_ENROLL_URL`
 - `QWEN_TTS_URL`
 
-> 当前实现采用通用 JSON / 二进制请求方式，若正式接口字段与返回结构不同，只需调整 `lib/qwen.ts`，无需改动 route handler。
+> 当前实现采用通用 JSON / 二进制请求方式，若正式接口字段与返回结构不同，只需调整 `api-server/src/lib/qwen.ts`，无需改动 route handler。
 
 ## 关键目录
 
@@ -129,10 +129,15 @@ components/
   voice-studio.tsx
 lib/
   audio.ts
-  minio.ts
-  prisma.ts
-  qwen.ts
-  session.ts
+  audio-browser.ts
+  audio-format.ts
+  constants.ts
+api-server/
+  src/lib/
+    minio.ts
+    prisma.ts
+    qwen.ts
+    validation.ts
 prisma/
   schema.prisma
 ```
@@ -159,14 +164,15 @@ bun run dev
 
 ## 数据模型摘要
 
-- `User`：手机号账号、可选密码与当前 `activeVoiceEnrollmentId`
+- `User`：手机号账号、可选密码与当前纯粹版/场景版 `active voice`
 - `Session`：数据库会话与 HttpOnly 登录 Cookie
 - `SmsVerification`：短信发送与校验状态追踪
-- `VoiceEnrollment`：录音建声记录、原始音频 MinIO 元数据、生成的 `voiceId`、`isInvalidated`
-- `TtsJob`：文本转语音任务、`voiceIdSnapshot`、输出音频 MinIO 元数据
+- `VoiceRecording`：上传录音记录与 MinIO 元数据（公网地址由运行时配置拼接）
+- `VoiceEnrollment`：基于录音建立的纯粹版/场景版声纹、生成的 `voiceId`、`isInvalidated`
+- `TtsJob`：文本转语音任务、`voiceIdSnapshot`、声纹类型/场景信息与输出音频 MinIO 元数据
 
 ## 已知边界
 
-- 真实 Qwen 接口字段若与假设不一致，需要在 `lib/qwen.ts` 微调。
+- 真实 Qwen 接口字段若与假设不一致，需要在 `api-server/src/lib/qwen.ts` 微调。
 - 浏览器录音依赖 `MediaRecorder` 与麦克风权限。
 - 首次运行前必须先让 PostgreSQL 与 MinIO 可用，否则 API 会返回依赖不可达错误。

@@ -22,16 +22,28 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
         ...(currentUser ? { userId: currentUser.id } : { anonymousUserId: anonymousUser?.id }),
       },
     });
-    const activeVoiceEnrollmentId = currentUser
-      ? (await prisma.user.findUnique({
-          where: { id: currentUser.id },
-          select: { activeVoiceEnrollmentId: true },
-        }))?.activeVoiceEnrollmentId
-      : anonymousUser?.activeVoiceEnrollmentId;
 
     if (!enrollment) {
       return errorResponse(c, "建声记录不存在", 404);
     }
+
+    const activeVoiceEnrollmentId = currentUser
+      ? enrollment.profileKind === "PURE"
+        ? (
+            await prisma.user.findUnique({
+              where: { id: currentUser.id },
+              select: { activePureVoiceEnrollmentId: true },
+            })
+          )?.activePureVoiceEnrollmentId
+        : (
+            await prisma.user.findUnique({
+              where: { id: currentUser.id },
+              select: { activeSceneVoiceEnrollmentId: true },
+            })
+          )?.activeSceneVoiceEnrollmentId
+      : enrollment.profileKind === "PURE"
+        ? anonymousUser?.activePureVoiceEnrollmentId
+        : anonymousUser?.activeSceneVoiceEnrollmentId;
 
     if (activeVoiceEnrollmentId !== enrollment.id) {
       return errorResponse(c, "当前仅允许作废正在启用的声纹", 409);
@@ -42,10 +54,14 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
         await prisma.user.updateMany({
           where: {
             id: currentUser.id,
-            activeVoiceEnrollmentId: enrollment.id,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: enrollment.id }
+              : { activeSceneVoiceEnrollmentId: enrollment.id }),
           },
           data: {
-            activeVoiceEnrollmentId: null,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: null }
+              : { activeSceneVoiceEnrollmentId: null }),
           },
         });
       }
@@ -54,10 +70,14 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
         await prisma.anonymousUser.updateMany({
           where: {
             id: anonymousUser.id,
-            activeVoiceEnrollmentId: enrollment.id,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: enrollment.id }
+              : { activeSceneVoiceEnrollmentId: enrollment.id }),
           },
           data: {
-            activeVoiceEnrollmentId: null,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: null }
+              : { activeSceneVoiceEnrollmentId: null }),
           },
         });
       }
@@ -83,10 +103,14 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
         await tx.user.updateMany({
           where: {
             id: currentUser.id,
-            activeVoiceEnrollmentId: enrollment.id,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: enrollment.id }
+              : { activeSceneVoiceEnrollmentId: enrollment.id }),
           },
           data: {
-            activeVoiceEnrollmentId: null,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: null }
+              : { activeSceneVoiceEnrollmentId: null }),
           },
         });
       }
@@ -95,10 +119,14 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
         await tx.anonymousUser.updateMany({
           where: {
             id: anonymousUser.id,
-            activeVoiceEnrollmentId: enrollment.id,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: enrollment.id }
+              : { activeSceneVoiceEnrollmentId: enrollment.id }),
           },
           data: {
-            activeVoiceEnrollmentId: null,
+            ...(enrollment.profileKind === "PURE"
+              ? { activePureVoiceEnrollmentId: null }
+              : { activeSceneVoiceEnrollmentId: null }),
           },
         });
       }

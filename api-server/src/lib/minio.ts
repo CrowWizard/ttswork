@@ -21,6 +21,11 @@ export function buildMinioUri(bucket: string, objectKey: string) {
   return `minio://${bucket}/${objectKey}`;
 }
 
+export function buildPublicObjectUrl(cfg: AppConfig["minio"], objectKey: string) {
+  const normalizedBaseUrl = cfg.publicBaseUrl.replace(/\/+$/, "");
+  return `${normalizedBaseUrl}/${cfg.bucket}/${objectKey}`;
+}
+
 export async function ensureBucketExists(client: Client, bucket: string) {
   const exists = await client.bucketExists(bucket);
 
@@ -60,6 +65,11 @@ export async function getObjectBuffer(cfg: AppConfig["minio"], objectKey: string
   }
 
   return Buffer.concat(chunks);
+}
+
+export async function removeObject(cfg: AppConfig["minio"], objectKey: string) {
+  const client = getMinioClient(cfg);
+  await client.removeObject(cfg.bucket, objectKey);
 }
 
 export async function checkMinioHealth(cfg: AppConfig["minio"]) {

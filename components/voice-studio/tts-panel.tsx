@@ -3,23 +3,32 @@ import { buildAudioFilename } from "./utils";
 
 export function TtsPanel({
   isAuthenticated,
-  hasActiveVoice,
+  hasPureVoice,
+  hasSceneVoice,
   canSubmitTts,
   ttsText,
   ttsLoading,
   ttsResult,
   ttsHistory,
+  scenes,
+  selectedSceneKey,
   ttsUsedCount,
   onTtsTextChange,
+  onSceneChange,
   onSubmitTts,
 }: TtsPanelProps) {
   const trimmedLength = ttsText.trim().length;
   const isOverLimit = trimmedLength > 30;
   const canUseFreeTrial = !isAuthenticated && trimmedLength > 0 && trimmedLength <= 30 && ttsUsedCount < 1;
+  const selectedScene = scenes.find((item) => item.key === selectedSceneKey) ?? null;
   const helperText = isAuthenticated
-    ? hasActiveVoice
-      ? "active voice 已就绪，可以输入文本生成语音。"
-      : "完成建声并保留 active voice 后，这里会开放语音合成。"
+    ? selectedSceneKey
+      ? hasSceneVoice
+        ? `已选择场景：${selectedScene?.label ?? "场景版"}，接口会携带 instruction 字段。`
+        : "如需选择场景，请先建立场景版声纹。"
+      : hasPureVoice
+        ? "纯粹版声纹已就绪，可以直接输入文本生成语音。"
+        : "完成纯粹版声纹后，这里会开放语音合成。"
     : "匿名可免费生成 1 次 30 字内语音，继续使用请登录。";
   const buttonText = ttsLoading
     ? "合成中..."
@@ -48,12 +57,35 @@ export function TtsPanel({
       <label className="mt-6 block text-sm font-medium text-text-secondary" htmlFor="tts-text">
         输入文本
       </label>
+      <label className="mt-4 block text-sm font-medium text-text-secondary" htmlFor="tts-scene">
+        场景选择
+      </label>
+      <select
+        id="tts-scene"
+        className="app-input mt-3"
+        value={selectedSceneKey}
+        onChange={(event) => onSceneChange(event.target.value)}
+        disabled={isAuthenticated && !hasSceneVoice && scenes.length > 0}
+      >
+        <option value="">不使用场景，生成纯粹版语音</option>
+        {scenes.map((item) => (
+          <option key={item.key} value={item.key}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+      {selectedScene ? (
+        <p className="mt-2 text-xs leading-5 text-text-muted">instruction：{selectedScene.instruction}</p>
+      ) : null}
+      {isAuthenticated && !hasSceneVoice ? (
+        <p className="mt-2 text-xs leading-5 text-danger">若要选择场景，请先到左侧建立场景版声纹。</p>
+      ) : null}
       <textarea
         id="tts-text"
         className="app-input mt-3 min-h-44 resize-y"
         value={ttsText}
         onChange={(event) => onTtsTextChange(event.target.value)}
-        maxLength={31}
+        maxLength={isAuthenticated ? 500 : 31}
         placeholder="欢迎使用语音复刻工作台"
       />
 
@@ -65,6 +97,7 @@ export function TtsPanel({
         <div className="mt-6 rounded-xl border border-success-border bg-success-surface p-4" role="status" aria-live="polite">
           <div className="text-sm text-success">任务已完成：{ttsResult.jobId}</div>
           <div className="mt-1 break-all text-sm text-success">voiceIdSnapshot：{ttsResult.voiceIdSnapshot}</div>
+          <div className="mt-1 text-sm text-success">类型：{ttsResult.profileKind === "SCENE" ? "场景版" : "纯粹版"}</div>
           <div className="mt-4 w-full min-w-0 max-w-full overflow-hidden">
             <audio controls src={ttsResult.downloadUrl} />
           </div>
@@ -88,8 +121,11 @@ export function TtsPanel({
                   <div className="line-clamp-2 text-sm text-text-secondary">{item.text}</div>
                   <div className="shrink-0 text-xs text-text-muted">{new Date(item.createdAt).toLocaleString()}</div>
                 </div>
+                <div className="mt-2 text-xs text-text-muted">
+                  {item.profileKind === "SCENE" ? `场景版${item.sceneKey ? ` · ${item.sceneKey}` : ""}` : "纯粹版"}
+                </div>
                 <div className="mt-2 w-full min-w-0 max-w-full overflow-hidden">
-                  <audio className="h-8 sm:h-auto" controls src={item.downloadUrl} />
+                  <audio controls src={item.downloadUrl} />
                 </div>
                 <a
                   className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-xs font-semibold text-text-secondary transition hover:bg-surface-selected sm:w-auto"

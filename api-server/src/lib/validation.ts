@@ -43,4 +43,12 @@ export const passwordChangeSchema = z.object({
 
 export const ttsRequestSchema = z.object({
   text: z.string().trim().min(1, "文本不能为空").max(500, "文本长度不能超过 500"),
+  profileKind: z.enum(["PURE", "SCENE"]).default("PURE"),
+  sceneKey: z.string().trim().min(1).max(50).optional(),
+  instruction: z.string().trim().max(100, "场景提示词不能超过 100 个字符").optional(),
+});
+
+export const voiceEnrollmentCreateSchema = z.object({
+  recordingId: z.string().trim().min(1, "请选择已上传录音"),
+  profileKind: z.enum(["PURE", "SCENE"]),
 });

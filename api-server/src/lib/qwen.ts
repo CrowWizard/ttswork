@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { isSupportedAudioMimeType, normalizeSupportedAudioMimeType } from "./audio-format";
+import { isSupportedAudioMimeType } from "./audio-format";
 import type { AppConfig } from "./config";
+import { isDebugEnabled, loggerDebug, loggerError } from "./logger";
 
 export type VoiceEnrollmentResult = {
   voiceId: string;
@@ -14,11 +15,8 @@ export type TtsResult = {
   rawResponse: unknown;
 };
 
-const QWEN_VC_TARGET_MODEL = "qwen3-tts-vc-2026-01-22";
-
-function buildPreferredName() {
-  return Date.now().toString(36);
-}
+const PURE_VOICE_TARGET_MODEL = "qwen3-tts-vc-2026-01-22";
+const SCENE_VOICE_TARGET_MODEL = "cosyvoice-v3.5-plus";
 
 function assertEnv(name: string, value: string) {
   if (!value) {
@@ -28,9 +26,13 @@ function assertEnv(name: string, value: string) {
   return value;
 }
 
-function buildMockVoiceId(audioBuffer: Buffer) {
-  const digest = createHash("sha256").update(audioBuffer).digest("hex").slice(0, 16);
+function buildMockVoiceId(source: string) {
+  const digest = createHash("sha256").update(source).digest("hex").slice(0, 16);
   return `mock-voice-${digest}-${randomUUID().slice(0, 8)}`;
+}
+
+function buildPreferredName() {
+  return Date.now().toString(36);
 }
 
 function buildWaveFile(durationSeconds: number, frequency: number) {
@@ -65,16 +67,16 @@ function buildWaveFile(durationSeconds: number, frequency: number) {
   return buffer;
 }
 
-async function mockEnrollVoice(audioBuffer: Buffer): Promise<VoiceEnrollmentResult> {
+async function mockEnrollVoice(source: string): Promise<VoiceEnrollmentResult> {
   return {
-    voiceId: buildMockVoiceId(audioBuffer),
+    voiceId: buildMockVoiceId(source),
     rawResponse: { mode: "mock" },
   };
 }
 
-async function mockSynthesizeSpeech(params: { text: string; voiceId: string }): Promise<TtsResult> {
+async function mockSynthesizeSpeech(params: { text: string; voiceId: string; instruction?: string }): Promise<TtsResult> {
   const durationSeconds = Math.min(Math.max(params.text.length / 8, 1.5), 8);
-  const voiceSeed = createHash("md5").update(params.voiceId).digest()[0] ?? 0;
+  const voiceSeed = createHash("md5").update(`${params.voiceId}:${params.instruction ?? ""}`).digest()[0] ?? 0;
   const frequency = 220 + (voiceSeed % 180);
 
   return {
@@ -86,22 +88,67 @@ async function mockSynthesizeSpeech(params: { text: string; voiceId: string }): 
 }
 
 async function requestJson(url: string, init: RequestInit) {
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.request_json.start", {
+      url,
+      method: init.method ?? "GET",
+      body: typeof init.body === "string" ? init.body : undefined,
+    });
+  }
+
   const response = await fetch(url, init);
 
   if (!response.ok) {
     const text = await response.text();
+    loggerError("qwen.request_json.failed", {
+      url,
+      method: init.method ?? "GET",
+      status: response.status,
+      responseText: text,
+    });
     throw new Error(`Qwen request failed: ${response.status} ${text}`);
+  }
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.request_json.success", {
+      url,
+      method: init.method ?? "GET",
+      status: response.status,
+      contentType: response.headers.get("content-type") ?? undefined,
+    });
   }
 
   return response.json();
 }
 
 async function requestArrayBuffer(url: string, init: RequestInit) {
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.request_binary.start", {
+      url,
+      method: init.method ?? "GET",
+    });
+  }
+
   const response = await fetch(url, init);
 
   if (!response.ok) {
     const text = await response.text();
+    loggerError("qwen.request_binary.failed", {
+      url,
+      method: init.method ?? "GET",
+      status: response.status,
+      responseText: text,
+    });
     throw new Error(`Qwen request failed: ${response.status} ${text}`);
+  }
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.request_binary.success", {
+      url,
+      method: init.method ?? "GET",
+      status: response.status,
+      contentType: response.headers.get("content-type") ?? undefined,
+    });
   }
 
   return {
@@ -153,23 +200,22 @@ async function fetchTtsAudioFromPayload(payload: any): Promise<{ audioBuffer: Bu
   throw new Error("Qwen TTS response missing audio data");
 }
 
-async function liveEnrollVoice(cfg: AppConfig["qwen"], audioBuffer: Buffer, mimeType: string) {
+async function liveEnrollPureVoice(cfg: AppConfig["qwen"], params: { audioBuffer: Buffer; mimeType: string }) {
   const url = assertEnv("QWEN_ENROLL_URL", cfg.enrollUrl);
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
-  const normalizedMimeType = normalizeSupportedAudioMimeType(mimeType);
 
-  if (!isSupportedAudioMimeType(normalizedMimeType)) {
+  if (!isSupportedAudioMimeType(params.mimeType)) {
     throw new Error("Qwen 建声只支持 WAV、MP3、M4A");
   }
 
-  const base64Audio = audioBuffer.toString("base64");
-  const audioData = `data:${normalizedMimeType};base64,${base64Audio}`;
+  const base64Audio = params.audioBuffer.toString("base64");
+  const audioData = `data:${params.mimeType};base64,${base64Audio}`;
   const preferredName = buildPreferredName();
   const requestPayload = {
     model: "qwen-voice-enrollment",
     input: {
       action: "create",
-      target_model: QWEN_VC_TARGET_MODEL,
+      target_model: PURE_VOICE_TARGET_MODEL,
       preferred_name: preferredName,
       audio: {
         data: audioData,
@@ -177,20 +223,16 @@ async function liveEnrollVoice(cfg: AppConfig["qwen"], audioBuffer: Buffer, mime
     },
   };
 
-  console.info("[Qwen enroll] request", {
-    url,
-    payload: {
-      ...requestPayload,
-      input: {
-        ...requestPayload.input,
-        audio: {
-          data: `${audioData.slice(0, 80)}...`,
-          bytes: audioBuffer.byteLength,
-          mimeType: normalizedMimeType,
-        },
-      },
-    },
-  });
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.enroll.pure.request", {
+      url,
+      targetModel: PURE_VOICE_TARGET_MODEL,
+      preferredName,
+      mimeType: params.mimeType,
+      audioBytes: params.audioBuffer.length,
+      audioPreview: `${audioData.slice(0, 80)}...`,
+    });
+  }
 
   const payload = await requestJson(url, {
     method: "POST",
@@ -201,12 +243,18 @@ async function liveEnrollVoice(cfg: AppConfig["qwen"], audioBuffer: Buffer, mime
     body: JSON.stringify(requestPayload),
   });
 
-  console.info("[Qwen enroll] response", payload);
-
   const voiceId = payload?.output?.voice ?? payload?.voice ?? payload?.output?.voiceId ?? payload?.voiceId;
 
   if (!voiceId || typeof voiceId !== "string") {
     throw new Error("Qwen enrollment response missing voiceId");
+  }
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.enroll.pure.success", {
+      url,
+      voiceId,
+      preferredName,
+    });
   }
 
   return {
@@ -215,17 +263,77 @@ async function liveEnrollVoice(cfg: AppConfig["qwen"], audioBuffer: Buffer, mime
   } satisfies VoiceEnrollmentResult;
 }
 
-async function liveSynthesizeSpeech(cfg: AppConfig["qwen"], params: { text: string; voiceId: string }) {
+async function liveEnrollSceneVoice(cfg: AppConfig["qwen"], params: { publicAudioUrl: string; prefix: string }) {
+  const url = assertEnv("QWEN_ENROLL_URL", cfg.enrollUrl);
+  const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
+  const requestPayload = {
+    model: "voice-enrollment",
+    input: {
+      action: "create_voice",
+      target_model: SCENE_VOICE_TARGET_MODEL,
+      prefix: params.prefix,
+      url: params.publicAudioUrl,
+      language_hints: ["zh"],
+    },
+  };
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.enroll.scene.request", {
+      url,
+      targetModel: SCENE_VOICE_TARGET_MODEL,
+      prefix: params.prefix,
+      publicAudioUrl: params.publicAudioUrl,
+    });
+  }
+
+  const payload = await requestJson(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestPayload),
+  });
+
+  const voiceId = payload?.output?.voice_id ?? payload?.output?.voiceId ?? payload?.voice_id ?? payload?.voiceId;
+
+  if (!voiceId || typeof voiceId !== "string") {
+    throw new Error("Qwen enrollment response missing voiceId");
+  }
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.enroll.scene.success", {
+      url,
+      voiceId,
+    });
+  }
+
+  return {
+    voiceId,
+    rawResponse: payload,
+  } satisfies VoiceEnrollmentResult;
+}
+
+async function liveSynthesizePureSpeech(cfg: AppConfig["qwen"], params: { text: string; voiceId: string }) {
   const url = assertEnv("QWEN_TTS_URL", cfg.ttsUrl);
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
   const requestPayload = {
-    model: QWEN_VC_TARGET_MODEL,
+    model: PURE_VOICE_TARGET_MODEL,
     input: {
       text: params.text,
       voice: params.voiceId,
       language_type: "Chinese",
     },
   };
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.tts.pure.request", {
+      url,
+      voiceId: params.voiceId,
+      textLength: params.text.length,
+      targetModel: PURE_VOICE_TARGET_MODEL,
+    });
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -238,6 +346,14 @@ async function liveSynthesizeSpeech(cfg: AppConfig["qwen"], params: { text: stri
 
   if (!response.ok) {
     const text = await response.text();
+    loggerError("qwen.tts.pure.failed", {
+      url,
+      voiceId: params.voiceId,
+      textLength: params.text.length,
+      targetModel: PURE_VOICE_TARGET_MODEL,
+      status: response.status,
+      responseText: text,
+    });
     throw new Error(`Qwen request failed: ${response.status} ${text}`);
   }
 
@@ -245,6 +361,17 @@ async function liveSynthesizeSpeech(cfg: AppConfig["qwen"], params: { text: stri
 
   if (!contentType.includes("json")) {
     const audioBuffer = Buffer.from(await response.arrayBuffer());
+
+    if (isDebugEnabled()) {
+      loggerDebug("qwen.tts.pure.success.binary", {
+        url,
+        voiceId: params.voiceId,
+        textLength: params.text.length,
+        targetModel: PURE_VOICE_TARGET_MODEL,
+        contentType,
+        audioBytes: audioBuffer.length,
+      });
+    }
 
     return {
       audioBuffer,
@@ -257,6 +384,17 @@ async function liveSynthesizeSpeech(cfg: AppConfig["qwen"], params: { text: stri
   const payload = await response.json();
   const audioResult = await fetchTtsAudioFromPayload(payload);
 
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.tts.pure.success.json", {
+      url,
+      voiceId: params.voiceId,
+      textLength: params.text.length,
+      targetModel: PURE_VOICE_TARGET_MODEL,
+      contentType: audioResult.contentType,
+      audioBytes: audioResult.audioBuffer.length,
+    });
+  }
+
   return {
     audioBuffer: audioResult.audioBuffer,
     contentType: audioResult.contentType,
@@ -265,18 +403,164 @@ async function liveSynthesizeSpeech(cfg: AppConfig["qwen"], params: { text: stri
   } satisfies TtsResult;
 }
 
-export async function enrollVoice(cfg: AppConfig["qwen"], params: { audioBuffer: Buffer; mimeType: string }) {
-  if (cfg.mockMode) {
-    return mockEnrollVoice(params.audioBuffer);
+async function liveSynthesizeSceneSpeech(cfg: AppConfig["qwen"], params: { text: string; voiceId: string; instruction?: string }) {
+  const url = assertEnv("QWEN_TTS_URL", cfg.ttsUrl);
+  const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
+  const requestPayload = {
+    model: SCENE_VOICE_TARGET_MODEL,
+    input: {
+      text: params.text,
+      voice: params.voiceId,
+      format: "wav",
+      sample_rate: 24000,
+      language_hints: ["zh"],
+      ...(params.instruction ? { instruction: params.instruction } : {}),
+    },
+  };
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.tts.scene.request", {
+      url,
+      voiceId: params.voiceId,
+      textLength: params.text.length,
+      instruction: params.instruction,
+      targetModel: SCENE_VOICE_TARGET_MODEL,
+    });
   }
 
-  return liveEnrollVoice(cfg, params.audioBuffer, params.mimeType);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestPayload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    loggerError("qwen.tts.scene.failed", {
+      url,
+      voiceId: params.voiceId,
+      textLength: params.text.length,
+      targetModel: SCENE_VOICE_TARGET_MODEL,
+      status: response.status,
+      responseText: text,
+    });
+    throw new Error(`Qwen request failed: ${response.status} ${text}`);
+  }
+
+  const contentType = normalizeAudioContentType(response.headers.get("content-type"));
+
+  if (!contentType.includes("json")) {
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+
+    if (isDebugEnabled()) {
+      loggerDebug("qwen.tts.scene.success.binary", {
+        url,
+        voiceId: params.voiceId,
+        textLength: params.text.length,
+        targetModel: SCENE_VOICE_TARGET_MODEL,
+        contentType,
+        audioBytes: audioBuffer.length,
+      });
+    }
+
+    return {
+      audioBuffer,
+      contentType,
+      extension: contentType.includes("wav") ? "wav" : "mp3",
+      rawResponse: { mode: "live", contentType },
+    } satisfies TtsResult;
+  }
+
+  const payload = await response.json();
+  const audioResult = await fetchTtsAudioFromPayload(payload);
+
+  if (isDebugEnabled()) {
+    loggerDebug("qwen.tts.scene.success.json", {
+      url,
+      voiceId: params.voiceId,
+      textLength: params.text.length,
+      targetModel: SCENE_VOICE_TARGET_MODEL,
+      contentType: audioResult.contentType,
+      audioBytes: audioResult.audioBuffer.length,
+    });
+  }
+
+  return {
+    audioBuffer: audioResult.audioBuffer,
+    contentType: audioResult.contentType,
+    extension: audioResult.extension,
+    rawResponse: payload,
+  } satisfies TtsResult;
 }
 
-export async function synthesizeSpeech(cfg: AppConfig["qwen"], params: { text: string; voiceId: string }) {
+export async function enrollPureVoice(
+  cfg: AppConfig["qwen"],
+  params: { audioBuffer: Buffer; mimeType: string },
+) {
   if (cfg.mockMode) {
+    if (isDebugEnabled()) {
+      loggerDebug("qwen.enroll.pure.mock", {
+        mimeType: params.mimeType,
+        audioBytes: params.audioBuffer.length,
+      });
+    }
+    return mockEnrollVoice(`pure:${params.mimeType}:${params.audioBuffer.length}`);
+  }
+
+  return liveEnrollPureVoice(cfg, params);
+}
+
+export async function enrollSceneVoice(
+  cfg: AppConfig["qwen"],
+  params: { publicAudioUrl: string; prefix: string },
+) {
+  if (cfg.mockMode) {
+    if (isDebugEnabled()) {
+      loggerDebug("qwen.enroll.scene.mock", {
+        publicAudioUrl: params.publicAudioUrl,
+        prefix: params.prefix,
+      });
+    }
+    return mockEnrollVoice(`scene:${params.publicAudioUrl}:${params.prefix}`);
+  }
+
+  return liveEnrollSceneVoice(cfg, params);
+}
+
+export async function synthesizePureSpeech(
+  cfg: AppConfig["qwen"],
+  params: { text: string; voiceId: string },
+) {
+  if (cfg.mockMode) {
+    if (isDebugEnabled()) {
+      loggerDebug("qwen.tts.pure.mock", {
+        voiceId: params.voiceId,
+        textLength: params.text.length,
+      });
+    }
     return mockSynthesizeSpeech(params);
   }
 
-  return liveSynthesizeSpeech(cfg, params);
+  return liveSynthesizePureSpeech(cfg, params);
+}
+
+export async function synthesizeSceneSpeech(
+  cfg: AppConfig["qwen"],
+  params: { text: string; voiceId: string; instruction?: string },
+) {
+  if (cfg.mockMode) {
+    if (isDebugEnabled()) {
+      loggerDebug("qwen.tts.scene.mock", {
+        voiceId: params.voiceId,
+        textLength: params.text.length,
+        instruction: params.instruction,
+      });
+    }
+    return mockSynthesizeSpeech(params);
+  }
+
+  return liveSynthesizeSceneSpeech(cfg, params);
 }

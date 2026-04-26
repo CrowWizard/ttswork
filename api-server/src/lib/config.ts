@@ -25,6 +25,7 @@ export type AppConfig = {
     accessKey: string;
     secretKey: string;
     bucket: string;
+    publicBaseUrl: string;
   };
   qwen: {
     mockMode: boolean;
@@ -196,12 +197,19 @@ export function loadConfig(): AppConfig {
       accessKey: envString("MINIO_ACCESS_KEY", minio.accessKey ?? "minioadmin"),
       secretKey: envString("MINIO_SECRET_KEY", minio.secretKey ?? "minioadmin"),
       bucket: envString("MINIO_BUCKET", minio.bucket ?? "voice-mvp"),
+      publicBaseUrl: envString("MINIO_PUBLIC_BASE_URL", minio.publicBaseUrl ?? "http://127.0.0.1/minio"),
     },
     qwen: {
       mockMode: envBool("QWEN_MOCK_MODE", qwen.mockMode ?? true),
       apiKey: envString("QWEN_API_KEY", qwen.apiKey ?? ""),
-      enrollUrl: envString("QWEN_ENROLL_URL", qwen.enrollUrl ?? ""),
-      ttsUrl: envString("QWEN_TTS_URL", qwen.ttsUrl ?? ""),
+      enrollUrl: envString(
+        "QWEN_ENROLL_URL",
+        qwen.enrollUrl ?? "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization",
+      ),
+      ttsUrl: envString(
+        "QWEN_TTS_URL",
+        qwen.ttsUrl ?? "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer",
+      ),
       trialVoiceId: envString("QWEN_TRIAL_VOICE_ID", qwen.trialVoiceId ?? "Cherry"),
     },
     cookie: {

@@ -58,6 +58,279 @@ sync_database() {
   echo "  已生成 $INSTALL_DIR/.env（host=${DB_HOST} port=${DB_PORT} db=${DB_NAME}）"
 
   if command -v bunx &>/dev/null; then
+    echo "  执行建声两步式结构兼容性回填"
+    echo "    [1/4] 补齐新枚举、表与缺失列"
+    (
+      cd "$SOURCE_DIR" &&
+      DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<'SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RecordingStatus') THEN
+    CREATE TYPE "RecordingStatus" AS ENUM ('UPLOADED');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'VoiceProfileKind') THEN
+    CREATE TYPE "VoiceProfileKind" AS ENUM ('PURE', 'SCENE');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'User'
+      AND column_name = 'activePureVoiceEnrollmentId'
+  ) THEN
+    ALTER TABLE "User" ADD COLUMN "activePureVoiceEnrollmentId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'User'
+      AND column_name = 'activeSceneVoiceEnrollmentId'
+  ) THEN
+    ALTER TABLE "User" ADD COLUMN "activeSceneVoiceEnrollmentId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'AnonymousUser'
+      AND column_name = 'activePureVoiceEnrollmentId'
+  ) THEN
+    ALTER TABLE "AnonymousUser" ADD COLUMN "activePureVoiceEnrollmentId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'AnonymousUser'
+      AND column_name = 'activeSceneVoiceEnrollmentId'
+  ) THEN
+    ALTER TABLE "AnonymousUser" ADD COLUMN "activeSceneVoiceEnrollmentId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'VoiceEnrollment'
+      AND column_name = 'anonymousUserId'
+  ) THEN
+    ALTER TABLE "VoiceEnrollment" ADD COLUMN "anonymousUserId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'VoiceEnrollment'
+      AND column_name = 'recordingId'
+  ) THEN
+    ALTER TABLE "VoiceEnrollment" ADD COLUMN "recordingId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'VoiceEnrollment'
+      AND column_name = 'profileKind'
+  ) THEN
+    ALTER TABLE "VoiceEnrollment" ADD COLUMN "profileKind" "VoiceProfileKind";
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'anonymousUserId'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "anonymousUserId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'profileKind'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "profileKind" "VoiceProfileKind";
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'sceneKey'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "sceneKey" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'instruction'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "instruction" TEXT;
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS "VoiceRecording" (
+  "id" TEXT NOT NULL,
+  "userId" TEXT,
+  "anonymousUserId" TEXT,
+  "status" "RecordingStatus" NOT NULL DEFAULT 'UPLOADED',
+  "durationSeconds" DOUBLE PRECISION NOT NULL,
+  "originalFilename" TEXT,
+  "inputContentType" TEXT NOT NULL,
+  "bucket" TEXT NOT NULL,
+  "objectKey" TEXT NOT NULL,
+  "minioUri" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "VoiceRecording_pkey" PRIMARY KEY ("id")
+);
+SQL
+    ) || {
+      echo "  ❌ 新建声结构补列失败，已中止后续 prisma db push"
+      echo "  请先确认数据库连接、schema 指向与 ALTER TABLE / CREATE TABLE 权限"
+      return 1
+    }
+
+    echo "    [2/4] 回填录音表与新必填字段"
+    (
+      cd "$SOURCE_DIR" &&
+      DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<SQL
+INSERT INTO "VoiceRecording" (
+  "id",
+  "userId",
+  "anonymousUserId",
+  "status",
+  "durationSeconds",
+  "originalFilename",
+  "inputContentType",
+  "bucket",
+  "objectKey",
+  "minioUri",
+  "createdAt",
+  "updatedAt"
+)
+SELECT
+  ve."id",
+  ve."userId",
+  ve."anonymousUserId",
+  'UPLOADED'::"RecordingStatus",
+  ve."durationSeconds",
+  ve."originalFilename",
+  ve."inputContentType",
+  ve."bucket",
+  ve."objectKey",
+  ve."minioUri",
+  ve."createdAt",
+  ve."updatedAt"
+FROM "VoiceEnrollment" ve
+WHERE NOT EXISTS (
+  SELECT 1 FROM "VoiceRecording" vr WHERE vr."id" = ve."id"
+);
+
+UPDATE "VoiceEnrollment"
+SET
+  "recordingId" = COALESCE("recordingId", "id"),
+  "profileKind" = COALESCE("profileKind", 'PURE'::"VoiceProfileKind")
+WHERE "recordingId" IS NULL OR "profileKind" IS NULL;
+
+UPDATE "TtsJob" tj
+SET "profileKind" = COALESCE(tj."profileKind", ve."profileKind", 'PURE'::"VoiceProfileKind")
+FROM "VoiceEnrollment" ve
+WHERE tj."voiceEnrollmentId" = ve."id"
+  AND tj."profileKind" IS NULL;
+
+UPDATE "TtsJob"
+SET "profileKind" = 'PURE'::"VoiceProfileKind"
+WHERE "profileKind" IS NULL;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'User'
+      AND column_name = 'activeVoiceEnrollmentId'
+  ) THEN
+    UPDATE "User"
+    SET "activePureVoiceEnrollmentId" = COALESCE("activePureVoiceEnrollmentId", "activeVoiceEnrollmentId")
+    WHERE "activeVoiceEnrollmentId" IS NOT NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'AnonymousUser'
+      AND column_name = 'activeVoiceEnrollmentId'
+  ) THEN
+    UPDATE "AnonymousUser"
+    SET "activePureVoiceEnrollmentId" = COALESCE("activePureVoiceEnrollmentId", "activeVoiceEnrollmentId")
+    WHERE "activeVoiceEnrollmentId" IS NOT NULL;
+  END IF;
+END
+$$;
+SQL
+    ) || {
+      echo "  ❌ 建声历史数据回填失败，已中止后续 prisma db push"
+      echo "  请先检查 VoiceEnrollment / TtsJob 历史数据是否存在异常空值"
+      return 1
+    }
+
+    echo "    [3/4] 创建两步建声所需索引"
+    (
+      cd "$SOURCE_DIR" &&
+      DATABASE_URL="$DATABASE_URL" bunx prisma db execute --stdin <<'SQL'
+CREATE UNIQUE INDEX IF NOT EXISTS "User_activePureVoiceEnrollmentId_key"
+  ON "User"("activePureVoiceEnrollmentId");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "User_activeSceneVoiceEnrollmentId_key"
+  ON "User"("activeSceneVoiceEnrollmentId");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "AnonymousUser_activePureVoiceEnrollmentId_key"
+  ON "AnonymousUser"("activePureVoiceEnrollmentId");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "AnonymousUser_activeSceneVoiceEnrollmentId_key"
+  ON "AnonymousUser"("activeSceneVoiceEnrollmentId");
+
+CREATE INDEX IF NOT EXISTS "VoiceRecording_userId_createdAt_idx"
+  ON "VoiceRecording"("userId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "VoiceRecording_anonymousUserId_createdAt_idx"
+  ON "VoiceRecording"("anonymousUserId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "VoiceEnrollment_recordingId_idx"
+  ON "VoiceEnrollment"("recordingId");
+
+CREATE INDEX IF NOT EXISTS "VoiceEnrollment_profileKind_createdAt_idx"
+  ON "VoiceEnrollment"("profileKind", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "TtsJob_voiceEnrollmentId_idx"
+  ON "TtsJob"("voiceEnrollmentId");
+SQL
+    ) || {
+      echo "  ❌ 两步建声索引创建失败，已中止后续 prisma db push"
+      echo "  请先检查历史脏数据是否导致唯一索引冲突"
+      return 1
+    }
+
     echo "  执行 AnonymousUser 兼容性回填"
     echo "    [1/3] 补齐 AnonymousUser 缺失列"
     (
@@ -137,7 +410,7 @@ SQL
       return 1
     }
 
-    echo "  执行 prisma db push ..."
+    echo "    [4/4] 执行 prisma db push"
     (cd "$SOURCE_DIR" && DATABASE_URL="$DATABASE_URL" bunx prisma db push --accept-data-loss 2>&1) || {
       echo "  ⚠️  数据库同步失败，请手动执行:"
       echo "  cd $SOURCE_DIR && DATABASE_URL='<database-url>' bunx prisma db push --accept-data-loss"

@@ -1,9 +1,9 @@
 import type { KeyboardEvent, MouseEvent, TouchEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isRecordDurationAccepted } from "@/lib/audio";
 import { convertBlobToWavFile } from "@/lib/audio-browser";
 import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
-import type { AuthMode, AuthUser, StatusState, TtsHistoryItem, TtsResult, VoiceProfileResponse } from "./types";
+import type { AuthMode, AuthUser, StatusState, TtsHistoryItem, TtsResult, TtsSceneItem, VoiceProfileKind, VoiceProfileResponse } from "./types";
 import { pickRecordingMimeType, readJsonSafely } from "./utils";
 
 export function useVoiceStudioState() {
@@ -27,18 +27,23 @@ export function useVoiceStudioState() {
   const [debugCode, setDebugCode] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<VoiceProfileResponse | null>(null);
-  const [activeVoicePlaybackUrl, setActiveVoicePlaybackUrl] = useState<string | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [recording, setRecording] = useState(false);
   const [recordStartedAt, setRecordStartedAt] = useState<number | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceNotice, setWorkspaceNotice] = useState<StatusState | null>(null);
-  const [enrolling, setEnrolling] = useState(false);
-  const [invalidating, setInvalidating] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [creatingPureVoice, setCreatingPureVoice] = useState(false);
+  const [creatingSceneVoice, setCreatingSceneVoice] = useState(false);
+  const [invalidatingVoiceId, setInvalidatingVoiceId] = useState<string | null>(null);
+  const [deletingRecordingId, setDeletingRecordingId] = useState<string | null>(null);
+  const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [ttsText, setTtsText] = useState("");
   const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsResult, setTtsResult] = useState<TtsResult | null>(null);
   const [ttsHistory, setTtsHistory] = useState<TtsHistoryItem[]>([]);
+  const [scenes, setScenes] = useState<TtsSceneItem[]>([]);
+  const [selectedSceneKey, setSelectedSceneKey] = useState("");
   const [ttsUsedCount, setTtsUsedCount] = useState(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("tts_used_count");
@@ -47,67 +52,13 @@ export function useVoiceStudioState() {
     return 0;
   });
 
-  const activeVoiceLabel = useMemo(() => {
-    if (!profile?.activeVoice?.voiceId) {
-      return "尚未生成 active voice";
-    }
-
-    if (profile.activeVoice.isInvalidated) {
-      return "当前 active voice 已作废";
-    }
-
-    return profile.activeVoice.voiceId;
-  }, [profile]);
-
   const ttsTextLength = ttsText.trim().length;
   const canUseAnonymousTts = !authUser && ttsTextLength > 0 && ttsTextLength <= 30 && ttsUsedCount < 1;
-  const canUseActiveVoiceTts = Boolean(authUser && profile?.activeVoice?.voiceId && !profile?.activeVoice?.isInvalidated);
+  const hasPureVoice = Boolean(authUser && profile?.activeVoices.pure?.voiceId && !profile.activeVoices.pure.isInvalidated);
+  const hasSceneVoice = Boolean(authUser && profile?.activeVoices.scene?.voiceId && !profile.activeVoices.scene.isInvalidated);
+  const usingSceneVoice = Boolean(selectedSceneKey);
+  const canUseActiveVoiceTts = Boolean(authUser && (usingSceneVoice ? hasSceneVoice : hasPureVoice));
   const canSubmitTts = ttsTextLength > 0 && (canUseAnonymousTts || canUseActiveVoiceTts);
-  const canPlaybackActiveVoice = Boolean(profile?.activeVoice?.playbackUrl) && !profile?.activeVoice?.isInvalidated;
-
-  useEffect(() => {
-    const playbackUrl = profile?.activeVoice?.playbackUrl ?? null;
-
-    if (!playbackUrl || profile?.activeVoice?.isInvalidated) {
-      setActiveVoicePlaybackUrl(null);
-      return;
-    }
-
-    let revoked = false;
-    let objectUrl: string | null = null;
-
-    async function loadPlaybackAudio(url: string) {
-      try {
-        const response = await fetch(url, {
-          cache: "no-store",
-          credentials: "include",
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-
-        if (!revoked) {
-          setActiveVoicePlaybackUrl(objectUrl);
-        }
-      } catch {
-        return;
-      }
-    }
-
-    void loadPlaybackAudio(playbackUrl);
-
-    return () => {
-      revoked = true;
-
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [profile?.activeVoice?.id, profile?.activeVoice?.isInvalidated, profile?.activeVoice?.playbackUrl]);
 
   const clearWorkspaceFeedback = useCallback(() => {
     setWorkspaceError(null);
@@ -120,11 +71,14 @@ export function useVoiceStudioState() {
     clearWorkspaceFeedback();
     setRecording(false);
     setRecordStartedAt(null);
-    setEnrolling(false);
-    setInvalidating(false);
-    setTtsLoading(false);
-    setTtsResult(null);
-    setTtsHistory([]);
+    setUploading(false);
+      setCreatingPureVoice(false);
+      setCreatingSceneVoice(false);
+      setInvalidatingVoiceId(null);
+      setDeletingRecordingId(null);
+      setTtsLoading(false);
+      setTtsResult(null);
+      setTtsHistory([]);
   }, [clearWorkspaceFeedback]);
 
   const openLoginModal = useCallback(() => {
@@ -161,6 +115,22 @@ export function useVoiceStudioState() {
     } catch {}
   }, [handleUnauthorized]);
 
+  const refreshScenes = useCallback(async () => {
+    try {
+      const response = await fetch("/api/tts/scenes", {
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data = (await response.json()) as TtsSceneItem[];
+      setScenes(data);
+    } catch {}
+  }, []);
+
   const refreshProfile = useCallback(async () => {
     setLoadingProfile(true);
 
@@ -181,7 +151,14 @@ export function useVoiceStudioState() {
         throw new Error(data.error ?? "加载声纹信息失败");
       }
 
-      setProfile(data);
+        setProfile(data);
+        setSelectedRecordingId((current) => {
+          if (!current) {
+            return data.recordings[0]?.id ?? null;
+          }
+
+          return data.recordings.some((item) => item.id === current) ? current : (data.recordings[0]?.id ?? null);
+        });
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "加载声纹信息失败");
     } finally {
@@ -226,11 +203,12 @@ export function useVoiceStudioState() {
 
   useEffect(() => {
     void refreshAuth();
+    void refreshScenes();
 
     return () => {
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [refreshAuth]);
+  }, [refreshAuth, refreshScenes]);
 
   useEffect(() => {
     if (!authUser) {
@@ -252,6 +230,18 @@ export function useVoiceStudioState() {
 
     return () => window.clearInterval(timer);
   }, [smsCountdown]);
+
+  useEffect(() => {
+    if (!selectedSceneKey) {
+      return;
+    }
+
+    const matchedScene = scenes.find((item) => item.key === selectedSceneKey);
+
+    if (!matchedScene) {
+      setSelectedSceneKey("");
+    }
+  }, [scenes, selectedSceneKey]);
 
   function startRecordTimer() {
     const startedAt = Date.now();
@@ -411,27 +401,20 @@ export function useVoiceStudioState() {
       setDebugCode(null);
       setAuthMessage({ type: "success", title: "已退出登录", text: "当前账号会话已结束。" });
     }
-  }, []);
+  }, [clearWorkspaceFeedback]);
 
-  async function submitEnrollmentAudio(audioFile: File, durationSeconds: number) {
+  const uploadRecording = useCallback(async (audioFile: File, durationSeconds: number) => {
     const formData = new FormData();
     formData.append(INPUT_AUDIO_FIELD, audioFile, audioFile.name);
     formData.append(RECORD_DURATION_SECONDS_FIELD, durationSeconds.toFixed(3));
 
-    console.info("[voice enroll] submit audio", {
-      name: audioFile.name,
-      type: audioFile.type,
-      size: audioFile.size,
-      durationSeconds,
-    });
-
     try {
-      const response = await fetch("/api/voice/enroll", {
+      const response = await fetch("/api/voice/recordings", {
         method: "POST",
         credentials: "include",
         body: formData,
       });
-      const payload = (await readJsonSafely(response)) as { error?: string; voiceId?: string };
+      const payload = (await readJsonSafely(response)) as { error?: string; recordingId?: string };
 
       if (response.status === 401 || response.status === 403) {
         handleUnauthorized();
@@ -439,20 +422,21 @@ export function useVoiceStudioState() {
       }
 
       if (!response.ok) {
-        throw new Error(payload.error ?? (response.status === 502 ? "接口繁忙" : "建声失败"));
+        throw new Error(payload.error ?? "上传录音失败");
       }
 
       await refreshProfile();
-      setWorkspaceNotice({ type: "success", title: "建声完成", text: `新的 active voice 已生成：${payload.voiceId}` });
+      setSelectedRecordingId(payload.recordingId ?? null);
+      setWorkspaceNotice({ type: "success", title: "录音上传完成", text: "录音已存入 MinIO，可继续建立纯粹版或场景版声纹。" });
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "建声失败");
+      setWorkspaceError(error instanceof Error ? error.message : "上传录音失败");
     } finally {
-      setEnrolling(false);
+      setUploading(false);
     }
-  }
+  }, [handleUnauthorized, refreshProfile]);
 
   const startRecording = useCallback(async () => {
-    if (recording || enrolling || invalidating) {
+    if (recording || uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId)) {
       return;
     }
 
@@ -500,15 +484,15 @@ export function useVoiceStudioState() {
         try {
           if (!isRecordDurationAccepted(recordDurationSeconds)) {
             setWorkspaceError(`录音不足 ${MIN_RECORD_SECONDS} 秒，请按住按钮说满 ${MIN_RECORD_SECONDS} 秒。`);
-            setEnrolling(false);
+            setUploading(false);
             return;
           }
 
           const audioFile = await convertBlobToWavFile(audioBlob);
-          await submitEnrollmentAudio(audioFile, recordDurationSeconds);
+          await uploadRecording(audioFile, recordDurationSeconds);
         } catch (error) {
           setWorkspaceError(error instanceof Error ? error.message : "录音处理失败");
-          setEnrolling(false);
+          setUploading(false);
         }
       };
 
@@ -519,33 +503,111 @@ export function useVoiceStudioState() {
       stopRecordTimer();
       setWorkspaceError(error instanceof Error ? error.message : "无法访问麦克风");
     }
-  }, [authUser, recording, enrolling, invalidating, clearWorkspaceFeedback]);
+  }, [recording, uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, clearWorkspaceFeedback, uploadRecording]);
 
-  function stopRecording() {
+  const stopRecording = useCallback(() => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
       return;
     }
 
     finalRecordDurationRef.current = stopRecordTimer();
-    setEnrolling(true);
+    setUploading(true);
     clearWorkspaceFeedback();
     mediaRecorderRef.current.stop();
     setRecording(false);
-  }
+  }, [clearWorkspaceFeedback]);
 
-  const invalidateActiveVoice = useCallback(async () => {
-    const activeVoiceId = profile?.activeVoice?.id;
-
-    if (!activeVoiceId || invalidating) {
+  const createVoiceEnrollment = useCallback(async (profileKind: VoiceProfileKind) => {
+    if (!selectedRecordingId) {
+      setWorkspaceError("请先上传录音，再建立声纹");
       return;
     }
 
-    setInvalidating(true);
+    if (profileKind === "PURE") {
+      setCreatingPureVoice(true);
+    } else {
+      setCreatingSceneVoice(true);
+    }
+
     clearWorkspaceFeedback();
     setTtsResult(null);
 
     try {
-      const response = await fetch(`/api/voice/enrollments/${activeVoiceId}/invalidate`, {
+      const response = await fetch("/api/voice/enrollments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          recordingId: selectedRecordingId,
+          profileKind,
+        }),
+      });
+      const payload = (await readJsonSafely(response)) as { error?: string; voiceId?: string };
+
+      if (response.status === 401 || response.status === 403) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "建立声纹失败");
+      }
+
+      await refreshProfile();
+      setWorkspaceNotice({
+        type: "success",
+        title: profileKind === "PURE" ? "纯粹版声纹已建立" : "场景版声纹已建立",
+        text: payload.voiceId ? `当前声纹 ID：${payload.voiceId}` : "声纹已可用于后续文本转语音。",
+      });
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "建立声纹失败");
+    } finally {
+      if (profileKind === "PURE") {
+        setCreatingPureVoice(false);
+      } else {
+        setCreatingSceneVoice(false);
+      }
+    }
+  }, [selectedRecordingId, clearWorkspaceFeedback, refreshProfile, handleUnauthorized]);
+
+  const deleteRecording = useCallback(async (recordingId: string) => {
+    setDeletingRecordingId(recordingId);
+    clearWorkspaceFeedback();
+
+    try {
+      const response = await fetch(`/api/voice/recordings/${recordingId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const payload = (await readJsonSafely(response)) as { error?: string };
+
+      if (response.status === 401 || response.status === 403) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "删除录音素材失败");
+      }
+
+      await refreshProfile();
+      setWorkspaceNotice({ type: "info", title: "录音素材已删除", text: "后续建声将只能使用当前列表中保留的最新录音素材。" });
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "删除录音素材失败");
+    } finally {
+      setDeletingRecordingId(null);
+    }
+  }, [clearWorkspaceFeedback, handleUnauthorized, refreshProfile]);
+
+  const invalidateVoice = useCallback(async (enrollmentId: string) => {
+    setInvalidatingVoiceId(enrollmentId);
+    clearWorkspaceFeedback();
+    setTtsResult(null);
+
+    try {
+      const response = await fetch(`/api/voice/enrollments/${enrollmentId}/invalidate`, {
         method: "POST",
         credentials: "include",
       });
@@ -557,17 +619,17 @@ export function useVoiceStudioState() {
       }
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "作废 active voice 失败");
+        throw new Error(payload.error ?? "作废声纹失败");
       }
 
       await refreshProfile();
-      setWorkspaceNotice({ type: "info", title: "active voice 已作废", text: "请重新录制建声后再生成语音。" });
+      setWorkspaceNotice({ type: "info", title: "声纹已作废", text: "如需继续使用，请重新基于录音建立新的声纹。" });
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "作废 active voice 失败");
+      setWorkspaceError(error instanceof Error ? error.message : "作废声纹失败");
     } finally {
-      setInvalidating(false);
+      setInvalidatingVoiceId(null);
     }
-  }, [profile, invalidating, clearWorkspaceFeedback, refreshProfile]);
+  }, [clearWorkspaceFeedback, refreshProfile, handleUnauthorized]);
 
   const submitTts = useCallback(async () => {
     const textLength = ttsText.trim().length;
@@ -581,13 +643,20 @@ export function useVoiceStudioState() {
     clearWorkspaceFeedback();
 
     try {
+      const selectedScene = scenes.find((item) => item.key === selectedSceneKey) ?? null;
+
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({ text: ttsText }),
+        body: JSON.stringify({
+          text: ttsText,
+          profileKind: selectedScene ? "SCENE" : "PURE",
+          sceneKey: selectedScene?.key,
+          instruction: selectedScene?.instruction,
+        }),
       });
       const payload = (await readJsonSafely(response)) as TtsResult & { error?: string };
 
@@ -615,7 +684,7 @@ export function useVoiceStudioState() {
     } finally {
       setTtsLoading(false);
     }
-  }, [authUser, ttsText, ttsUsedCount, clearWorkspaceFeedback, openLoginModal, refreshTtsHistory]);
+  }, [authUser, ttsText, ttsUsedCount, clearWorkspaceFeedback, handleUnauthorized, openLoginModal, refreshTtsHistory, scenes, selectedSceneKey]);
 
   const handleRecordButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 0) {
@@ -705,15 +774,18 @@ export function useVoiceStudioState() {
       onLogout: () => void logout(),
     },
     recordingPanel: {
-      activeVoiceLabel,
-      canPlaybackActiveVoice,
-      activeVoicePlaybackUrl,
       loadingProfile,
       profile,
       recording,
       recordStartedAt,
-      enrolling,
-      invalidating,
+      uploading,
+      creatingPureVoice,
+      creatingSceneVoice,
+      invalidatingVoiceId,
+      deletingRecordingId,
+      selectedRecordingId,
+      onSelectRecording: setSelectedRecordingId,
+      onDeleteRecording: (recordingId: string) => void deleteRecording(recordingId),
       workspaceError,
       workspaceNotice,
       onRecordButtonMouseDown: handleRecordButtonMouseDown,
@@ -723,18 +795,24 @@ export function useVoiceStudioState() {
       onRecordButtonTouchEnd: handleRecordButtonTouchEnd,
       onRecordButtonTouchCancel: handleRecordButtonTouchCancel,
       onRecordButtonKeyDown: handleRecordButtonKeyDown,
-      onInvalidateActiveVoice: () => void invalidateActiveVoice(),
+      onCreatePureVoice: () => void createVoiceEnrollment("PURE"),
+      onCreateSceneVoice: () => void createVoiceEnrollment("SCENE"),
+      onInvalidateVoice: (enrollmentId: string) => void invalidateVoice(enrollmentId),
     },
     ttsPanel: {
       isAuthenticated: Boolean(authUser),
-      hasActiveVoice: canUseActiveVoiceTts,
+      hasPureVoice,
+      hasSceneVoice,
       canSubmitTts,
       ttsText,
       ttsLoading,
       ttsResult,
       ttsHistory,
+      scenes,
+      selectedSceneKey,
       ttsUsedCount,
       onTtsTextChange: setTtsText,
+      onSceneChange: setSelectedSceneKey,
       onSubmitTts: () => void submitTts(),
     },
   };

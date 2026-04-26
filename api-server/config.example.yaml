@@ -18,12 +18,13 @@ minio:
   accessKey: "minioadmin"
   secretKey: "minioadmin"
   bucket: "voice-mvp"
+  publicBaseUrl: "http://127.0.0.1/minio"
 
 qwen:
   mockMode: true
   apiKey: ""
-  enrollUrl: ""
-  ttsUrl: ""
+  enrollUrl: "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization"
+  ttsUrl: "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer"
   trialVoiceId: "Cherry"
 
 cookie:
