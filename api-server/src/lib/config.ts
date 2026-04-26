@@ -30,8 +30,10 @@ export type AppConfig = {
   qwen: {
     mockMode: boolean;
     apiKey: string;
-    enrollUrl: string;
-    ttsUrl: string;
+    pureEnrollUrl: string;
+    sceneEnrollUrl: string;
+    pureTtsUrl: string;
+    sceneTtsUrl: string;
     trialVoiceId: string;
   };
   cookie: {
@@ -171,7 +173,10 @@ export function loadConfig(): AppConfig {
   const server: Partial<AppConfig["server"]> = file?.server ?? {};
   const database: Partial<AppConfig["database"]> = file?.database ?? {};
   const minio: Partial<AppConfig["minio"]> = file?.minio ?? {};
-  const qwen: Partial<AppConfig["qwen"]> = file?.qwen ?? {};
+  const qwen = (file?.qwen ?? {}) as Partial<AppConfig["qwen"]> & {
+    enrollUrl?: string;
+    ttsUrl?: string;
+  };
   const cookie: Partial<AppConfig["cookie"]> = file?.cookie ?? {};
   const auth: Partial<AppConfig["auth"]> = file?.auth ?? {};
   const sms: Partial<AppConfig["sms"]> = file?.sms ?? {};
@@ -202,13 +207,33 @@ export function loadConfig(): AppConfig {
     qwen: {
       mockMode: envBool("QWEN_MOCK_MODE", qwen.mockMode ?? true),
       apiKey: envString("QWEN_API_KEY", qwen.apiKey ?? ""),
-      enrollUrl: envString(
-        "QWEN_ENROLL_URL",
-        qwen.enrollUrl ?? "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization",
+      pureEnrollUrl: envString(
+        "QWEN_PURE_ENROLL_URL",
+        process.env.QWEN_ENROLL_URL ??
+        qwen.pureEnrollUrl ??
+        qwen.enrollUrl ??
+        "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization",
       ),
-      ttsUrl: envString(
-        "QWEN_TTS_URL",
-        qwen.ttsUrl ?? "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer",
+      sceneEnrollUrl: envString(
+        "QWEN_SCENE_ENROLL_URL",
+        process.env.QWEN_ENROLL_URL ??
+        qwen.sceneEnrollUrl ??
+        qwen.enrollUrl ??
+        "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization",
+      ),
+      pureTtsUrl: envString(
+        "QWEN_PURE_TTS_URL",
+        process.env.QWEN_TTS_URL ??
+        qwen.pureTtsUrl ??
+        qwen.ttsUrl ??
+        "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer",
+      ),
+      sceneTtsUrl: envString(
+        "QWEN_SCENE_TTS_URL",
+        process.env.QWEN_TTS_URL ??
+        qwen.sceneTtsUrl ??
+        qwen.ttsUrl ??
+        "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer",
       ),
       trialVoiceId: envString("QWEN_TRIAL_VOICE_ID", qwen.trialVoiceId ?? "Cherry"),
     },

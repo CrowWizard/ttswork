@@ -235,6 +235,11 @@ BEGIN
 END
 $$;
 
+-- 旧字段 activeVoiceEnrollmentId 在部分线上库中是通过唯一约束创建的，
+-- Prisma 会尝试删除其底层索引，但 PostgreSQL 要求先删除约束本身。
+ALTER TABLE "User" DROP CONSTRAINT IF EXISTS "User_activeVoiceEnrollmentId_key";
+ALTER TABLE "AnonymousUser" DROP CONSTRAINT IF EXISTS "AnonymousUser_activeVoiceEnrollmentId_key";
+
 -- 删除旧列前的安全检查：如果还有未迁移值，直接中止，避免误删仅存的 active voice 绑定。
 DO $$
 DECLARE

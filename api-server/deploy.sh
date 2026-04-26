@@ -287,6 +287,9 @@ BEGIN
   END IF;
 END
 $$;
+
+ALTER TABLE "User" DROP CONSTRAINT IF EXISTS "User_activeVoiceEnrollmentId_key";
+ALTER TABLE "AnonymousUser" DROP CONSTRAINT IF EXISTS "AnonymousUser_activeVoiceEnrollmentId_key";
 SQL
     ) || {
       echo "  ❌ 建声历史数据回填失败，已中止后续 prisma db push"
