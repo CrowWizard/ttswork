@@ -34,7 +34,6 @@ export type AppConfig = {
     sceneEnrollUrl: string;
     pureTtsUrl: string;
     sceneTtsUrl: string;
-    trialVoiceId: string;
   };
   cookie: {
     secure: boolean;
@@ -235,7 +234,6 @@ export function loadConfig(): AppConfig {
         qwen.ttsUrl ??
         "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer",
       ),
-      trialVoiceId: envString("QWEN_TRIAL_VOICE_ID", qwen.trialVoiceId ?? "Cherry"),
     },
     cookie: {
       secure: envBool("COOKIE_SECURE", cookie.secure ?? false),

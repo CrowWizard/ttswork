@@ -117,20 +117,6 @@ export function createTtsRoutes(cfg: AppConfig) {
             throw new ActiveVoiceUnavailableError("请选择有效场景后再合成");
           }
 
-          if (!currentUser && !activeVoiceEnrollmentId) {
-            return tx.ttsJob.create({
-              data: {
-                anonymousUserId: anonymousUser?.id,
-                profileKind: parsedBody.data.profileKind,
-                voiceIdSnapshot: cfg.qwen.trialVoiceId,
-                text: parsedBody.data.text,
-                sceneKey: parsedBody.data.sceneKey,
-                instruction: parsedBody.data.instruction,
-                status: TtsJobStatus.PENDING,
-              },
-            });
-          }
-
           if (!activeVoiceEnrollmentId) {
             throw new ActiveVoiceUnavailableError("当前没有可用的 active voice");
           }

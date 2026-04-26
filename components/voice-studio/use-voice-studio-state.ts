@@ -44,21 +44,12 @@ export function useVoiceStudioState() {
   const [ttsHistory, setTtsHistory] = useState<TtsHistoryItem[]>([]);
   const [scenes, setScenes] = useState<TtsSceneItem[]>([]);
   const [selectedSceneKey, setSelectedSceneKey] = useState("");
-  const [ttsUsedCount, setTtsUsedCount] = useState(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("tts_used_count");
-      return stored ? parseInt(stored, 10) : 0;
-    }
-    return 0;
-  });
-
   const ttsTextLength = ttsText.trim().length;
-  const canUseAnonymousTts = !authUser && ttsTextLength > 0 && ttsTextLength <= 30 && ttsUsedCount < 1;
-  const hasPureVoice = Boolean(authUser && profile?.activeVoices.pure?.voiceId && !profile.activeVoices.pure.isInvalidated);
-  const hasSceneVoice = Boolean(authUser && profile?.activeVoices.scene?.voiceId && !profile.activeVoices.scene.isInvalidated);
+  const hasPureVoice = Boolean(profile?.activeVoices.pure?.voiceId && !profile.activeVoices.pure.isInvalidated);
+  const hasSceneVoice = Boolean(profile?.activeVoices.scene?.voiceId && !profile.activeVoices.scene.isInvalidated);
   const usingSceneVoice = Boolean(selectedSceneKey);
-  const canUseActiveVoiceTts = Boolean(authUser && (usingSceneVoice ? hasSceneVoice : hasPureVoice));
-  const canSubmitTts = ttsTextLength > 0 && (canUseAnonymousTts || canUseActiveVoiceTts);
+  const canUseActiveVoiceTts = usingSceneVoice ? hasSceneVoice : hasPureVoice;
+  const canSubmitTts = ttsTextLength > 0 && canUseActiveVoiceTts;
 
   const clearWorkspaceFeedback = useCallback(() => {
     setWorkspaceError(null);
@@ -80,10 +71,6 @@ export function useVoiceStudioState() {
       setTtsResult(null);
       setTtsHistory([]);
   }, [clearWorkspaceFeedback]);
-
-  const openLoginModal = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("open-voice-login-modal"));
-  }, []);
 
   const handleUnauthorized = useCallback(
     (message = "登录已失效，请重新登录") => {
@@ -632,9 +619,8 @@ export function useVoiceStudioState() {
   }, [clearWorkspaceFeedback, refreshProfile, handleUnauthorized]);
 
   const submitTts = useCallback(async () => {
-    const textLength = ttsText.trim().length;
-    if (!authUser && (textLength > 30 || ttsUsedCount >= 1)) {
-      openLoginModal();
+    if (!canUseActiveVoiceTts) {
+      setWorkspaceError(usingSceneVoice ? "请先建立场景版声纹后再进行文本转语音" : "请先建立纯粹版声纹后再进行文本转语音");
       return;
     }
 
@@ -669,11 +655,6 @@ export function useVoiceStudioState() {
         throw new Error(payload.error ?? "语音合成失败");
       }
 
-      if (!authUser) {
-        const newCount = ttsUsedCount + 1;
-        setTtsUsedCount(newCount);
-        localStorage.setItem("tts_used_count", newCount.toString());
-      }
       setTtsResult(payload);
       setWorkspaceNotice({ type: "success", title: "语音合成完成", text: "可在右侧结果区直接播放或下载。" });
       if (authUser) {
@@ -684,7 +665,7 @@ export function useVoiceStudioState() {
     } finally {
       setTtsLoading(false);
     }
-  }, [authUser, ttsText, ttsUsedCount, clearWorkspaceFeedback, handleUnauthorized, openLoginModal, refreshTtsHistory, scenes, selectedSceneKey]);
+  }, [authUser, canUseActiveVoiceTts, clearWorkspaceFeedback, handleUnauthorized, refreshTtsHistory, scenes, selectedSceneKey, ttsText, usingSceneVoice]);
 
   const handleRecordButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.button !== 0) {
@@ -810,7 +791,6 @@ export function useVoiceStudioState() {
       ttsHistory,
       scenes,
       selectedSceneKey,
-      ttsUsedCount,
       onTtsTextChange: setTtsText,
       onSceneChange: setSelectedSceneKey,
       onSubmitTts: () => void submitTts(),
