@@ -12,7 +12,7 @@ const TTS_SCENES: TtsScene[] = [
   },
   {
     key: "live_stream",
-    label: "直播",
+    label: "直播口播",
     instruction: "语气热情有感染力，节奏明快，重点词适度重读，像直播间口播一样自然。",
   },
   {

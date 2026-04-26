@@ -6,6 +6,7 @@ import { TtsPanel } from "./voice-studio/tts-panel";
 import { useVoiceStudioState } from "./voice-studio/use-voice-studio-state";
 import { WorkspaceHeader } from "./voice-studio/workspace-header";
 import { AuthPanel } from "./voice-studio/auth-panel";
+import { WorkspaceModuleNav } from "./workspace-module-nav";
 
 export function VoiceStudio() {
   const studio = useVoiceStudioState();
@@ -134,6 +135,7 @@ export function VoiceStudio() {
         </div>
       )}
       <div className="mx-auto w-full min-w-0 max-w-5xl">
+        <WorkspaceModuleNav />
         <WorkspaceHeader {...studio.header} />
         <section className="mt-8 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
           <RecordingPanel {...studio.recordingPanel} />
