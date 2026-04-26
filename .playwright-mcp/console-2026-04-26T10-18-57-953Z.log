@@ -1,0 +1,263 @@
+[    3679ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[    3860ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/auth/me:0
+[    3874ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/tts/scenes:0
+[    4090ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/voice/profile:0
+[    4091ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/tts:0
+[    4820ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:3000/favicon.ico:0
+[    5262ms] [LOG] [Fast Refresh] done in 1777198743214ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[   26176ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:3000/:0
+[  491835ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[  492888ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  492934ms] [LOG] {file: Object} @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/next-devtools/index.js:1630
+[  493107ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  523148ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  523149ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[  523359ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  523383ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  523865ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  524065ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  542313ms] [ERROR] ./components/voice-studio/recording-panel.tsx
+Error:   x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                               ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+  x Unexpected token. Did you mean `{'>'}` or `&gt;`?
+     ,-[/home/ttswork/ttswork/components/voice-studio/recording-panel.tsx:188:1]
+ 185 | 
+ 186 |       <div className="mt-8 flex flex-col gap-4">
+ 187 |         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
+ 188 |           三步完成：录音上传 -> 建立声纹 -> 输入文本生成语音。
+     :                                           ^
+ 189 |         </div>
+ 190 | 
+ 191 |         <p id="recording-help" className="text-center text-sm text-text-muted">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./components/voice-studio/recording-panel.tsx
+./components/voice-studio.tsx @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[  542313ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[  543470ms] [LOG] [Fast Refresh] done in 1156ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[  543491ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/auth/me:0
+[  543500ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[  543500ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/tts/scenes:0
+[  543517ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/voice/profile:0
+[  543530ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/tts:0
+[  543806ms] [LOG] [Fast Refresh] done in 306ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[  671198ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[  671896ms] [LOG] [Fast Refresh] done in 697ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[  682996ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[  683115ms] [LOG] [Fast Refresh] done in 118ms @ webpack-internal:///(app-pages-browser)/./node_modules/next/dist/client/dev/report-hmr-latency.js:13
