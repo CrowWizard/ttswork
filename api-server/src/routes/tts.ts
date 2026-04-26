@@ -1,19 +1,29 @@
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { Prisma, TtsJobStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
 import { requireCurrentUser, resolveAnonymousUser } from "../lib/auth";
 import { errorResponse } from "../lib/http";
+import { buildErrorLogContext, loggerError } from "../lib/logger";
 import { uploadBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
-import { synthesizeSpeech } from "../lib/qwen";
+import { synthesizePureSpeech, synthesizeSceneSpeech } from "../lib/qwen";
+import { getTtsScene, listTtsScenes } from "../lib/scene";
 import { ttsRequestSchema } from "../lib/validation";
+
+function getRequestId(c: Context) {
+  return (c as Context & { get: (key: string) => unknown }).get("requestId") as string | undefined;
+}
 
 export function createTtsRoutes(cfg: AppConfig) {
   const tts = new Hono();
 
   const TTS_HISTORY_LIMIT = 3;
   const ANONYMOUS_TTS_TEXT_LIMIT = 30;
+
+  tts.get("/scenes", async (c) => {
+    return c.json(listTtsScenes());
+  });
 
   tts.get("/", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
@@ -34,6 +44,9 @@ export function createTtsRoutes(cfg: AppConfig) {
         text: true,
         status: true,
         createdAt: true,
+        profileKind: true,
+        sceneKey: true,
+        instruction: true,
       },
     });
 
@@ -43,6 +56,9 @@ export function createTtsRoutes(cfg: AppConfig) {
         text: job.text,
         status: job.status,
         createdAt: job.createdAt,
+        profileKind: job.profileKind,
+        sceneKey: job.sceneKey,
+        instruction: job.instruction,
         downloadUrl: `/api/tts/${job.id}/download`,
       })),
     );
@@ -78,16 +94,38 @@ export function createTtsRoutes(cfg: AppConfig) {
     try {
       job = await prisma.$transaction(
         async (tx) => {
+          const scene = parsedBody.data.profileKind === "SCENE" ? getTtsScene(parsedBody.data.sceneKey) : null;
           const activeVoiceEnrollmentId = currentUser
-            ? (await tx.user.findUnique({ where: { id: currentUser.id } }))?.activeVoiceEnrollmentId
-            : anonymousUser?.activeVoiceEnrollmentId;
+            ? parsedBody.data.profileKind === "PURE"
+              ? (
+                  await tx.user.findUnique({
+                    where: { id: currentUser.id },
+                    select: { activePureVoiceEnrollmentId: true },
+                  })
+                )?.activePureVoiceEnrollmentId
+              : (
+                  await tx.user.findUnique({
+                    where: { id: currentUser.id },
+                    select: { activeSceneVoiceEnrollmentId: true },
+                  })
+                )?.activeSceneVoiceEnrollmentId
+            : parsedBody.data.profileKind === "PURE"
+              ? anonymousUser?.activePureVoiceEnrollmentId
+              : anonymousUser?.activeSceneVoiceEnrollmentId;
+
+          if (parsedBody.data.profileKind === "SCENE" && !scene) {
+            throw new ActiveVoiceUnavailableError("请选择有效场景后再合成");
+          }
 
           if (!currentUser && !activeVoiceEnrollmentId) {
             return tx.ttsJob.create({
               data: {
                 anonymousUserId: anonymousUser?.id,
+                profileKind: parsedBody.data.profileKind,
                 voiceIdSnapshot: cfg.qwen.trialVoiceId,
                 text: parsedBody.data.text,
+                sceneKey: parsedBody.data.sceneKey,
+                instruction: parsedBody.data.instruction,
                 status: TtsJobStatus.PENDING,
               },
             });
@@ -105,6 +143,10 @@ export function createTtsRoutes(cfg: AppConfig) {
             throw new ActiveVoiceUnavailableError("当前没有可用的 active voice");
           }
 
+          if (activeVoice.profileKind !== parsedBody.data.profileKind) {
+            throw new ActiveVoiceChangedError("所选声纹类型已发生变化，请重试");
+          }
+
           if (currentUser && activeVoice.userId !== currentUser.id) {
             throw new ActiveVoiceChangedError("当前 active voice 已发生变化，请重试");
           }
@@ -118,8 +160,11 @@ export function createTtsRoutes(cfg: AppConfig) {
               userId: currentUser?.id,
               anonymousUserId: anonymousUser?.id,
               voiceEnrollmentId: activeVoice.id,
+              profileKind: parsedBody.data.profileKind,
               voiceIdSnapshot: activeVoice.voiceId,
               text: parsedBody.data.text,
+              sceneKey: parsedBody.data.sceneKey,
+              instruction: parsedBody.data.instruction,
               status: TtsJobStatus.PENDING,
             },
           });
@@ -135,14 +180,29 @@ export function createTtsRoutes(cfg: AppConfig) {
         return errorResponse(c, error.message, 409);
       }
 
-      return errorResponse(c, "创建语音任务失败", 500);
+      loggerError("tts_job.create_failed", {
+        requestId: getRequestId(c),
+        ownerId,
+        profileKind: parsedBody.data.profileKind,
+        sceneKey: parsedBody.data.sceneKey,
+        textLength: parsedBody.data.text.length,
+        ...buildErrorLogContext(error),
+      });
+
+      return errorResponse(c, error instanceof Error ? error.message : "创建语音任务失败", 500);
     }
 
     try {
-      const qwenResult = await synthesizeSpeech(cfg.qwen, {
-        text: parsedBody.data.text,
-        voiceId: job.voiceIdSnapshot,
-      });
+      const qwenResult = job.profileKind === "PURE"
+        ? await synthesizePureSpeech(cfg.qwen, {
+            text: parsedBody.data.text,
+            voiceId: job.voiceIdSnapshot,
+          })
+        : await synthesizeSceneSpeech(cfg.qwen, {
+            text: parsedBody.data.text,
+            voiceId: job.voiceIdSnapshot,
+            instruction: job.instruction ?? undefined,
+          });
 
       const extension = qwenResult.extension || "wav";
       const outputObjectKey = `tts/${ownerId}/${Date.now()}-${randomUUID()}.${extension}`;
@@ -169,11 +229,24 @@ export function createTtsRoutes(cfg: AppConfig) {
         status: updated.status,
         downloadUrl: `/api/tts/${updated.id}/download`,
         voiceIdSnapshot: updated.voiceIdSnapshot,
+        profileKind: updated.profileKind,
+        sceneKey: updated.sceneKey,
+        instruction: updated.instruction,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "语音合成失败";
 
-      console.error("[Qwen tts] failed", error);
+      loggerError("tts_job.qwen_failed", {
+        requestId: getRequestId(c),
+        jobId: job.id,
+        ownerId,
+        profileKind: job.profileKind,
+        sceneKey: job.sceneKey,
+        synthesizeMode: job.profileKind === "PURE" ? "pure-direct-tts" : "scene-instruction-tts",
+        voiceIdSnapshot: job.voiceIdSnapshot,
+        textLength: job.text.length,
+        ...buildErrorLogContext(error),
+      });
 
       await prisma.ttsJob.update({
         where: { id: job.id },
@@ -183,7 +256,13 @@ export function createTtsRoutes(cfg: AppConfig) {
         },
       });
 
-      return errorResponse(c, "接口繁忙", 502);
+      return errorResponse(c, message, 502, {
+        details: {
+          jobId: job.id,
+          profileKind: job.profileKind,
+          sceneKey: job.sceneKey,
+        },
+      });
     }
   });
 

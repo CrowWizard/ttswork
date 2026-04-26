@@ -9,6 +9,7 @@ import {
   unauthorizedResponse,
 } from "../lib/auth";
 import { errorResponse } from "../lib/http";
+import { loggerError } from "../lib/logger";
 import { hashPassword, verifyPassword } from "../lib/password";
 import { prisma } from "../lib/prisma";
 import { SmsServiceError, sendSmsVerification, verifySmsCode } from "../lib/sms";
@@ -78,10 +79,12 @@ export function createAuthRoutes(cfg: AppConfig) {
         ...(result.debugCode ? { debugCode: result.debugCode } : {}),
       });
     } catch (error) {
-      console.error(
-        `[auth.sms.send] failed scene=${scene} phone=${phoneNumber.slice(0, 3)}****${phoneNumber.slice(-4)} ` +
-        `mockMode=${cfg.sms.mockMode} ${error instanceof Error ? error.message : String(error)}`,
-      );
+      loggerError("auth.sms.send_failed", {
+        scene,
+        phone: `${phoneNumber.slice(0, 3)}****${phoneNumber.slice(-4)}`,
+        mockMode: cfg.sms.mockMode,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
 
       if (error instanceof SmsServiceError) {
         return errorResponse(c, error.message, error.status);

@@ -14,6 +14,15 @@ enum EnrollmentStatus {
   FAILED
 }
 
+enum RecordingStatus {
+  UPLOADED
+}
+
+enum VoiceProfileKind {
+  PURE
+  SCENE
+}
+
 enum TtsJobStatus {
   PENDING
   READY
@@ -32,23 +41,25 @@ enum SmsVerificationStatus {
 }
 
 model User {
-  id                      String  @id @default(cuid())
-  phoneNumber              String  @unique
-  passwordHash           String?
-  phoneVerifiedAt        DateTime?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  activeVoiceEnrollmentId String? @unique
+  id                           String  @id @default(cuid())
+  phoneNumber                  String  @unique
+  passwordHash                 String?
+  phoneVerifiedAt              DateTime?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  activePureVoiceEnrollmentId  String?  @unique
+  activeSceneVoiceEnrollmentId String?  @unique
 }
 
 model AnonymousUser {
-  id                      String   @id @default(cuid())
-  tokenHash               String   @unique
-  expiresAt               DateTime
-  lastSeenAt              DateTime @default(now())
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  activeVoiceEnrollmentId String?  @unique
+  id                           String   @id @default(cuid())
+  tokenHash                    String   @unique
+  expiresAt                    DateTime
+  lastSeenAt                   DateTime @default(now())
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  activePureVoiceEnrollmentId  String?  @unique
+  activeSceneVoiceEnrollmentId String?  @unique
 
   @@index([expiresAt])
 }
@@ -85,10 +96,30 @@ model SmsVerification {
   @@index([status, expiresAt])
 }
 
+model VoiceRecording {
+  id              String          @id @default(cuid())
+  userId          String?
+  anonymousUserId String?
+  status          RecordingStatus @default(UPLOADED)
+  durationSeconds Float
+  originalFilename String?
+  inputContentType String
+  bucket          String
+  objectKey       String
+  minioUri        String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([anonymousUserId, createdAt])
+}
+
 model VoiceEnrollment {
   id                String           @id @default(cuid())
+  recordingId       String
   userId            String?
   anonymousUserId   String?
+  profileKind       VoiceProfileKind
   status            EnrollmentStatus @default(PENDING)
   durationSeconds   Float
   originalFilename  String?
@@ -102,6 +133,8 @@ model VoiceEnrollment {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
+  @@index([recordingId])
+  @@index([profileKind, createdAt])
   @@index([userId, createdAt])
   @@index([anonymousUserId, createdAt])
 }
@@ -111,8 +144,11 @@ model TtsJob {
   userId             String?
   anonymousUserId    String?
   voiceEnrollmentId  String?
+  profileKind        VoiceProfileKind
   voiceIdSnapshot   String
   text             String
+  sceneKey         String?
+  instruction      String?
   status           TtsJobStatus    @default(PENDING)
   outputContentType String?
   errorMessage    String?

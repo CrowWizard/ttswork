@@ -2,8 +2,8 @@ export function formatDuration(durationSeconds: number) {
   return `${durationSeconds.toFixed(1)} 秒`;
 }
 
-export function buildAudioFilename(jobId: string) {
-  return `tts-${jobId}.wav`;
+export function buildAudioFilename(jobId: string, profileKind?: "PURE" | "SCENE") {
+  return `tts-${profileKind === "SCENE" ? "scene" : "pure"}-${jobId}.wav`;
 }
 
 export function pickRecordingMimeType() {

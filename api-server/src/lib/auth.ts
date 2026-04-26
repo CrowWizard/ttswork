@@ -128,9 +128,21 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { id: userId },
-      select: { activeVoiceEnrollmentId: true },
+      select: {
+        activePureVoiceEnrollmentId: true,
+        activeSceneVoiceEnrollmentId: true,
+      },
     });
-    const anonymousActiveVoiceId = anonymousUser.activeVoiceEnrollmentId;
+    const anonymousActivePureVoiceId = anonymousUser.activePureVoiceEnrollmentId;
+    const anonymousActiveSceneVoiceId = anonymousUser.activeSceneVoiceEnrollmentId;
+
+    await tx.voiceRecording.updateMany({
+      where: { anonymousUserId: anonymousUser.id },
+      data: {
+        userId,
+        anonymousUserId: null,
+      },
+    });
 
     await tx.voiceEnrollment.updateMany({
       where: { anonymousUserId: anonymousUser.id },
@@ -148,11 +160,12 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
       },
     });
 
-    if (!user?.activeVoiceEnrollmentId && anonymousActiveVoiceId) {
+    if (!user?.activePureVoiceEnrollmentId && anonymousActivePureVoiceId) {
       const anonymousActiveVoice = await tx.voiceEnrollment.findFirst({
         where: {
-          id: anonymousActiveVoiceId,
+          id: anonymousActivePureVoiceId,
           userId,
+          profileKind: "PURE",
           status: "READY",
           isInvalidated: false,
         },
@@ -161,7 +174,26 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
       if (anonymousActiveVoice?.voiceId) {
         await tx.user.update({
           where: { id: userId },
-          data: { activeVoiceEnrollmentId: anonymousActiveVoice.id },
+          data: { activePureVoiceEnrollmentId: anonymousActiveVoice.id },
+        });
+      }
+    }
+
+    if (!user?.activeSceneVoiceEnrollmentId && anonymousActiveSceneVoiceId) {
+      const anonymousActiveVoice = await tx.voiceEnrollment.findFirst({
+        where: {
+          id: anonymousActiveSceneVoiceId,
+          userId,
+          profileKind: "SCENE",
+          status: "READY",
+          isInvalidated: false,
+        },
+      });
+
+      if (anonymousActiveVoice?.voiceId) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { activeSceneVoiceEnrollmentId: anonymousActiveVoice.id },
         });
       }
     }

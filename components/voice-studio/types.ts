@@ -3,15 +3,11 @@ import type { KeyboardEvent, MouseEvent, TouchEvent } from "react";
 export type VoiceProfileResponse = {
   userId: string | null;
   anonymousUserId?: string | null;
-  activeVoice: {
-    id: string;
-    voiceId: string | null;
-    status: string;
-    durationSeconds: number;
-    createdAt: string;
-    playbackUrl: string | null;
-    isInvalidated: boolean;
-  } | null;
+  activeVoices: {
+    pure: ActiveVoiceSummary | null;
+    scene: ActiveVoiceSummary | null;
+  };
+  recordings: VoiceRecordingItem[];
   recentEnrollments: Array<{
     id: string;
     status: string;
@@ -20,7 +16,31 @@ export type VoiceProfileResponse = {
     createdAt: string;
     errorMessage: string | null;
     isInvalidated: boolean;
+    profileKind: VoiceProfileKind;
+    recordingId: string;
   }>;
+};
+
+export type VoiceProfileKind = "PURE" | "SCENE";
+
+export type ActiveVoiceSummary = {
+  id: string;
+  voiceId: string | null;
+  status: string;
+  durationSeconds: number;
+  createdAt: string;
+  isInvalidated: boolean;
+  profileKind: VoiceProfileKind;
+  recordingId: string;
+};
+
+export type VoiceRecordingItem = {
+  id: string;
+  status: string;
+  durationSeconds: number;
+  createdAt: string;
+  playbackUrl: string;
+  originalFilename: string | null;
 };
 
 export type TtsResult = {
@@ -28,6 +48,9 @@ export type TtsResult = {
   status: string;
   downloadUrl: string;
   voiceIdSnapshot: string;
+  profileKind: VoiceProfileKind;
+  sceneKey?: string | null;
+  instruction?: string | null;
 };
 
 export type TtsHistoryItem = {
@@ -36,6 +59,15 @@ export type TtsHistoryItem = {
   status: string;
   createdAt: string;
   downloadUrl: string;
+  profileKind: VoiceProfileKind;
+  sceneKey?: string | null;
+  instruction?: string | null;
+};
+
+export type TtsSceneItem = {
+  key: string;
+  label: string;
+  instruction: string;
 };
 
 export type AuthUser = {
@@ -82,15 +114,18 @@ export type WorkspaceHeaderProps = {
 };
 
 export type RecordingPanelProps = {
-  activeVoiceLabel: string;
-  canPlaybackActiveVoice: boolean;
-  activeVoicePlaybackUrl: string | null;
   loadingProfile: boolean;
   profile: VoiceProfileResponse | null;
   recording: boolean;
   recordStartedAt: number | null;
-  enrolling: boolean;
-  invalidating: boolean;
+  uploading: boolean;
+  creatingPureVoice: boolean;
+  creatingSceneVoice: boolean;
+  invalidatingVoiceId: string | null;
+  deletingRecordingId: string | null;
+  selectedRecordingId: string | null;
+  onSelectRecording: (recordingId: string) => void;
+  onDeleteRecording: (recordingId: string) => void;
   workspaceError: string | null;
   workspaceNotice: StatusState | null;
   onRecordButtonMouseDown: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -100,18 +135,24 @@ export type RecordingPanelProps = {
   onRecordButtonTouchEnd: (event: TouchEvent<HTMLButtonElement>) => void;
   onRecordButtonTouchCancel: (event: TouchEvent<HTMLButtonElement>) => void;
   onRecordButtonKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
-  onInvalidateActiveVoice: () => void;
+  onCreatePureVoice: () => void;
+  onCreateSceneVoice: () => void;
+  onInvalidateVoice: (enrollmentId: string) => void;
 };
 
 export type TtsPanelProps = {
   isAuthenticated: boolean;
-  hasActiveVoice: boolean;
+  hasPureVoice: boolean;
+  hasSceneVoice: boolean;
   canSubmitTts: boolean;
   ttsText: string;
   ttsLoading: boolean;
   ttsResult: TtsResult | null;
   ttsHistory: TtsHistoryItem[];
+  scenes: TtsSceneItem[];
+  selectedSceneKey: string;
   ttsUsedCount: number;
   onTtsTextChange: (value: string) => void;
+  onSceneChange: (value: string) => void;
   onSubmitTts: () => void;
 };

@@ -28,78 +28,215 @@ GRANT ALL PRIVILEGES ON DATABASE voice_mvp TO voice_mvp;
 GRANT ALL ON SCHEMA public TO voice_mvp;
 
 -- 4. 创建枚举类型
-CREATE TYPE "EnrollmentStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
-CREATE TYPE "TtsJobStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'EnrollmentStatus') THEN
+    CREATE TYPE "EnrollmentStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RecordingStatus') THEN
+    CREATE TYPE "RecordingStatus" AS ENUM ('UPLOADED');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'VoiceProfileKind') THEN
+    CREATE TYPE "VoiceProfileKind" AS ENUM ('PURE', 'SCENE');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TtsJobStatus') THEN
+    CREATE TYPE "TtsJobStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SmsScene') THEN
+    CREATE TYPE "SmsScene" AS ENUM ('REGISTER', 'LOGIN', 'PASSWORD_CHANGE');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SmsVerificationStatus') THEN
+    CREATE TYPE "SmsVerificationStatus" AS ENUM ('SENT', 'VERIFIED', 'FAILED');
+  END IF;
+END
+$$;
 
 -- 5. 创建表（无外键约束，关联关系由应用层保证）
-CREATE TABLE IF NOT EXISTS "AnonymousUser" (
-    "id" TEXT NOT NULL,
-    "tokenHash" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "activeVoiceEnrollmentId" TEXT,
+CREATE TABLE IF NOT EXISTS "User" (
+  "id" TEXT NOT NULL,
+  "phoneNumber" TEXT NOT NULL,
+  "passwordHash" TEXT,
+  "phoneVerifiedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "activePureVoiceEnrollmentId" TEXT,
+  "activeSceneVoiceEnrollmentId" TEXT,
 
-    CONSTRAINT "AnonymousUser_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "AnonymousUser_tokenHash_key" UNIQUE ("tokenHash"),
-    CONSTRAINT "AnonymousUser_activeVoiceEnrollmentId_key" UNIQUE ("activeVoiceEnrollmentId")
+  CONSTRAINT "User_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "User_phoneNumber_key" UNIQUE ("phoneNumber"),
+  CONSTRAINT "User_activePureVoiceEnrollmentId_key" UNIQUE ("activePureVoiceEnrollmentId"),
+  CONSTRAINT "User_activeSceneVoiceEnrollmentId_key" UNIQUE ("activeSceneVoiceEnrollmentId")
+);
+
+CREATE TABLE IF NOT EXISTS "AnonymousUser" (
+  "id" TEXT NOT NULL,
+  "tokenHash" TEXT NOT NULL,
+  "expiresAt" TIMESTAMP(3) NOT NULL,
+  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "activePureVoiceEnrollmentId" TEXT,
+  "activeSceneVoiceEnrollmentId" TEXT,
+
+  CONSTRAINT "AnonymousUser_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "AnonymousUser_tokenHash_key" UNIQUE ("tokenHash"),
+  CONSTRAINT "AnonymousUser_activePureVoiceEnrollmentId_key" UNIQUE ("activePureVoiceEnrollmentId"),
+  CONSTRAINT "AnonymousUser_activeSceneVoiceEnrollmentId_key" UNIQUE ("activeSceneVoiceEnrollmentId")
+);
+
+CREATE TABLE IF NOT EXISTS "Session" (
+  "id" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  "tokenHash" TEXT NOT NULL,
+  "expiresAt" TIMESTAMP(3) NOT NULL,
+  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "Session_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "Session_tokenHash_key" UNIQUE ("tokenHash")
+);
+
+CREATE TABLE IF NOT EXISTS "SmsVerification" (
+  "id" TEXT NOT NULL,
+  "phoneNumber" TEXT NOT NULL,
+  "scene" "SmsScene" NOT NULL,
+  "provider" TEXT NOT NULL,
+  "providerBizId" TEXT,
+  "providerRequestId" TEXT,
+  "providerOutId" TEXT NOT NULL,
+  "codeHash" TEXT,
+  "status" "SmsVerificationStatus" NOT NULL DEFAULT 'SENT',
+  "verifyAttempts" INTEGER NOT NULL DEFAULT 0,
+  "expiresAt" TIMESTAMP(3) NOT NULL,
+  "verifiedAt" TIMESTAMP(3),
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "SmsVerification_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "VoiceRecording" (
+  "id" TEXT NOT NULL,
+  "userId" TEXT,
+  "anonymousUserId" TEXT,
+  "status" "RecordingStatus" NOT NULL DEFAULT 'UPLOADED',
+  "durationSeconds" DOUBLE PRECISION NOT NULL,
+  "originalFilename" TEXT,
+  "inputContentType" TEXT NOT NULL,
+  "bucket" TEXT NOT NULL,
+  "objectKey" TEXT NOT NULL,
+  "minioUri" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "VoiceRecording_pkey" PRIMARY KEY ("id")
 );
 
 CREATE TABLE IF NOT EXISTS "VoiceEnrollment" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "status" "EnrollmentStatus" NOT NULL DEFAULT 'PENDING',
-    "durationSeconds" DOUBLE PRECISION NOT NULL,
-    "originalFilename" TEXT,
-    "inputContentType" TEXT NOT NULL,
-    "voiceId" TEXT,
-    "errorMessage" TEXT,
-    "isInvalidated" BOOLEAN NOT NULL DEFAULT false,
-    "bucket" TEXT NOT NULL,
-    "objectKey" TEXT NOT NULL,
-    "minioUri" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "id" TEXT NOT NULL,
+  "recordingId" TEXT NOT NULL,
+  "userId" TEXT,
+  "anonymousUserId" TEXT,
+  "profileKind" "VoiceProfileKind" NOT NULL,
+  "status" "EnrollmentStatus" NOT NULL DEFAULT 'PENDING',
+  "durationSeconds" DOUBLE PRECISION NOT NULL,
+  "originalFilename" TEXT,
+  "inputContentType" TEXT NOT NULL,
+  "voiceId" TEXT,
+  "errorMessage" TEXT,
+  "isInvalidated" BOOLEAN NOT NULL DEFAULT false,
+  "bucket" TEXT NOT NULL,
+  "objectKey" TEXT NOT NULL,
+  "minioUri" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "VoiceEnrollment_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "VoiceEnrollment_voiceId_key" UNIQUE ("voiceId")
+  CONSTRAINT "VoiceEnrollment_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "VoiceEnrollment_voiceId_key" UNIQUE ("voiceId")
 );
 
 CREATE TABLE IF NOT EXISTS "TtsJob" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "voiceEnrollmentId" TEXT NOT NULL,
-    "voiceIdSnapshot" TEXT NOT NULL,
-    "text" TEXT NOT NULL,
-    "status" "TtsJobStatus" NOT NULL DEFAULT 'PENDING',
-    "outputContentType" TEXT,
-    "errorMessage" TEXT,
-    "bucket" TEXT,
-    "objectKey" TEXT,
-    "minioUri" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "id" TEXT NOT NULL,
+  "userId" TEXT,
+  "anonymousUserId" TEXT,
+  "voiceEnrollmentId" TEXT,
+  "profileKind" "VoiceProfileKind" NOT NULL,
+  "voiceIdSnapshot" TEXT NOT NULL,
+  "text" TEXT NOT NULL,
+  "sceneKey" TEXT,
+  "instruction" TEXT,
+  "status" "TtsJobStatus" NOT NULL DEFAULT 'PENDING',
+  "outputContentType" TEXT,
+  "errorMessage" TEXT,
+  "bucket" TEXT,
+  "objectKey" TEXT,
+  "minioUri" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "TtsJob_pkey" PRIMARY KEY ("id")
+  CONSTRAINT "TtsJob_pkey" PRIMARY KEY ("id")
 );
 
 -- 6. 创建索引
 CREATE INDEX IF NOT EXISTS "AnonymousUser_expiresAt_idx"
-    ON "AnonymousUser"("expiresAt");
+  ON "AnonymousUser"("expiresAt");
+
+CREATE INDEX IF NOT EXISTS "Session_userId_expiresAt_idx"
+  ON "Session"("userId", "expiresAt");
+
+CREATE INDEX IF NOT EXISTS "SmsVerification_phoneNumber_scene_createdAt_idx"
+  ON "SmsVerification"("phoneNumber", "scene", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "SmsVerification_status_expiresAt_idx"
+  ON "SmsVerification"("status", "expiresAt");
+
+CREATE INDEX IF NOT EXISTS "VoiceRecording_userId_createdAt_idx"
+  ON "VoiceRecording"("userId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "VoiceRecording_anonymousUserId_createdAt_idx"
+  ON "VoiceRecording"("anonymousUserId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "VoiceEnrollment_recordingId_idx"
+  ON "VoiceEnrollment"("recordingId");
+
+CREATE INDEX IF NOT EXISTS "VoiceEnrollment_profileKind_createdAt_idx"
+  ON "VoiceEnrollment"("profileKind", "createdAt");
 
 CREATE INDEX IF NOT EXISTS "VoiceEnrollment_userId_createdAt_idx"
-    ON "VoiceEnrollment"("userId", "createdAt");
+  ON "VoiceEnrollment"("userId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "VoiceEnrollment_anonymousUserId_createdAt_idx"
+  ON "VoiceEnrollment"("anonymousUserId", "createdAt");
 
 CREATE INDEX IF NOT EXISTS "TtsJob_userId_createdAt_idx"
-    ON "TtsJob"("userId", "createdAt");
+  ON "TtsJob"("userId", "createdAt");
 
--- 7. 表所有权授予 voice_mvp 用户
+CREATE INDEX IF NOT EXISTS "TtsJob_anonymousUserId_createdAt_idx"
+  ON "TtsJob"("anonymousUserId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "TtsJob_voiceEnrollmentId_idx"
+  ON "TtsJob"("voiceEnrollmentId");
+
+-- 7. 表和类型所有权授予 voice_mvp 用户
+ALTER TABLE "User" OWNER TO voice_mvp;
 ALTER TABLE "AnonymousUser" OWNER TO voice_mvp;
+ALTER TABLE "Session" OWNER TO voice_mvp;
+ALTER TABLE "SmsVerification" OWNER TO voice_mvp;
+ALTER TABLE "VoiceRecording" OWNER TO voice_mvp;
 ALTER TABLE "VoiceEnrollment" OWNER TO voice_mvp;
 ALTER TABLE "TtsJob" OWNER TO voice_mvp;
 ALTER TYPE "EnrollmentStatus" OWNER TO voice_mvp;
+ALTER TYPE "RecordingStatus" OWNER TO voice_mvp;
+ALTER TYPE "VoiceProfileKind" OWNER TO voice_mvp;
 ALTER TYPE "TtsJobStatus" OWNER TO voice_mvp;
+ALTER TYPE "SmsScene" OWNER TO voice_mvp;
+ALTER TYPE "SmsVerificationStatus" OWNER TO voice_mvp;
 
 -- 完成
 SELECT '✅ 数据库初始化完成' AS result;

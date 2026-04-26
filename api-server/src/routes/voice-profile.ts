@@ -6,6 +6,34 @@ import { prisma } from "../lib/prisma";
 export function createVoiceProfileRoutes(cfg: AppConfig) {
   const voiceProfile = new Hono();
 
+  function buildVoiceSummary(
+    enrollment: {
+      id: string;
+      voiceId: string | null;
+      status: string;
+      durationSeconds: number;
+      createdAt: Date;
+      isInvalidated: boolean;
+      recordingId: string;
+      profileKind: string;
+    } | null,
+  ) {
+    if (!enrollment) {
+      return null;
+    }
+
+    return {
+      id: enrollment.id,
+      voiceId: enrollment.voiceId,
+      status: enrollment.status,
+      durationSeconds: enrollment.durationSeconds,
+      createdAt: enrollment.createdAt,
+      isInvalidated: enrollment.isInvalidated,
+      profileKind: enrollment.profileKind,
+      recordingId: enrollment.recordingId,
+    };
+  }
+
   voiceProfile.get("/", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
     const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
@@ -14,20 +42,41 @@ export function createVoiceProfileRoutes(cfg: AppConfig) {
       return c.json({
         userId: null,
         anonymousUserId: null,
-        activeVoice: null,
+        activeVoices: {
+          pure: null,
+          scene: null,
+        },
+        recordings: [],
         recentEnrollments: [],
       });
     }
 
-    const activeVoiceEnrollmentId = currentUser
-      ? (await prisma.user.findUnique({ where: { id: currentUser.id } }))?.activeVoiceEnrollmentId
-      : anonymousUser?.activeVoiceEnrollmentId;
+    const voiceOwner = currentUser
+      ? await prisma.user.findUnique({
+          where: { id: currentUser.id },
+          select: {
+            activePureVoiceEnrollmentId: true,
+            activeSceneVoiceEnrollmentId: true,
+          },
+        })
+      : anonymousUser;
 
-    const activeEnrollment = activeVoiceEnrollmentId
+    const activePureEnrollment = voiceOwner?.activePureVoiceEnrollmentId
       ? await prisma.voiceEnrollment.findUnique({
-          where: { id: activeVoiceEnrollmentId },
+          where: { id: voiceOwner.activePureVoiceEnrollmentId },
         })
       : null;
+    const activeSceneEnrollment = voiceOwner?.activeSceneVoiceEnrollmentId
+      ? await prisma.voiceEnrollment.findUnique({
+          where: { id: voiceOwner.activeSceneVoiceEnrollmentId },
+        })
+      : null;
+
+    const recordings = await prisma.voiceRecording.findMany({
+      where: currentUser ? { userId: currentUser.id } : { anonymousUserId: anonymousUser?.id },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    });
 
     const recentEnrollments = await prisma.voiceEnrollment.findMany({
       where: currentUser ? { userId: currentUser.id } : { anonymousUserId: anonymousUser?.id },
@@ -38,20 +87,18 @@ export function createVoiceProfileRoutes(cfg: AppConfig) {
     return c.json({
       userId: currentUser?.id ?? null,
       anonymousUserId: anonymousUser?.id ?? null,
-      activeVoice: activeEnrollment
-        ? {
-            id: activeEnrollment.id,
-            voiceId: activeEnrollment.voiceId,
-            status: activeEnrollment.status,
-            durationSeconds: activeEnrollment.durationSeconds,
-            createdAt: activeEnrollment.createdAt,
-            playbackUrl:
-              activeEnrollment.status === "READY" && !activeEnrollment.isInvalidated
-                ? `/api/voice/enrollments/${activeEnrollment.id}/audio`
-                : null,
-            isInvalidated: activeEnrollment.isInvalidated,
-          }
-        : null,
+      activeVoices: {
+        pure: buildVoiceSummary(activePureEnrollment),
+        scene: buildVoiceSummary(activeSceneEnrollment),
+      },
+      recordings: recordings.map((item) => ({
+        id: item.id,
+        status: item.status,
+        durationSeconds: item.durationSeconds,
+        createdAt: item.createdAt,
+        playbackUrl: `/api/voice/enrollments/recordings/${item.id}/audio`,
+        originalFilename: item.originalFilename,
+      })),
       recentEnrollments: recentEnrollments.map((item) => ({
         id: item.id,
         status: item.status,
@@ -60,6 +107,8 @@ export function createVoiceProfileRoutes(cfg: AppConfig) {
         createdAt: item.createdAt,
         errorMessage: item.errorMessage,
         isInvalidated: item.isInvalidated,
+        profileKind: item.profileKind,
+        recordingId: item.recordingId,
       })),
     });
   });
