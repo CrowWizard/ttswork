@@ -201,7 +201,7 @@ async function fetchTtsAudioFromPayload(payload: any): Promise<{ audioBuffer: Bu
 }
 
 async function liveEnrollPureVoice(cfg: AppConfig["qwen"], params: { audioBuffer: Buffer; mimeType: string }) {
-  const url = assertEnv("QWEN_ENROLL_URL", cfg.enrollUrl);
+  const url = assertEnv("QWEN_PURE_ENROLL_URL", cfg.pureEnrollUrl);
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
 
   if (!isSupportedAudioMimeType(params.mimeType)) {
@@ -264,7 +264,7 @@ async function liveEnrollPureVoice(cfg: AppConfig["qwen"], params: { audioBuffer
 }
 
 async function liveEnrollSceneVoice(cfg: AppConfig["qwen"], params: { publicAudioUrl: string; prefix: string }) {
-  const url = assertEnv("QWEN_ENROLL_URL", cfg.enrollUrl);
+  const url = assertEnv("QWEN_SCENE_ENROLL_URL", cfg.sceneEnrollUrl);
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
   const requestPayload = {
     model: "voice-enrollment",
@@ -315,7 +315,7 @@ async function liveEnrollSceneVoice(cfg: AppConfig["qwen"], params: { publicAudi
 }
 
 async function liveSynthesizePureSpeech(cfg: AppConfig["qwen"], params: { text: string; voiceId: string }) {
-  const url = assertEnv("QWEN_TTS_URL", cfg.ttsUrl);
+  const url = assertEnv("QWEN_PURE_TTS_URL", cfg.pureTtsUrl);
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
   const requestPayload = {
     model: PURE_VOICE_TARGET_MODEL,
@@ -404,7 +404,7 @@ async function liveSynthesizePureSpeech(cfg: AppConfig["qwen"], params: { text: 
 }
 
 async function liveSynthesizeSceneSpeech(cfg: AppConfig["qwen"], params: { text: string; voiceId: string; instruction?: string }) {
-  const url = assertEnv("QWEN_TTS_URL", cfg.ttsUrl);
+  const url = assertEnv("QWEN_SCENE_TTS_URL", cfg.sceneTtsUrl);
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
   const requestPayload = {
     model: SCENE_VOICE_TARGET_MODEL,

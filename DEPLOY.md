@@ -357,8 +357,10 @@ minio:
 qwen:
   mockMode: true           # true=本地Mock / false=调用通义千问
   apiKey: ""               # 通义千问 API Key
-  enrollUrl: ""            # 建声接口地址
-  ttsUrl: ""               # TTS 接口地址
+  pureEnrollUrl: ""        # 纯粹版建声接口地址
+  sceneEnrollUrl: ""       # 场景版建声接口地址
+  pureTtsUrl: ""           # 纯粹版 TTS 接口地址
+  sceneTtsUrl: ""          # 场景版 TTS 接口地址
 
 cookie:
   secure: false            # 生产环境建议 true（需 HTTPS）
@@ -394,8 +396,10 @@ cookie:
 | `MINIO_BUCKET` | minio.bucket |
 | `QWEN_MOCK_MODE` | qwen.mockMode |
 | `QWEN_API_KEY` | qwen.apiKey |
-| `QWEN_ENROLL_URL` | qwen.enrollUrl |
-| `QWEN_TTS_URL` | qwen.ttsUrl |
+| `QWEN_PURE_ENROLL_URL` | qwen.pureEnrollUrl |
+| `QWEN_SCENE_ENROLL_URL` | qwen.sceneEnrollUrl |
+| `QWEN_PURE_TTS_URL` | qwen.pureTtsUrl |
+| `QWEN_SCENE_TTS_URL` | qwen.sceneTtsUrl |
 | `COOKIE_SECURE` | cookie.secure |
 | `COOKIE_MAX_AGE` | cookie.maxAge |
 

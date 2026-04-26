@@ -114,8 +114,10 @@ npm run dev
 将以下环境变量配置为真实值，并把 `QWEN_MOCK_MODE` 设为 `false`：
 
 - `QWEN_API_KEY`
-- `QWEN_ENROLL_URL`
-- `QWEN_TTS_URL`
+- `QWEN_PURE_ENROLL_URL`
+- `QWEN_SCENE_ENROLL_URL`
+- `QWEN_PURE_TTS_URL`
+- `QWEN_SCENE_TTS_URL`
 
 > 当前实现采用通用 JSON / 二进制请求方式，若正式接口字段与返回结构不同，只需调整 `api-server/src/lib/qwen.ts`，无需改动 route handler。
 
