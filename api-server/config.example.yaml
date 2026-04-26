@@ -27,7 +27,6 @@ qwen:
   sceneEnrollUrl: "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization"
   pureTtsUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
   sceneTtsUrl: "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer"
-  trialVoiceId: "Cherry"
 
 cookie:
   secure: false

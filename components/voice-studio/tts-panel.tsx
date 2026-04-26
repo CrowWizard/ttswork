@@ -12,14 +12,11 @@ export function TtsPanel({
   ttsHistory,
   scenes,
   selectedSceneKey,
-  ttsUsedCount,
   onTtsTextChange,
   onSceneChange,
   onSubmitTts,
 }: TtsPanelProps) {
   const trimmedLength = ttsText.trim().length;
-  const isOverLimit = trimmedLength > 30;
-  const canUseFreeTrial = !isAuthenticated && trimmedLength > 0 && trimmedLength <= 30 && ttsUsedCount < 1;
   const selectedScene = scenes.find((item) => item.key === selectedSceneKey) ?? null;
   const helperText = isAuthenticated
     ? selectedSceneKey
@@ -29,16 +26,14 @@ export function TtsPanel({
       : hasPureVoice
         ? "纯粹版声纹已就绪，可以直接输入文本生成语音。"
         : "完成纯粹版声纹后，这里会开放语音合成。"
-    : "匿名可免费生成 1 次 30 字内语音，继续使用请登录。";
+    : selectedSceneKey
+      ? "未登录时如需生成场景版语音，请先建立场景版声纹。"
+      : "未登录时也必须先建立纯粹版声纹，才可进行文本转语音。";
   const buttonText = ttsLoading
     ? "合成中..."
     : isAuthenticated
       ? "生成语音"
-      : canUseFreeTrial
-        ? "生成语音（免费）"
-        : isOverLimit
-          ? "超30字，请登录"
-          : "请登录后继续";
+      : "生成语音";
 
   return (
     <div className="app-card w-full p-6 sm:p-8">

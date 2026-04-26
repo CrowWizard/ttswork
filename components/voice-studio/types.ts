@@ -151,7 +151,6 @@ export type TtsPanelProps = {
   ttsHistory: TtsHistoryItem[];
   scenes: TtsSceneItem[];
   selectedSceneKey: string;
-  ttsUsedCount: number;
   onTtsTextChange: (value: string) => void;
   onSceneChange: (value: string) => void;
   onSubmitTts: () => void;
