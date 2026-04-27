@@ -52,3 +52,7 @@ export const voiceEnrollmentCreateSchema = z.object({
   recordingId: z.string().trim().min(1, "请选择已上传录音"),
   profileKind: z.enum(["PURE", "SCENE"]),
 });
+
+export const videoAnalysisJobCreateSchema = z.object({
+  input: z.string().trim().min(1, "请输入视频链接或 BV 号").max(500, "输入内容过长"),
+});
