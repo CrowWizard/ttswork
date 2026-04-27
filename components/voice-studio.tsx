@@ -135,7 +135,9 @@ export function VoiceStudio() {
         </div>
       )}
       <div className="mx-auto w-full min-w-0 max-w-5xl">
-        <WorkspaceModuleNav />
+        <div className="mb-6">
+          <WorkspaceModuleNav />
+        </div>
         <WorkspaceHeader {...studio.header} />
         <section className="mt-8 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
           <RecordingPanel {...studio.recordingPanel} />

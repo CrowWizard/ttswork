@@ -14,6 +14,7 @@ import { createEnrollmentAudioRoutes } from "./routes/enrollment-audio";
 import { createEnrollmentInvalidateRoutes } from "./routes/enrollment-invalidate";
 import { createTtsRoutes } from "./routes/tts";
 import { createTtsDownloadRoutes } from "./routes/tts-download";
+import { createVideoAnalysisRoutes } from "./routes/video-analysis";
 
 function setRequestId(context: Context, requestId: string) {
   (context as Context & { set: (key: string, value: unknown) => void }).set("requestId", requestId);
@@ -134,6 +135,7 @@ app.route("/api/voice/enrollments", createEnrollmentAudioRoutes(cfg));
 app.route("/api/voice/enrollments", createEnrollmentInvalidateRoutes(cfg));
 app.route("/api/tts", createTtsRoutes(cfg));
 app.route("/api/tts", createTtsDownloadRoutes(cfg));
+app.route("/api/video-analysis", createVideoAnalysisRoutes(cfg));
 
 loggerInfo("server.start", {
   port: cfg.server.port,
