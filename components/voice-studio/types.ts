@@ -1,5 +1,3 @@
-import type { KeyboardEvent, MouseEvent, TouchEvent } from "react";
-
 export type VoiceProfileResponse = {
   userId: string | null;
   anonymousUserId?: string | null;
@@ -126,15 +124,10 @@ export type RecordingPanelProps = {
   selectedRecordingId: string | null;
   onSelectRecording: (recordingId: string) => void;
   onDeleteRecording: (recordingId: string) => void;
+  onUploadAudioFile: (file: File | null) => void;
   workspaceError: string | null;
   workspaceNotice: StatusState | null;
-  onRecordButtonMouseDown: (event: MouseEvent<HTMLButtonElement>) => void;
-  onRecordButtonMouseUp: () => void;
-  onRecordButtonMouseLeave: () => void;
-  onRecordButtonTouchStart: (event: TouchEvent<HTMLButtonElement>) => void;
-  onRecordButtonTouchEnd: (event: TouchEvent<HTMLButtonElement>) => void;
-  onRecordButtonTouchCancel: (event: TouchEvent<HTMLButtonElement>) => void;
-  onRecordButtonKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
+  onRecordButtonClick: () => void;
   onCreatePureVoice: () => void;
   onCreateSceneVoice: () => void;
   onInvalidateVoice: (enrollmentId: string) => void;

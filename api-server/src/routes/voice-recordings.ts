@@ -4,7 +4,7 @@ import { RecordingStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
 import { requireCurrentUser, resolveAnonymousUser, unauthorizedResponse } from "../lib/auth";
 import { isRecordDurationAccepted } from "../lib/audio";
-import { getAudioExtension, isSupportedAudioMimeType, normalizeSupportedAudioMimeType } from "../lib/audio-format";
+import { getAudioExtension, resolveSupportedAudioMimeType } from "../lib/audio-format";
 import { errorResponse } from "../lib/http";
 import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "../lib/constants";
 import { removeObject, uploadBuffer } from "../lib/minio";
@@ -35,10 +35,10 @@ export function createVoiceRecordingRoutes(cfg: AppConfig) {
     }
 
     const rawMimeType = audioFile.type || "application/octet-stream";
-    const mimeType = normalizeSupportedAudioMimeType(rawMimeType);
+    const mimeType = resolveSupportedAudioMimeType(rawMimeType, audioFile.name);
 
-    if (!isSupportedAudioMimeType(rawMimeType)) {
-      return errorResponse(c, "录音格式仅支持 WAV、MP3、M4A", 400);
+    if (!mimeType) {
+      return errorResponse(c, "录音格式仅支持 WAV、MP3、W4V", 400);
     }
 
     const durationSeconds = Number(recordDurationValue);

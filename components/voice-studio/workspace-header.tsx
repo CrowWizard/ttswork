@@ -5,7 +5,7 @@ export function WorkspaceHeader({ authResolving, authUser, onLogout }: Workspace
   const guestNotice = authResolving
     ? "正在检查登录状态..."
     : authUser
-      ? "支持按住录音建声，也支持键盘按一次开始、再按一次结束。建立声纹后即可输入文本生成语音。"
+      ? "支持点击开始/结束录音建声，也支持上传 MP3、WAV、W4V 文件；建立声纹后即可输入文本生成语音。"
       : "未登录用户可试用 1 次，单次最多 30 字；登录后可解锁完整使用。";
 
   return (
