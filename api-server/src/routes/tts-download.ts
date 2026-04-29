@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getAudioExtension, resolveSupportedAudioMimeType } from "../lib/audio-format";
 import type { AppConfig } from "../lib/config";
 import { requireCurrentUser, resolveAnonymousUser, unauthorizedResponse } from "../lib/auth";
 import { errorResponse } from "../lib/http";
@@ -33,12 +34,16 @@ export function createTtsDownloadRoutes(cfg: AppConfig) {
     }
 
     const audioBuffer = await getObjectBuffer(cfg.minio, job.objectKey);
+    const supportedMimeType = resolveSupportedAudioMimeType(job.outputContentType);
+    const extension = supportedMimeType ? getAudioExtension(supportedMimeType) : "wav";
+    const timestamp = job.createdAt.getTime();
+    const filename = `tts-${job.profileKind === "SCENE" ? "scene" : "pure"}-${timestamp}.${extension}`;
 
     return new Response(audioBuffer, {
       status: 200,
       headers: {
         "Content-Type": job.outputContentType,
-        "Content-Disposition": `inline; filename="${job.id}"`,
+        "Content-Disposition": `inline; filename="${filename}"`,
         "Cache-Control": "no-store",
       },
     });

@@ -121,3 +121,8 @@
 - 2026-04-26 18:42 +08:00：按 `polish` 精修首页 TTS 面板的场景选择控件：将原生下拉框重做为暖灰双层触发器，增加独立箭头按钮区、hover / focus 边界反馈与更稳定的触控高度；同时把下拉后的选中信息改为结构化说明区，未选择时明确显示“纯粹版语音”模式，已选择时展示场景标签与 instruction 文案，整体更符合“低干扰任务台”的产品 register。执行根 `npm run lint`、`npm run typecheck`、`npm run build` 通过，`build` 仍保留项目既有 `output: export` 与 `rewrites` 组合警告。
 - 2026-04-29 12:44 +08:00：建声前端恢复“录音 + 文件上传”双入口；上传端新增 `mp3 / wav / w4v` 扩展名与 MIME 联合校验，并在服务端补充按文件名回退识别 `w4v` / `video/mp4`，同时将前端用户提示中的“存入 MinIO”统一收敛为“先保存”。执行根 `npm run typecheck` 验证。
 - 2026-04-29 13:30 +08:00：按录音交互反馈将建声按钮从“按住开始、松开结束”改为“点击开始、再次点击结束”；前端移除 mouse/touch 长按状态机，统一收敛为单一 `onClick` 切换逻辑，并补充 `recording start requested / started / stop requested / button clicked` 最小诊断日志，便于区分授权弹窗、启动中与真实录音中的状态切换；同步更新录音区、步骤提示与头部说明文案。
+- 2026-04-29 13:36 +08:00：将建声区“开始录音”与“音频上传”两个独立入口合并为同一组左右分体按钮：左侧保留录音主操作，右侧保留文件上传触发，沿用既有上传/建声/删除中的禁用约束与文件选择逻辑，不改后端接口与状态流；执行根 `npm run typecheck` 验证。
+- 2026-04-29 13:38 +08:00：清理上传控件 `accept` 重复项，新增前端共享方法按受支持扩展名生成去重后的文件选择值，仅向系统文件选择器暴露 `.wav,.mp3,.w4v`，保留现有运行时 MIME/后缀校验逻辑不变；执行根 `npm run typecheck` 验证。
+- 2026-04-29 13:43 +08:00：为前端录音流程新增 30 秒自动结束机制：新增 `MAX_RECORD_SECONDS = 30` 常量，在录音开始后按剩余时长注册自动停止定时器，超时后自动结束并进入上传；同步更新建声区状态文案、帮助文案与按钮标签，明确提示“最长 30 秒自动结束”；执行根 `npm run typecheck` 验证。
+- 2026-04-29 13:46 +08:00：修复 TTS 下载文件名不可读问题：`/api/tts/:jobId/download` 改为根据实际 `outputContentType` 推导扩展名，并在 `Content-Disposition` 中返回 `tts-pure|scene-<jobId>.<ext>` 文件名，避免浏览器“另存为”时只显示任务 ID 或无后缀乱名；执行 API `bunx tsc --noEmit` 验证。
+- 2026-04-29 13:49 +08:00：继续调整 TTS 下载文件名，将 `Content-Disposition` 中的 `<jobId>` 替换为任务 `createdAt` 的毫秒级时间戳，生成 `tts-pure|scene-<timestamp>.<ext>`，减少暴露内部任务 ID 并提升文件名可读性；执行 API `bunx tsc --noEmit` 验证。

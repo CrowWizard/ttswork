@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { isRecordDurationAccepted } from "@/lib/audio";
 import { convertBlobToWavFile, getBlobDurationSeconds } from "@/lib/audio-browser";
 import { resolveSupportedAudioMimeType } from "@/lib/audio-format";
-import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
+import { INPUT_AUDIO_FIELD, MAX_RECORD_SECONDS, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
 import type { AuthMode, AuthUser, StatusState, TtsHistoryItem, TtsResult, TtsSceneItem, VoiceProfileKind, VoiceProfileResponse } from "./types";
 import { pickRecordingMimeType, readJsonSafely, toUserFacingErrorMessage } from "./utils";
 
@@ -13,6 +13,7 @@ export function useVoiceStudioState() {
   const finalRecordDurationRef = useRef(0);
   const recordStartedAtRef = useRef<number | null>(null);
   const recordingStartingRef = useRef(false);
+  const recordingStopReasonRef = useRef<"manual" | "auto">("manual");
 
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authResolving, setAuthResolving] = useState(true);
@@ -496,6 +497,7 @@ export function useVoiceStudioState() {
       streamRef.current = stream;
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      recordingStopReasonRef.current = "manual";
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -555,16 +557,49 @@ export function useVoiceStudioState() {
       return;
     }
 
+    const isAutoStop = recordingStopReasonRef.current === "auto";
+    recordingStopReasonRef.current = "manual";
+
     console.info("[voice enroll] recording stop requested", {
       recorderState: mediaRecorderRef.current.state,
+      reason: isAutoStop ? "auto" : "manual",
     });
 
     finalRecordDurationRef.current = stopRecordTimer();
     setUploading(true);
     clearWorkspaceFeedback();
+
+    if (isAutoStop) {
+      setWorkspaceNotice({
+        type: "info",
+        title: "录音已自动结束",
+        text: `单次录音最长 ${MAX_RECORD_SECONDS} 秒，已自动停止并开始上传。`,
+      });
+    }
+
     mediaRecorderRef.current.stop();
     setRecording(false);
   }, [clearWorkspaceFeedback]);
+
+  useEffect(() => {
+    if (!recording || !recordStartedAt) {
+      return;
+    }
+
+    const elapsedMilliseconds = Date.now() - recordStartedAt;
+    const remainingMilliseconds = Math.max(MAX_RECORD_SECONDS * 1000 - elapsedMilliseconds, 0);
+
+    const timer = window.setTimeout(() => {
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+        return;
+      }
+
+      recordingStopReasonRef.current = "auto";
+      stopRecording();
+    }, remainingMilliseconds);
+
+    return () => window.clearTimeout(timer);
+  }, [recording, recordStartedAt, stopRecording]);
 
   const createVoiceEnrollment = useCallback(async (profileKind: VoiceProfileKind) => {
     if (!selectedRecordingId) {
