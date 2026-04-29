@@ -151,6 +151,7 @@ export type TtsPanelProps = {
   hasPureVoice: boolean;
   hasSceneVoice: boolean;
   canSubmitTts: boolean;
+  useFreeTrial: boolean;
   ttsText: string;
   usageCode: string;
   ttsUsage: TtsUsageState | null;
@@ -160,6 +161,7 @@ export type TtsPanelProps = {
   ttsHistory: TtsHistoryItem[];
   scenes: TtsSceneItem[];
   selectedSceneKey: string;
+  onUseFreeTrialChange: (value: boolean) => void;
   onTtsTextChange: (value: string) => void;
   onUsageCodeChange: (value: string) => void;
   onSceneChange: (value: string) => void;
