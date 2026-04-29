@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: all dev dev-api dev-frontend build build-frontend build-api clean install install-frontend install-api prisma-generate prisma-migrate help
+.PHONY: all dev dev-api dev-frontend dev-video-worker build build-frontend build-api clean install install-frontend install-api install-video-worker prisma-generate prisma-migrate help
 
 all: build
 
@@ -16,6 +16,8 @@ help:
 	@echo "  make install          安装全部依赖"
 	@echo "  make install-frontend 安装前端依赖"
 	@echo "  make install-api      安装 API 依赖"
+	@echo "  make install-video-worker 安装视频分析 worker Python 依赖"
+	@echo "  make dev-video-worker 启动视频分析 worker"
 	@echo "  make prisma-generate  生成 Prisma Client（前端 + API）"
 	@echo "  make prisma-migrate   执行数据库迁移（前端项目）"
 	@echo "  make clean            清理构建产物"
@@ -28,6 +30,9 @@ install-frontend:
 
 install-api:
 	cd api-server && bun install && bunx prisma generate
+
+install-video-worker:
+	python3 -m pip install -r video-analysis-worker/requirements.txt
 
 prisma-generate:
 	bunx prisma generate
@@ -53,6 +58,9 @@ dev-frontend:
 
 dev-api:
 	cd api-server && bun run --hot src/index.ts
+
+dev-video-worker:
+	python3 video-analysis-worker/worker.py
 
 dev:
 	@echo "启动前端 :3000 + API :3001 ..."

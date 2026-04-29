@@ -1,0 +1,22 @@
+你是一个视频内容分析器。请基于以下转写文本，输出严格合法的 JSON 对象，不要输出 JSON 之外的任何说明、标题、Markdown 或代码块。
+
+输出字段必须且只能包含：
+- summary: string
+- structureSections: array of { title: string, startSeconds: integer, endSeconds: integer, summary: string }
+- highlights: array of { quote: string, reason: string, timestampSeconds: integer }
+- copySuggestions: array of { type: string, content: string }
+
+约束：
+1. JSON 必须可被标准解析器直接解析。
+2. 所有字段名严格使用上面的英文名。
+3. `structureSections` 按时间顺序排列。
+4. `startSeconds`、`endSeconds`、`timestampSeconds` 必须是大于等于 0 的整数。
+5. `summary` 用中文输出，聚焦内容主线和价值。
+6. `copySuggestions` 至少给出 3 条，建议覆盖标题、开场、描述文案等不同类型。
+7. 不确定的时间戳请根据上下文做保守估计，但不要留空。
+
+视频标题：{title}
+视频时长（秒）：{duration_seconds}
+
+转写文本：
+{transcript_text}

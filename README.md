@@ -39,6 +39,10 @@
 - `GET /api/tts`
 - `POST /api/tts`
 - `GET /api/tts/[jobId]/download`
+- `POST /api/video-analysis/jobs`
+- `GET /api/video-analysis/jobs/[jobId]`
+- `GET /api/video-analysis/jobs`
+- `GET /api/video-analysis/workspace`
 
 ## 本地启动
 
@@ -97,6 +101,27 @@ npm run dev
 
 打开 `http://127.0.0.1:3000` 即可。
 
+### 6. 启动视频分析 worker
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r video-analysis-worker/requirements.txt
+python3 video-analysis-worker/worker.py
+```
+
+视频分析 worker 会：
+
+- 从 `VideoAnalysisJob` 表轮询领取 `PENDING` 任务
+- 优先抓取 B 站字幕；无字幕时再走 ASR
+- 将结构化分析结果回写到现有 `summary`、`structureSections`、`highlights`、`copySuggestions`
+
+默认可通过 `QWEN_MOCK_MODE=true` 跑通不依赖外部模型服务的本地验证：
+
+- 有字幕视频仍会访问 B 站接口并走真实字幕链路
+- 无字幕视频会先访问 B 站接口获取音频地址，再走 mock ASR 文本
+- 结构化分析走 mock JSON 输出，不依赖外部 LLM
+
 ## Qwen 集成说明
 
 项目中所有第三方建声与 TTS 请求都统一封装在 `api-server/src/lib/qwen.ts`。
@@ -140,8 +165,13 @@ api-server/
     prisma.ts
     qwen.ts
     validation.ts
+  src/routes/
+    video-analysis.ts
 prisma/
   schema.prisma
+video-analysis-worker/
+  worker.py
+  services/
 ```
 
 ## 验证命令
@@ -154,6 +184,7 @@ bunx prisma generate
 bun run lint
 bun run typecheck
 bun run build
+python3 -m compileall video-analysis-worker
 ```
 
 如需使用容器方式快速补齐本地依赖，再补充：
@@ -172,6 +203,8 @@ bun run dev
 - `VoiceRecording`：上传录音记录与 MinIO 元数据（公网地址由运行时配置拼接）
 - `VoiceEnrollment`：基于录音建立的纯粹版/场景版声纹、生成的 `voiceId`、`isInvalidated`
 - `TtsJob`：文本转语音任务、`voiceIdSnapshot`、声纹类型/场景信息与输出音频 MinIO 元数据
+- `VideoSource`：按 `normalizedBvid` 复用的视频基础信息、字幕状态与转写缓存
+- `VideoAnalysisJob`：单次视频分析任务状态、结构化结果、worker 锁信息与完成时间
 
 ## 已知边界
 

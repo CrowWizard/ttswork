@@ -58,3 +58,13 @@ api-server/bun.lockb
 api-server/package-lock.json
 api-server/config.yaml
 api-server/index.js.map
+
+# Python
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+*.pyc
+video-analysis-worker/.biliapi-profile/
+video-analysis-worker/tmp/
