@@ -1,14 +1,17 @@
 import { StatusMessage } from "@/components/ui/status-message";
-import { MIN_RECORD_SECONDS } from "@/lib/constants";
+import { getSupportedAudioAcceptValue } from "@/lib/audio-format";
+import { MAX_RECORD_SECONDS, MIN_RECORD_SECONDS } from "@/lib/constants";
 import type { RecordingPanelProps } from "./types";
 import { formatDuration } from "./utils";
 import { useRecordingElapsedSeconds } from "./use-recording-elapsed-seconds";
 
+const AUDIO_FILE_ACCEPT_VALUE = getSupportedAudioAcceptValue();
+
 function RecordingElapsedStatus({ recording, recordStartedAt }: { recording: boolean; recordStartedAt: number | null }) {
   const elapsedSeconds = useRecordingElapsedSeconds(recording, recordStartedAt);
   const recordingStatusText = recording
-    ? `录音中，当前已录制 ${formatDuration(elapsedSeconds)}。再次点击按钮即可结束。`
-    : `点击按钮开始录音，再次点击结束，至少录制 ${MIN_RECORD_SECONDS} 秒。`;
+    ? `录音中，当前已录制 ${formatDuration(elapsedSeconds)}。最长 ${MAX_RECORD_SECONDS} 秒，到时会自动结束；也可再次点击提前结束。`
+    : `点击按钮开始录音，再次点击结束，至少录制 ${MIN_RECORD_SECONDS} 秒，最长 ${MAX_RECORD_SECONDS} 秒会自动结束。`;
 
   return (
     <>
@@ -43,7 +46,7 @@ function TaskHintList() {
         <div className="p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 1</div>
           <div className="mt-1 font-medium text-text-primary">录音或上传清晰语音</div>
-          <p className="mt-1 leading-5">可点击开始/结束录音，也可上传 MP3、WAV、W4V 文件，音频时长需不少于 {MIN_RECORD_SECONDS} 秒。</p>
+          <p className="mt-1 leading-5">可点击开始/结束录音，单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束；也可上传 MP3、WAV、W4V 文件，音频时长需不少于 {MIN_RECORD_SECONDS} 秒。</p>
         </div>
 
         <div className="border-t border-border-subtle p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
@@ -184,7 +187,7 @@ export function RecordingPanel({
         </div>
 
         <p id="recording-help" className="text-center text-sm text-text-muted">
-          点击开始录音，再次点击结束，也可直接上传 MP3、WAV、W4V 文件。
+          点击开始录音，再次点击结束；单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束，也可直接上传 MP3、WAV、W4V 文件。
         </p>
 
         {uploading ? (
@@ -203,24 +206,31 @@ export function RecordingPanel({
           <RecordingElapsedStatus recording={recording} recordStartedAt={recordStartedAt} />
         )}
 
-        <button
-          type="button"
-          onClick={onRecordButtonClick}
-          className={`touch-none rounded-2xl px-6 py-8 text-lg font-semibold transition ${
-            recording ? "bg-action-record-active text-text-inverse" : "bg-action-record text-text-primary hover:bg-action-record-hover"
-          }`}
-          disabled={uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId)}
-          aria-pressed={recording}
-          aria-describedby="recording-help recording-status"
-        >
-          {recording ? "结束录音" : uploading ? "上传录音中..." : `开始录音（至少 ${MIN_RECORD_SECONDS} 秒）`}
-        </button>
+        <div className="flex overflow-hidden rounded-2xl border border-border-subtle">
+          <button
+            type="button"
+            onClick={onRecordButtonClick}
+            className={`touch-none flex-1 px-6 py-8 text-lg font-semibold transition ${
+              recording ? "bg-action-record-active text-text-inverse" : "bg-action-record text-text-primary hover:bg-action-record-hover"
+            }`}
+            disabled={uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId)}
+            aria-pressed={recording}
+            aria-describedby="recording-help recording-status"
+          >
+            {recording ? "结束录音" : uploading ? "上传录音中..." : `开始录音（${MIN_RECORD_SECONDS}-${MAX_RECORD_SECONDS} 秒）`}
+          </button>
 
-        <div className="flex justify-center">
-          <label className={`inline-flex cursor-pointer items-center justify-center rounded-2xl border border-border-subtle bg-surface-elevated px-5 py-3 text-sm font-medium text-text-primary transition hover:bg-surface-muted ${uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId) || recording ? "pointer-events-none opacity-60" : ""}`}>
+          <label
+            className={`relative flex w-28 shrink-0 items-center justify-center border-l border-border-subtle px-4 text-sm font-medium transition sm:w-32 ${
+              uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId) || recording
+                ? "pointer-events-none bg-surface-muted text-text-muted opacity-60"
+                : "cursor-pointer bg-surface-elevated text-text-primary hover:bg-surface-muted"
+            }`}
+            aria-label="音频上传"
+          >
             <input
               type="file"
-              accept=".mp3,.wav,.w4v,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
+              accept={AUDIO_FILE_ACCEPT_VALUE}
               className="sr-only"
               disabled={uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId) || recording}
               onChange={(event) => {
@@ -228,7 +238,7 @@ export function RecordingPanel({
                 event.currentTarget.value = "";
               }}
             />
-            选择音频文件上传
+            音频上传
           </label>
         </div>
 

@@ -31,6 +31,10 @@ export function getSupportedAudioExtensions() {
   return [...SUPPORTED_AUDIO_EXTENSIONS];
 }
 
+export function getSupportedAudioAcceptValue() {
+  return SUPPORTED_AUDIO_EXTENSIONS.map((extension) => `.${extension}`).join(",");
+}
+
 export function getAudioExtensionFromFilename(filename: string) {
   const normalizedFilename = filename.trim().toLowerCase();
   const extension = normalizedFilename.includes(".") ? normalizedFilename.split(".").pop() : "";
