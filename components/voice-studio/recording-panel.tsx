@@ -169,26 +169,6 @@ export function RecordingPanel({
       </div>
 
       <div className="mt-8 flex flex-col gap-4">
-        <p id="recording-help" className="text-center text-sm text-text-muted">
-          点击开始录音，再次点击结束；单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束，也可直接上传 MP3、WAV、W4V 文件。
-        </p>
-
-        {uploading ? (
-          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
-            音频正在上传并保存。
-          </p>
-        ) : deletingRecordingId ? (
-          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
-            正在删除录音素材。
-          </p>
-        ) : invalidatingVoiceId ? (
-          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
-            正在作废当前声纹。
-          </p>
-        ) : (
-          <RecordingElapsedStatus recording={recording} recordStartedAt={recordStartedAt} />
-        )}
-
         <div className="flex overflow-hidden rounded-2xl border border-border-subtle">
           <button
             type="button"
@@ -225,6 +205,29 @@ export function RecordingPanel({
           </label>
         </div>
 
+        <p id="recording-help" className="text-center text-sm text-text-muted">
+          点击开始录音，再次点击结束；单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束，也可直接上传 MP3、WAV、W4V 文件。
+        </p>
+
+        {uploading ? (
+          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
+            音频正在上传并保存。
+          </p>
+        ) : deletingRecordingId ? (
+          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
+            正在删除录音素材。
+          </p>
+        ) : invalidatingVoiceId ? (
+          <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
+            正在作废当前声纹。
+          </p>
+        ) : (
+          <RecordingElapsedStatus recording={recording} recordStartedAt={recordStartedAt} />
+        )}
+
+        {workspaceError ? <StatusMessage message={workspaceError} type="error" title="建声操作失败" /> : null}
+        {workspaceNotice ? <StatusMessage message={workspaceNotice.text} type={workspaceNotice.type} title={workspaceNotice.title} /> : null}
+
         <div className="grid gap-3 sm:grid-cols-2">
           <button type="button" className="app-button-primary w-full" disabled={!selectedRecordingId || creatingPureVoice || uploading || Boolean(deletingRecordingId)} onClick={onCreatePureVoice}>
             {creatingPureVoice ? "建立纯粹版声纹中..." : "2. 建立纯粹版声纹"}
@@ -238,9 +241,6 @@ export function RecordingPanel({
           <VoiceCard title="纯粹版声纹" voice={activePureVoice} />
           <VoiceCard title="场景版声纹" voice={activeSceneVoice} />
         </div>
-
-        {workspaceError ? <StatusMessage message={workspaceError} type="error" title="建声操作失败" /> : null}
-        {workspaceNotice ? <StatusMessage message={workspaceNotice.text} type={workspaceNotice.type} title={workspaceNotice.title} /> : null}
       </div>
     </div>
   );

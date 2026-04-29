@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MultiRecorder, PCM_WORKLET_URL } from "react-ts-audio-recorder";
 import { isRecordDurationAccepted } from "@/lib/audio";
-import { convertBlobToWavFile, getBlobDurationSeconds } from "@/lib/audio-browser";
+import { getBlobDurationSeconds } from "@/lib/audio-browser";
 import { resolveSupportedAudioMimeType } from "@/lib/audio-format";
 import { INPUT_AUDIO_FIELD, MAX_RECORD_SECONDS, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
 import type {
@@ -14,12 +15,10 @@ import type {
   VoiceProfileKind,
   VoiceProfileResponse,
 } from "./types";
-import { pickRecordingMimeType, readJsonSafely, toUserFacingErrorMessage } from "./utils";
+import { readJsonSafely, toUserFacingErrorMessage } from "./utils";
 
 export function useVoiceStudioState() {
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recorderRef = useRef<MultiRecorder | null>(null);
   const finalRecordDurationRef = useRef(0);
   const recordStartedAtRef = useRef<number | null>(null);
   const recordingStartingRef = useRef(false);
@@ -231,7 +230,8 @@ export function useVoiceStudioState() {
     void refreshScenes();
 
     return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      recorderRef.current?.close();
+      recorderRef.current = null;
     };
   }, [refreshAuth, refreshScenes]);
 
@@ -522,86 +522,46 @@ export function useVoiceStudioState() {
     });
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = pickRecordingMimeType();
+      const recorder = new MultiRecorder({
+        format: "wav",
+        sampleRate: 48000,
+        workletURL: PCM_WORKLET_URL,
+      });
 
-      if (!mimeType) {
-        stream.getTracks().forEach((track) => track.stop());
-        recordingStartingRef.current = false;
-        setWorkspaceError("当前浏览器不支持录音。请更换支持 MediaRecorder 的浏览器。");
-        return;
-      }
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
-
-      streamRef.current = stream;
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
+      recorderRef.current = recorder;
       recordingStopReasonRef.current = "manual";
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        mediaRecorderRef.current = null;
-
-        const audioBlob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType });
-        const recordDurationSeconds = finalRecordDurationRef.current;
-
-        console.info("[voice enroll] recorded blob", {
-          sourceMimeType: mediaRecorder.mimeType,
-          blobType: audioBlob.type,
-          size: audioBlob.size,
-          durationSeconds: recordDurationSeconds,
-          chunkCount: chunksRef.current.length,
-        });
-
-        try {
-          if (!isRecordDurationAccepted(recordDurationSeconds)) {
-            setWorkspaceError(`录音不足 ${MIN_RECORD_SECONDS} 秒，请继续录满 ${MIN_RECORD_SECONDS} 秒后再结束。`);
-            setUploading(false);
-            return;
-          }
-
-          const audioFile = await convertBlobToWavFile(audioBlob);
-          await uploadRecording(audioFile, recordDurationSeconds);
-        } catch (error) {
-          setWorkspaceError(toUserFacingErrorMessage(error, "录音处理失败，请重新录制"));
-          setUploading(false);
-        }
-      };
-
-      mediaRecorder.start();
+      await recorder.init();
+      await recorder.startRecording();
       startRecordTimer();
       setRecording(true);
       recordingStartingRef.current = false;
 
       console.info("[voice enroll] recording started", {
-        mimeType,
-        streamTrackCount: stream.getAudioTracks().length,
+        format: "wav",
+        workletURL: PCM_WORKLET_URL,
       });
     } catch (error) {
+      recorderRef.current?.close();
+      recorderRef.current = null;
       recordingStartingRef.current = false;
       stopRecordTimer();
       setWorkspaceError(toUserFacingErrorMessage(error, "无法访问麦克风，请检查浏览器权限后重试"));
     }
-  }, [recording, uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, clearWorkspaceFeedback, uploadRecording]);
+  }, [recording, uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, clearWorkspaceFeedback]);
 
   const stopRecording = useCallback(() => {
-    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+    const recorder = recorderRef.current;
+
+    if (!recorder) {
       return;
     }
+
+    recorderRef.current = null;
 
     const isAutoStop = recordingStopReasonRef.current === "auto";
     recordingStopReasonRef.current = "manual";
 
     console.info("[voice enroll] recording stop requested", {
-      recorderState: mediaRecorderRef.current.state,
       reason: isAutoStop ? "auto" : "manual",
     });
 
@@ -617,9 +577,34 @@ export function useVoiceStudioState() {
       });
     }
 
-    mediaRecorderRef.current.stop();
     setRecording(false);
-  }, [clearWorkspaceFeedback]);
+    void (async () => {
+      try {
+        const audioBlob = await recorder.stopRecording();
+        const recordDurationSeconds = finalRecordDurationRef.current;
+
+        console.info("[voice enroll] recorded blob", {
+          blobType: audioBlob.type,
+          size: audioBlob.size,
+          durationSeconds: recordDurationSeconds,
+        });
+
+        if (!isRecordDurationAccepted(recordDurationSeconds)) {
+          setWorkspaceError(`录音不足 ${MIN_RECORD_SECONDS} 秒，请继续录满 ${MIN_RECORD_SECONDS} 秒后再结束。`);
+          setUploading(false);
+          return;
+        }
+
+        const audioFile = new File([audioBlob], "enrollment.wav", { type: audioBlob.type || "audio/wav" });
+        await uploadRecording(audioFile, recordDurationSeconds);
+      } catch (error) {
+        setWorkspaceError(toUserFacingErrorMessage(error, "录音处理失败，请重新录制"));
+        setUploading(false);
+      } finally {
+        recorder.close();
+      }
+    })();
+  }, [clearWorkspaceFeedback, uploadRecording]);
 
   useEffect(() => {
     if (!recording || !recordStartedAt) {
@@ -630,7 +615,7 @@ export function useVoiceStudioState() {
     const remainingMilliseconds = Math.max(MAX_RECORD_SECONDS * 1000 - elapsedMilliseconds, 0);
 
     const timer = window.setTimeout(() => {
-      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+      if (!recorderRef.current) {
         return;
       }
 
@@ -823,7 +808,7 @@ export function useVoiceStudioState() {
     console.info("[voice enroll] record button clicked", {
       recording,
       recordingStarting: recordingStartingRef.current,
-      recorderState: mediaRecorderRef.current?.state ?? "missing",
+      recorderReady: Boolean(recorderRef.current),
     });
 
     if (recording) {
