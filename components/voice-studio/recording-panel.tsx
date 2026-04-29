@@ -71,6 +71,7 @@ export function RecordingPanel({
 }: RecordingPanelProps) {
   const activePureVoice = profile?.activeVoices.pure ?? null;
   const activeSceneVoice = profile?.activeVoices.scene ?? null;
+  const orderedRecordings = profile?.recordings ? [...profile.recordings].reverse() : [];
 
   function VoiceCard({
     title,
@@ -119,55 +120,6 @@ export function RecordingPanel({
         <TaskHintList />
       </div>
 
-      <div className="app-panel mt-6 p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-medium text-text-secondary">当前录音素材</div>
-          <div className="text-xs text-text-muted">仅显示最新 3 份</div>
-        </div>
-        {loadingProfile ? (
-          <div className="mt-3 text-sm text-text-muted">录音素材加载中...</div>
-        ) : profile?.recordings.length ? (
-          <div className="mt-4 flex flex-col gap-3">
-            {profile.recordings.map((item) => (
-              <label key={item.id} className={`rounded-xl border p-3 ${selectedRecordingId === item.id ? "border-action-primary bg-surface-selected" : "border-border-subtle bg-surface-elevated"}`}>
-                <div className="flex items-center gap-3">
-                  <input type="radio" name="recording" className="self-start mt-1" checked={selectedRecordingId === item.id} onChange={() => onSelectRecording(item.id)} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm text-text-primary">{item.originalFilename ?? `录音 ${item.id}`}</div>
-                        <div className="mt-1 text-xs text-text-muted">{formatDuration(item.durationSeconds)} · {new Date(item.createdAt).toLocaleString()}</div>
-                      </div>
-                      <button
-                        type="button"
-                        className="flex h-9 w-9 min-w-9 self-center shrink-0 items-center justify-center rounded-xl border border-danger-border text-sm font-semibold leading-none text-danger transition hover:bg-danger-surface disabled:opacity-60"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          onDeleteRecording(item.id);
-                        }}
-                        disabled={deletingRecordingId === item.id || creatingPureVoice || creatingSceneVoice || uploading}
-                        aria-label="删除录音素材"
-                      >
-                        {deletingRecordingId === item.id ? "…" : "×"}
-                      </button>
-                    </div>
-                    <div className="mt-3 w-full min-w-0 max-w-full overflow-hidden">
-                      <audio controls src={item.playbackUrl} />
-                    </div>
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-3 space-y-1 text-sm text-text-muted">
-            <p>还没有上传录音，请先录制或上传至少 {MIN_RECORD_SECONDS} 秒语音。</p>
-            <p>上传后的录音会先保存，并作为后续建立纯粹版/场景版声纹的素材。</p>
-          </div>
-        )}
-      </div>
-
       <div className="mt-8 flex flex-col gap-4">
         <div className="flex overflow-hidden rounded-2xl border border-border-subtle">
           <button
@@ -208,6 +160,55 @@ export function RecordingPanel({
         <p id="recording-help" className="text-center text-sm text-text-muted">
           点击开始录音，再次点击结束；单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束，也可直接上传 MP3、WAV、W4V 文件。
         </p>
+
+        <div className="app-panel p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium text-text-secondary">当前录音素材</div>
+            <div className="text-xs text-text-muted">仅显示最新 3 份</div>
+          </div>
+          {loadingProfile ? (
+            <div className="mt-3 text-sm text-text-muted">录音素材加载中...</div>
+          ) : orderedRecordings.length ? (
+            <div className="mt-4 flex flex-col gap-3">
+              {orderedRecordings.map((item) => (
+                <label key={item.id} className={`rounded-xl border p-3 ${selectedRecordingId === item.id ? "border-action-primary bg-surface-selected" : "border-border-subtle bg-surface-elevated"}`}>
+                  <div className="flex items-center gap-3">
+                    <input type="radio" name="recording" className="self-start mt-1" checked={selectedRecordingId === item.id} onChange={() => onSelectRecording(item.id)} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm text-text-primary">{item.originalFilename ?? `录音 ${item.id}`}</div>
+                          <div className="mt-1 text-xs text-text-muted">{formatDuration(item.durationSeconds)} · {new Date(item.createdAt).toLocaleString()}</div>
+                        </div>
+                        <button
+                          type="button"
+                          className="flex h-9 w-9 min-w-9 self-center shrink-0 items-center justify-center rounded-xl border border-danger-border text-sm font-semibold leading-none text-danger transition hover:bg-danger-surface disabled:opacity-60"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onDeleteRecording(item.id);
+                          }}
+                          disabled={deletingRecordingId === item.id || creatingPureVoice || creatingSceneVoice || uploading}
+                          aria-label="删除录音素材"
+                        >
+                          {deletingRecordingId === item.id ? "…" : "×"}
+                        </button>
+                      </div>
+                      <div className="mt-3 w-full min-w-0 max-w-full overflow-hidden">
+                        <audio controls src={item.playbackUrl} />
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 space-y-1 text-sm text-text-muted">
+              <p>还没有上传录音，请先录制或上传至少 {MIN_RECORD_SECONDS} 秒语音。</p>
+              <p>上传后的录音会先保存，并作为后续建立纯粹版/场景版声纹的素材。</p>
+            </div>
+          )}
+        </div>
 
         {uploading ? (
           <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">

@@ -18,6 +18,7 @@ export function TtsPanel({
   hasPureVoice,
   hasSceneVoice,
   canSubmitTts,
+  useFreeTrial,
   ttsText,
   usageCode,
   ttsUsage,
@@ -27,13 +28,15 @@ export function TtsPanel({
   ttsHistory,
   scenes,
   selectedSceneKey,
+  onUseFreeTrialChange,
   onTtsTextChange,
   onUsageCodeChange,
   onSceneChange,
   onSubmitTts,
 }: TtsPanelProps) {
   const trimmedLength = ttsText.trim().length;
-  const textLimit = isAuthenticated && ttsUsage?.requiresUsageCode ? 500 : 30;
+  const hasFreeTrialRemaining = Boolean(isAuthenticated && (ttsUsage?.freeUsesRemaining ?? 0) > 0);
+  const textLimit = isAuthenticated && !useFreeTrial ? 500 : 30;
   const selectedScene = scenes.find((item) => item.key === selectedSceneKey) ?? null;
   const sceneSelectionDisabled = isAuthenticated && !hasSceneVoice && scenes.length > 0;
   const helperText = isAuthenticated
@@ -117,10 +120,25 @@ export function TtsPanel({
         <p className="mt-2 text-xs leading-5 text-danger">若要选择场景，请先到左侧建立场景版声纹。</p>
       ) : null}
 
-      {isAuthenticated && ttsUsage?.requiresUsageCode ? (
+      {isAuthenticated ? (
         <div className="mt-5 rounded-2xl border border-info-border bg-info-surface p-4 text-sm text-info">
-          <div className="font-medium">使用码</div>
-          <p className="mt-1 leading-6">免费生成机会用完后，请输入使用码继续生成。</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="font-medium">使用码</div>
+            {hasFreeTrialRemaining ? (
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-text-secondary">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-border-subtle"
+                  checked={useFreeTrial}
+                  onChange={(event) => onUseFreeTrialChange(event.target.checked)}
+                />
+                试用（最多 30 个字）
+              </label>
+            ) : null}
+          </div>
+          <p className="mt-1 leading-6">
+            可直接输入 6 位使用码继续生成；如仍有试用机会，试用单次最多 30 个字。
+          </p>
           <label className="mt-4 block font-medium text-text-secondary" htmlFor="usage-code">
             使用码
             <input
@@ -130,6 +148,7 @@ export function TtsPanel({
               onChange={(event) => onUsageCodeChange(event.target.value.trim().slice(0, 6))}
               placeholder="6 位使用码"
               autoComplete="one-time-code"
+              disabled={useFreeTrial}
             />
           </label>
         </div>

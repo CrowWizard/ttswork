@@ -50,6 +50,7 @@ export function useVoiceStudioState() {
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [ttsText, setTtsText] = useState("");
   const [usageCode, setUsageCode] = useState("");
+  const [useFreeTrial, setUseFreeTrial] = useState(false);
   const [ttsUsage, setTtsUsage] = useState<TtsUsageState | null>(null);
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsLoading, setTtsLoading] = useState(false);
@@ -62,9 +63,11 @@ export function useVoiceStudioState() {
   const hasSceneVoice = Boolean(profile?.activeVoices.scene?.voiceId && !profile.activeVoices.scene.isInvalidated);
   const usingSceneVoice = Boolean(selectedSceneKey);
   const canUseActiveVoiceTts = usingSceneVoice ? hasSceneVoice : hasPureVoice;
-  const usageCodeReady = !authUser || !ttsUsage?.requiresUsageCode || /^[0-9A-Za-z]{6}$/.test(usageCode.trim());
+  const hasFreeTrialRemaining = Boolean(authUser && (ttsUsage?.freeUsesRemaining ?? 0) > 0);
+  const usingUsageCode = Boolean(authUser && !useFreeTrial);
+  const usageCodeReady = !usingUsageCode || /^[0-9A-Za-z]{6}$/.test(usageCode.trim());
   const anonymousBlocked = Boolean(ttsUsage?.requiresLoginForNextUse);
-  const ttsTextLimit = authUser && ttsUsage?.requiresUsageCode ? 500 : 30;
+  const ttsTextLimit = usingUsageCode ? 500 : 30;
   const canSubmitTts =
     ttsTextLength > 0 && ttsTextLength <= ttsTextLimit && canUseActiveVoiceTts && usageCodeReady && !anonymousBlocked;
 
@@ -89,7 +92,17 @@ export function useVoiceStudioState() {
     setTtsHistory([]);
     setTtsUsage(null);
     setUsageCode("");
+    setUseFreeTrial(false);
   }, [clearWorkspaceFeedback]);
+
+  useEffect(() => {
+    if (!authUser) {
+      setUseFreeTrial(false);
+      return;
+    }
+
+    setUseFreeTrial(hasFreeTrialRemaining);
+  }, [authUser, hasFreeTrialRemaining]);
 
   const refreshTtsUsage = useCallback(async () => {
     try {
@@ -176,10 +189,12 @@ export function useVoiceStudioState() {
       setProfile(data);
       setSelectedRecordingId((current) => {
         if (!current) {
-          return data.recordings[0]?.id ?? null;
+          return data.recordings[data.recordings.length - 1]?.id ?? null;
         }
 
-        return data.recordings.some((item) => item.id === current) ? current : (data.recordings[0]?.id ?? null);
+        return data.recordings.some((item) => item.id === current)
+          ? current
+          : (data.recordings[data.recordings.length - 1]?.id ?? null);
       });
     } catch (error) {
       setWorkspaceError(toUserFacingErrorMessage(error, "加载声纹信息失败，请稍后重试"));
@@ -765,7 +780,7 @@ export function useVoiceStudioState() {
           profileKind: selectedScene ? "SCENE" : "PURE",
           sceneKey: selectedScene?.key,
           instruction: selectedScene?.instruction,
-          usageCode: authUser && ttsUsage?.requiresUsageCode ? usageCode.trim() : undefined,
+          usageCode: usingUsageCode ? usageCode.trim() : undefined,
         }),
       });
       const payload = (await readJsonSafely(response)) as TtsResult & { error?: string };
@@ -790,7 +805,6 @@ export function useVoiceStudioState() {
       setTtsLoading(false);
     }
   }, [
-    authUser,
     canUseActiveVoiceTts,
     clearWorkspaceFeedback,
     handleUnauthorized,
@@ -799,8 +813,8 @@ export function useVoiceStudioState() {
     scenes,
     selectedSceneKey,
     ttsText,
-    ttsUsage?.requiresUsageCode,
     usageCode,
+    usingUsageCode,
     usingSceneVoice,
   ]);
 
@@ -869,6 +883,7 @@ export function useVoiceStudioState() {
       hasPureVoice,
       hasSceneVoice,
       canSubmitTts,
+      useFreeTrial,
       ttsText,
       usageCode,
       ttsUsage,
@@ -878,6 +893,7 @@ export function useVoiceStudioState() {
       ttsHistory,
       scenes,
       selectedSceneKey,
+      onUseFreeTrialChange: setUseFreeTrial,
       onTtsTextChange: setTtsText,
       onUsageCodeChange: setUsageCode,
       onSceneChange: setSelectedSceneKey,
