@@ -9,6 +9,7 @@ import { uploadBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
 import { synthesizePureSpeech, synthesizeSceneSpeech } from "../lib/qwen";
 import { getTtsScene, listTtsScenes } from "../lib/scene";
+import { normalizeUsageCodeInput } from "../lib/usage-code";
 import { ttsRequestSchema } from "../lib/validation";
 
 function getRequestId(c: Context) {
@@ -19,10 +20,27 @@ export function createTtsRoutes(cfg: AppConfig) {
   const tts = new Hono();
 
   const TTS_HISTORY_LIMIT = 3;
-  const ANONYMOUS_TTS_TEXT_LIMIT = 30;
+  const FREE_TTS_TEXT_LIMIT = 30;
+  const USAGE_CODE_MODULE = "VOICE_TO_TEXT";
+  const generalUsageCode = normalizeUsageCodeInput(cfg.usageCode.generalCode);
 
   tts.get("/scenes", async (c) => {
     return c.json(listTtsScenes());
+  });
+
+  tts.get("/usage", async (c) => {
+    const currentUser = await requireCurrentUser(c, cfg);
+    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
+    const freeTtsUsedAt = currentUser?.freeTtsUsedAt ?? anonymousUser?.freeTtsUsedAt ?? null;
+
+    return c.json({
+      isAuthenticated: Boolean(currentUser),
+      freeTtsUsedAt,
+      freeUsesRemaining: freeTtsUsedAt ? 0 : 1,
+      requiresLoginForNextUse: !currentUser && Boolean(freeTtsUsedAt),
+      requiresUsageCode: Boolean(currentUser && freeTtsUsedAt),
+      usageCodeModule: currentUser && freeTtsUsedAt ? USAGE_CODE_MODULE : null,
+    });
   });
 
   tts.get("/", async (c) => {
@@ -47,6 +65,7 @@ export function createTtsRoutes(cfg: AppConfig) {
         profileKind: true,
         sceneKey: true,
         instruction: true,
+        accessKind: true,
       },
     });
 
@@ -59,6 +78,7 @@ export function createTtsRoutes(cfg: AppConfig) {
         profileKind: job.profileKind,
         sceneKey: job.sceneKey,
         instruction: job.instruction,
+        accessKind: job.accessKind,
         downloadUrl: `/api/tts/${job.id}/download`,
       })),
     );
@@ -81,12 +101,6 @@ export function createTtsRoutes(cfg: AppConfig) {
 
     if (!ownerId) {
       return errorResponse(c, "无法建立匿名会话", 500);
-    }
-
-    if (!currentUser) {
-      if (parsedBody.data.text.length > ANONYMOUS_TTS_TEXT_LIMIT) {
-        return errorResponse(c, `匿名免费语音最多支持 ${ANONYMOUS_TTS_TEXT_LIMIT} 字，请先登录`, 401);
-      }
     }
 
     let job;
@@ -141,12 +155,87 @@ export function createTtsRoutes(cfg: AppConfig) {
             throw new ActiveVoiceChangedError("当前 active voice 已发生变化，请重试");
           }
 
-          return tx.ttsJob.create({
+          const now = new Date();
+          const usageCodeInput = parsedBody.data.usageCode;
+          const isGeneralUsageCode = Boolean(
+            currentUser && usageCodeInput && usageCodeInput === generalUsageCode,
+          );
+          let accessKind: "FREE_TRIAL" | "GENERAL_USAGE_CODE" | "USAGE_CODE" = "FREE_TRIAL";
+          let usageCodeId: string | null = null;
+          let usageCodeValue: string | null = null;
+
+          if (!currentUser) {
+            if (usageCodeInput) {
+              throw new ActiveVoiceUnavailableError("匿名用户不能使用使用码，请先登录");
+            }
+
+            if (parsedBody.data.text.length > FREE_TTS_TEXT_LIMIT) {
+              throw new ActiveVoiceUnavailableError(`文本长度不能超过 ${FREE_TTS_TEXT_LIMIT} 字`);
+            }
+
+            const freshAnonymousUser = await tx.anonymousUser.findUnique({
+              where: { id: anonymousUser?.id ?? "" },
+              select: { freeTtsUsedAt: true },
+            });
+
+            if (freshAnonymousUser?.freeTtsUsedAt) {
+              throw new ActiveVoiceUnavailableError("免费次数已用完，请先登录后继续使用");
+            }
+
+            await tx.anonymousUser.update({
+              where: { id: anonymousUser!.id },
+              data: { freeTtsUsedAt: now },
+            });
+          } else if (isGeneralUsageCode) {
+            accessKind = "GENERAL_USAGE_CODE";
+            usageCodeValue = usageCodeInput ?? null;
+          } else if (usageCodeInput) {
+            const usageCode = await tx.usageCode.findFirst({
+              where: {
+                code: usageCodeInput,
+                module: USAGE_CODE_MODULE,
+                consumedAt: null,
+              },
+              select: { id: true },
+            });
+
+            if (!usageCode) {
+              throw new ActiveVoiceUnavailableError("使用码无效或已使用");
+            }
+
+            accessKind = "USAGE_CODE";
+            usageCodeId = usageCode.id;
+            usageCodeValue = usageCodeInput ?? null;
+          } else {
+            if (parsedBody.data.text.length > FREE_TTS_TEXT_LIMIT) {
+              throw new ActiveVoiceUnavailableError(`文本长度不能超过 ${FREE_TTS_TEXT_LIMIT} 字`);
+            }
+
+            const freshUser = await tx.user.findUnique({
+              where: { id: currentUser.id },
+              select: { freeTtsUsedAt: true },
+            });
+
+            if (freshUser?.freeTtsUsedAt) {
+              throw new ActiveVoiceUnavailableError("免费次数已用完，请输入使用码继续生成");
+            }
+
+            await tx.user.update({
+              where: { id: currentUser.id },
+              data: { freeTtsUsedAt: now },
+            });
+          }
+
+          const createdJob = await tx.ttsJob.create({
             data: {
               userId: currentUser?.id,
               anonymousUserId: anonymousUser?.id,
               voiceEnrollmentId: activeVoice.id,
               profileKind: parsedBody.data.profileKind,
+              accessKind,
+              usageCodeId,
+              usageCodeModule: accessKind === "FREE_TRIAL" ? null : USAGE_CODE_MODULE,
+              usageCodeValue,
               voiceIdSnapshot: activeVoice.voiceId,
               text: parsedBody.data.text,
               sceneKey: parsedBody.data.sceneKey,
@@ -154,6 +243,26 @@ export function createTtsRoutes(cfg: AppConfig) {
               status: TtsJobStatus.PENDING,
             },
           });
+
+          if (usageCodeId) {
+            const consumed = await tx.usageCode.updateMany({
+              where: {
+                id: usageCodeId,
+                consumedAt: null,
+              },
+              data: {
+                consumedAt: now,
+                consumedByUserId: currentUser!.id,
+                consumedTtsJobId: createdJob.id,
+              },
+            });
+
+            if (consumed.count !== 1) {
+              throw new ActiveVoiceUnavailableError("使用码无效或已使用");
+            }
+          }
+
+          return createdJob;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
@@ -218,6 +327,7 @@ export function createTtsRoutes(cfg: AppConfig) {
         profileKind: updated.profileKind,
         sceneKey: updated.sceneKey,
         instruction: updated.instruction,
+        accessKind: updated.accessKind,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "语音合成失败";

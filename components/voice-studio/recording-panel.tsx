@@ -26,40 +26,23 @@ function RecordingElapsedStatus({ recording, recordStartedAt }: { recording: boo
 
 function TaskHintList() {
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2 sm:hidden">
-        <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-center">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">Step 1</div>
-          <div className="mt-1 text-sm font-medium text-text-primary">录音</div>
-        </div>
-        <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-center">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">Step 2</div>
-          <div className="mt-1 text-sm font-medium text-text-primary">建声</div>
-        </div>
-        <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-center">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">Step 3</div>
-          <div className="mt-1 text-sm font-medium text-text-primary">生成</div>
-        </div>
+    <div className="rounded-2xl border border-border-subtle bg-surface-muted p-3 text-sm text-text-secondary sm:grid sm:grid-cols-3 sm:gap-3">
+      <div className="p-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 1</div>
+        <div className="mt-1 font-medium text-text-primary">录音或上传清晰语音</div>
+        <p className="mt-1 leading-5">可点击开始/结束录音，单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束；也可上传 MP3、WAV、W4V 文件，音频时长需不少于 {MIN_RECORD_SECONDS} 秒。</p>
       </div>
 
-      <div className="hidden rounded-xl border border-border-subtle bg-surface-muted sm:grid sm:grid-cols-3 sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0">
-        <div className="p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 1</div>
-          <div className="mt-1 font-medium text-text-primary">录音或上传清晰语音</div>
-          <p className="mt-1 leading-5">可点击开始/结束录音，单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束；也可上传 MP3、WAV、W4V 文件，音频时长需不少于 {MIN_RECORD_SECONDS} 秒。</p>
-        </div>
+      <div className="border-t border-border-subtle p-3 sm:border-l sm:border-t-0">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 2</div>
+        <div className="mt-1 font-medium text-text-primary">选择录音建立声纹</div>
+        <p className="mt-1 leading-5">从最新三份录音素材中选择一份，再建立纯粹版或场景版声纹。</p>
+      </div>
 
-        <div className="border-t border-border-subtle p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 2</div>
-          <div className="mt-1 font-medium text-text-primary">选择录音建立声纹</div>
-          <p className="mt-1 leading-5">从最新三份录音素材中选择一份，再建立纯粹版或场景版声纹。</p>
-        </div>
-
-        <div className="border-t border-border-subtle p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 3</div>
-          <div className="mt-1 font-medium text-text-primary">输入文本生成</div>
-          <p className="mt-1 leading-5">建议先用短句测试，再生成较长内容。</p>
-        </div>
+      <div className="border-t border-border-subtle p-3 sm:border-l sm:border-t-0">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 3</div>
+        <div className="mt-1 font-medium text-text-primary">输入文本生成</div>
+        <p className="mt-1 leading-5">建议先用短句测试，再生成较长内容。</p>
       </div>
     </div>
   );
@@ -132,6 +115,10 @@ export function RecordingPanel({
         <span className="rounded-full bg-surface-muted px-3 py-1 text-xs text-text-muted">支持录音和文件上传</span>
       </div>
 
+      <div className="mt-5">
+        <TaskHintList />
+      </div>
+
       <div className="app-panel mt-6 p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-medium text-text-secondary">当前录音素材</div>
@@ -182,10 +169,6 @@ export function RecordingPanel({
       </div>
 
       <div className="mt-8 flex flex-col gap-4">
-        <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
-          三步完成：录音或上传 - 建立声纹 - 输入文本生成语音。
-        </div>
-
         <p id="recording-help" className="text-center text-sm text-text-muted">
           点击开始录音，再次点击结束；单次录音最长 {MAX_RECORD_SECONDS} 秒会自动结束，也可直接上传 MP3、WAV、W4V 文件。
         </p>
@@ -255,8 +238,6 @@ export function RecordingPanel({
           <VoiceCard title="纯粹版声纹" voice={activePureVoice} />
           <VoiceCard title="场景版声纹" voice={activeSceneVoice} />
         </div>
-
-        <TaskHintList />
 
         {workspaceError ? <StatusMessage message={workspaceError} type="error" title="建声操作失败" /> : null}
         {workspaceNotice ? <StatusMessage message={workspaceNotice.text} type={workspaceNotice.type} title={workspaceNotice.title} /> : null}

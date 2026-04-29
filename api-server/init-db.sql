@@ -46,6 +46,14 @@ BEGIN
     CREATE TYPE "TtsJobStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
   END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TtsAccessKind') THEN
+    CREATE TYPE "TtsAccessKind" AS ENUM ('FREE_TRIAL', 'GENERAL_USAGE_CODE', 'USAGE_CODE');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UsageCodeModule') THEN
+    CREATE TYPE "UsageCodeModule" AS ENUM ('VOICE_TO_TEXT');
+  END IF;
+
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SmsScene') THEN
     CREATE TYPE "SmsScene" AS ENUM ('REGISTER', 'LOGIN', 'PASSWORD_CHANGE');
   END IF;
@@ -56,12 +64,15 @@ BEGIN
 END
 $$;
 
+ALTER TYPE "TtsAccessKind" ADD VALUE IF NOT EXISTS 'GENERAL_USAGE_CODE';
+
 -- 5. 创建表（无外键约束，关联关系由应用层保证）
 CREATE TABLE IF NOT EXISTS "User" (
   "id" TEXT NOT NULL,
   "phoneNumber" TEXT NOT NULL,
   "passwordHash" TEXT,
   "phoneVerifiedAt" TIMESTAMP(3),
+  "freeTtsUsedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "activePureVoiceEnrollmentId" TEXT,
@@ -78,6 +89,7 @@ CREATE TABLE IF NOT EXISTS "AnonymousUser" (
   "tokenHash" TEXT NOT NULL,
   "expiresAt" TIMESTAMP(3) NOT NULL,
   "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "freeTtsUsedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "activePureVoiceEnrollmentId" TEXT,
@@ -161,12 +173,31 @@ CREATE TABLE IF NOT EXISTS "VoiceEnrollment" (
   CONSTRAINT "VoiceEnrollment_voiceId_key" UNIQUE ("voiceId")
 );
 
+CREATE TABLE IF NOT EXISTS "UsageCode" (
+  "id" TEXT NOT NULL,
+  "module" "UsageCodeModule" NOT NULL DEFAULT 'VOICE_TO_TEXT',
+  "code" TEXT NOT NULL,
+  "consumedAt" TIMESTAMP(3),
+  "consumedByUserId" TEXT,
+  "consumedTtsJobId" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "UsageCode_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "UsageCode_code_key" UNIQUE ("code"),
+  CONSTRAINT "UsageCode_consumedTtsJobId_key" UNIQUE ("consumedTtsJobId")
+);
+
 CREATE TABLE IF NOT EXISTS "TtsJob" (
   "id" TEXT NOT NULL,
   "userId" TEXT,
   "anonymousUserId" TEXT,
   "voiceEnrollmentId" TEXT,
   "profileKind" "VoiceProfileKind" NOT NULL,
+  "accessKind" "TtsAccessKind" NOT NULL DEFAULT 'FREE_TRIAL',
+  "usageCodeId" TEXT,
+  "usageCodeModule" "UsageCodeModule",
+  "usageCodeValue" TEXT,
   "voiceIdSnapshot" TEXT NOT NULL,
   "text" TEXT NOT NULL,
   "sceneKey" TEXT,
@@ -180,7 +211,8 @@ CREATE TABLE IF NOT EXISTS "TtsJob" (
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  CONSTRAINT "TtsJob_pkey" PRIMARY KEY ("id")
+  CONSTRAINT "TtsJob_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "TtsJob_usageCodeId_key" UNIQUE ("usageCodeId")
 );
 
 -- 6. 创建索引
@@ -214,6 +246,15 @@ CREATE INDEX IF NOT EXISTS "VoiceEnrollment_userId_createdAt_idx"
 CREATE INDEX IF NOT EXISTS "VoiceEnrollment_anonymousUserId_createdAt_idx"
   ON "VoiceEnrollment"("anonymousUserId", "createdAt");
 
+CREATE INDEX IF NOT EXISTS "UsageCode_module_consumedAt_idx"
+  ON "UsageCode"("module", "consumedAt");
+
+CREATE INDEX IF NOT EXISTS "UsageCode_consumedAt_idx"
+  ON "UsageCode"("consumedAt");
+
+CREATE INDEX IF NOT EXISTS "UsageCode_consumedByUserId_consumedAt_idx"
+  ON "UsageCode"("consumedByUserId", "consumedAt");
+
 CREATE INDEX IF NOT EXISTS "TtsJob_userId_createdAt_idx"
   ON "TtsJob"("userId", "createdAt");
 
@@ -223,6 +264,12 @@ CREATE INDEX IF NOT EXISTS "TtsJob_anonymousUserId_createdAt_idx"
 CREATE INDEX IF NOT EXISTS "TtsJob_voiceEnrollmentId_idx"
   ON "TtsJob"("voiceEnrollmentId");
 
+CREATE INDEX IF NOT EXISTS "TtsJob_accessKind_createdAt_idx"
+  ON "TtsJob"("accessKind", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "TtsJob_usageCodeModule_createdAt_idx"
+  ON "TtsJob"("usageCodeModule", "createdAt");
+
 -- 7. 表和类型所有权授予 voice_mvp 用户
 ALTER TABLE "User" OWNER TO voice_mvp;
 ALTER TABLE "AnonymousUser" OWNER TO voice_mvp;
@@ -230,11 +277,14 @@ ALTER TABLE "Session" OWNER TO voice_mvp;
 ALTER TABLE "SmsVerification" OWNER TO voice_mvp;
 ALTER TABLE "VoiceRecording" OWNER TO voice_mvp;
 ALTER TABLE "VoiceEnrollment" OWNER TO voice_mvp;
+ALTER TABLE "UsageCode" OWNER TO voice_mvp;
 ALTER TABLE "TtsJob" OWNER TO voice_mvp;
 ALTER TYPE "EnrollmentStatus" OWNER TO voice_mvp;
 ALTER TYPE "RecordingStatus" OWNER TO voice_mvp;
 ALTER TYPE "VoiceProfileKind" OWNER TO voice_mvp;
 ALTER TYPE "TtsJobStatus" OWNER TO voice_mvp;
+ALTER TYPE "TtsAccessKind" OWNER TO voice_mvp;
+ALTER TYPE "UsageCodeModule" OWNER TO voice_mvp;
 ALTER TYPE "SmsScene" OWNER TO voice_mvp;
 ALTER TYPE "SmsVerificationStatus" OWNER TO voice_mvp;
 

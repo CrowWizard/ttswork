@@ -62,6 +62,9 @@ export type AppConfig = {
     codeType: number;
     returnVerifyCode: boolean;
   };
+  usageCode: {
+    generalCode: string;
+  };
 };
 
 import { statSync } from "node:fs";
@@ -179,6 +182,11 @@ export function loadConfig(): AppConfig {
   const cookie: Partial<AppConfig["cookie"]> = file?.cookie ?? {};
   const auth: Partial<AppConfig["auth"]> = file?.auth ?? {};
   const sms: Partial<AppConfig["sms"]> = file?.sms ?? {};
+  const usageCode: Partial<AppConfig["usageCode"]> = file?.usageCode ?? {};
+  const configuredGeneralUsageCode = envString("USAGE_CODE_GENERAL_CODE", usageCode.generalCode ?? "123456").trim();
+  const generalUsageCode = /^[0-9A-Za-z]{6}$/.test(configuredGeneralUsageCode)
+    ? configuredGeneralUsageCode
+    : "123456";
 
   const config: AppConfig = {
     server: {
@@ -264,6 +272,9 @@ export function loadConfig(): AppConfig {
       intervalSeconds: envInt("SMS_INTERVAL_SECONDS", sms.intervalSeconds ?? 60),
       codeType: envInt("SMS_CODE_TYPE", sms.codeType ?? 1),
       returnVerifyCode: envBool("SMS_RETURN_VERIFY_CODE", sms.returnVerifyCode ?? false),
+    },
+    usageCode: {
+      generalCode: generalUsageCode,
     },
   };
 

@@ -1,22 +1,39 @@
 import type { TtsPanelProps } from "./types";
 import { buildAudioFilename } from "./utils";
 
+function formatAccessKind(accessKind: NonNullable<TtsPanelProps["ttsResult"]>["accessKind"]) {
+  if (accessKind === "GENERAL_USAGE_CODE") {
+    return "通用使用码";
+  }
+
+  if (accessKind === "USAGE_CODE") {
+    return "非通用使用码";
+  }
+
+  return "免费生成";
+}
+
 export function TtsPanel({
   isAuthenticated,
   hasPureVoice,
   hasSceneVoice,
   canSubmitTts,
   ttsText,
+  usageCode,
+  ttsUsage,
   ttsLoading,
   ttsResult,
+  ttsError,
   ttsHistory,
   scenes,
   selectedSceneKey,
   onTtsTextChange,
+  onUsageCodeChange,
   onSceneChange,
   onSubmitTts,
 }: TtsPanelProps) {
   const trimmedLength = ttsText.trim().length;
+  const textLimit = isAuthenticated && ttsUsage?.requiresUsageCode ? 500 : 30;
   const selectedScene = scenes.find((item) => item.key === selectedSceneKey) ?? null;
   const sceneSelectionDisabled = isAuthenticated && !hasSceneVoice && scenes.length > 0;
   const helperText = isAuthenticated
@@ -30,11 +47,7 @@ export function TtsPanel({
     : selectedSceneKey
       ? "未登录时如需生成场景版语音，请先建立场景版声纹。"
       : "未登录时也必须先建立纯粹版声纹，才可进行文本转语音。";
-  const buttonText = ttsLoading
-    ? "合成中..."
-    : isAuthenticated
-      ? "生成语音"
-      : "生成语音";
+  const buttonText = ttsLoading ? "合成中..." : "生成语音";
   const selectedSceneSummary = selectedScene
     ? {
         badge: "已选场景",
@@ -57,7 +70,7 @@ export function TtsPanel({
           </p>
         </div>
         <span className="self-start rounded-full border border-border-subtle bg-surface-muted px-3 py-1 text-xs text-text-muted sm:self-auto">
-          {trimmedLength}/500
+          {trimmedLength}/{textLimit}
         </span>
       </div>
 
@@ -103,6 +116,25 @@ export function TtsPanel({
       {isAuthenticated && !hasSceneVoice ? (
         <p className="mt-2 text-xs leading-5 text-danger">若要选择场景，请先到左侧建立场景版声纹。</p>
       ) : null}
+
+      {isAuthenticated && ttsUsage?.requiresUsageCode ? (
+        <div className="mt-5 rounded-2xl border border-info-border bg-info-surface p-4 text-sm text-info">
+          <div className="font-medium">使用码</div>
+          <p className="mt-1 leading-6">免费生成机会用完后，请输入使用码继续生成。</p>
+          <label className="mt-4 block font-medium text-text-secondary" htmlFor="usage-code">
+            使用码
+            <input
+              id="usage-code"
+              className="app-input mt-3 tracking-[0.2em]"
+              value={usageCode}
+              onChange={(event) => onUsageCodeChange(event.target.value.trim().slice(0, 6))}
+              placeholder="6 位使用码"
+              autoComplete="one-time-code"
+            />
+          </label>
+        </div>
+      ) : null}
+
       <label className="mt-5 block text-sm font-medium text-text-secondary" htmlFor="tts-text">
         输入文本
       </label>
@@ -111,9 +143,24 @@ export function TtsPanel({
         className="app-input mt-3 min-h-44 resize-y"
         value={ttsText}
         onChange={(event) => onTtsTextChange(event.target.value)}
-        maxLength={isAuthenticated ? 500 : 31}
-        placeholder="欢迎使用语音复刻工作台"
+        maxLength={textLimit}
+        placeholder={textLimit === 30 ? "请输入 30 字以内文本" : "请输入需要生成的文本"}
       />
+
+      {!isAuthenticated && ttsUsage?.requiresLoginForNextUse ? (
+        <p className="mt-3 rounded-xl border border-warning-border bg-warning-surface px-4 py-3 text-sm leading-6 text-warning">
+          免费生成次数已用完，请先登录后继续使用。匿名用户不能使用使用码。
+        </p>
+      ) : null}
+
+      {ttsError ? (
+        <div className="relative mt-4 rounded-xl border border-danger-border bg-danger-surface px-4 py-3 text-sm leading-6 text-danger" role="alert">
+          <div className="pr-8">{ttsError}</div>
+          <svg className="absolute right-3 top-3 h-5 w-5 shrink-0 text-danger" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+          </svg>
+        </div>
+      ) : null}
 
       <button type="button" className="app-button-primary mt-5 w-full" onClick={onSubmitTts} disabled={ttsLoading || !canSubmitTts}>
         {buttonText}
@@ -124,16 +171,19 @@ export function TtsPanel({
           <div className="text-sm text-success">任务已完成：{ttsResult.jobId}</div>
           <div className="mt-1 break-all text-sm text-success">voiceIdSnapshot：{ttsResult.voiceIdSnapshot}</div>
           <div className="mt-1 text-sm text-success">类型：{ttsResult.profileKind === "SCENE" ? "场景版" : "纯粹版"}</div>
+          <div className="mt-1 text-sm text-success">来源：{formatAccessKind(ttsResult.accessKind)}</div>
           <div className="mt-4 w-full min-w-0 max-w-full overflow-hidden">
             <audio controls src={ttsResult.downloadUrl} />
           </div>
-          <a
-            className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-success px-4 py-3 text-sm font-semibold text-text-inverse transition hover:bg-action-primary"
-            href={ttsResult.downloadUrl}
-            download={buildAudioFilename(ttsResult.jobId)}
-          >
-            下载生成语音
-          </a>
+          <div className="mt-4 flex justify-end">
+            <a
+              className="inline-flex items-center justify-center rounded-xl bg-success px-4 py-3 text-sm font-semibold text-text-inverse transition hover:bg-action-primary"
+              href={ttsResult.downloadUrl}
+              download={buildAudioFilename(ttsResult.jobId)}
+            >
+              下载生成语音
+            </a>
+          </div>
         </div>
       ) : null}
 
@@ -149,17 +199,20 @@ export function TtsPanel({
                 </div>
                 <div className="mt-2 text-xs text-text-muted">
                   {item.profileKind === "SCENE" ? `场景版${item.sceneKey ? ` · ${item.sceneKey}` : ""}` : "纯粹版"}
+                  <span> · {formatAccessKind(item.accessKind)}</span>
                 </div>
                 <div className="mt-2 w-full min-w-0 max-w-full overflow-hidden">
                   <audio controls src={item.downloadUrl} />
                 </div>
-                <a
-                  className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-xs font-semibold text-text-secondary transition hover:bg-surface-selected sm:w-auto"
-                  href={item.downloadUrl}
-                  download={buildAudioFilename(item.jobId)}
-                >
-                  下载
-                </a>
+                <div className="mt-3 flex justify-end">
+                  <a
+                    className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-xs font-semibold text-text-secondary transition hover:bg-surface-selected"
+                    href={item.downloadUrl}
+                    download={buildAudioFilename(item.jobId)}
+                  >
+                    下载
+                  </a>
+                </div>
               </div>
             ))}
           </div>

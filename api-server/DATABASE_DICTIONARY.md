@@ -40,6 +40,20 @@
 | `READY` | 文本转语音成功，输出音频已生成 |
 | `FAILED` | 文本转语音失败 |
 
+### `TtsAccessKind`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `FREE_TRIAL` | 免费生成机会 |
+| `GENERAL_USAGE_CODE` | 通用使用码生成 |
+| `USAGE_CODE` | 非通用一次性使用码生成 |
+
+### `UsageCodeModule`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `VOICE_TO_TEXT` | 文本转语音模块 |
+
 ### `SmsScene`
 
 | 枚举值 | 中文说明 |
@@ -68,6 +82,7 @@
 | `phoneNumber` | `String` | 唯一 | 用户手机号 |
 | `passwordHash` | `String?` | 可空 | 用户密码哈希，未设置密码时为空 |
 | `phoneVerifiedAt` | `DateTime?` | 可空 | 手机号完成验证的时间 |
+| `freeTtsUsedAt` | `DateTime?` | 可空 | 注册用户免费 TTS 机会使用时间 |
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 | `activePureVoiceEnrollmentId` | `String?` | 唯一，可空 | 当前生效的纯粹版声纹记录 ID |
@@ -83,6 +98,7 @@
 | `tokenHash` | `String` | 唯一 | 匿名身份 Cookie 的哈希值 |
 | `expiresAt` | `DateTime` | 必填 | 匿名身份过期时间 |
 | `lastSeenAt` | `DateTime` | 默认 `now()` | 匿名用户最近活跃时间 |
+| `freeTtsUsedAt` | `DateTime?` | 可空 | 匿名用户免费 TTS 机会使用时间 |
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 | `activePureVoiceEnrollmentId` | `String?` | 唯一，可空 | 当前生效的纯粹版声纹记录 ID |
@@ -176,6 +192,23 @@
 
 索引：`recordingId`、`profileKind + createdAt`、`userId + createdAt`、`anonymousUserId + createdAt`
 
+### `UsageCode`
+
+用于保存一次性使用码库存与消费状态。使用码以明文存储，便于后台查询和多次分发。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | 使用码记录主键 ID |
+| `module` | `UsageCodeModule` | 默认 `VOICE_TO_TEXT` | 使用码所属模块 |
+| `code` | `String` | 唯一 | 6 位明文使用码，可直接查询和分发 |
+| `consumedAt` | `DateTime?` | 可空 | 使用码消费时间，空表示未消费 |
+| `consumedByUserId` | `String?` | 可空 | 消费使用码的注册用户 ID |
+| `consumedTtsJobId` | `String?` | 唯一，可空 | 使用码对应的 TTS 任务 ID |
+| `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
+| `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
+
+索引：`module + consumedAt`、`consumedAt`、`consumedByUserId + consumedAt`
+
 ### `TtsJob`
 
 用于保存文本转语音任务及输出结果。
@@ -187,6 +220,10 @@
 | `anonymousUserId` | `String?` | 可空 | 任务所属匿名用户 ID |
 | `voiceEnrollmentId` | `String?` | 可空 | 本次合成使用的声纹记录 ID |
 | `profileKind` | `VoiceProfileKind` | 必填 | 本次合成所使用的声纹类型 |
+| `accessKind` | `TtsAccessKind` | 默认 `FREE_TRIAL` | 本次 TTS 任务的权益来源 |
+| `usageCodeId` | `String?` | 唯一，可空 | 使用码生成时关联的使用码 ID |
+| `usageCodeModule` | `UsageCodeModule?` | 可空 | 使用码生成时的模块标识 |
+| `usageCodeValue` | `String?` | 可空 | 本次生成输入的使用码快照；免费生成时为空 |
 | `voiceIdSnapshot` | `String` | 必填 | 提交任务时使用的 `voiceId` 快照，避免后续 active voice 变化影响历史追溯 |
 | `text` | `String` | 必填 | 待合成文本 |
 | `sceneKey` | `String?` | 可空 | 场景版 TTS 所选场景标识，纯粹版通常为空 |
@@ -200,7 +237,7 @@
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 
-索引：`userId + createdAt`、`anonymousUserId + createdAt`、`voiceEnrollmentId`
+索引：`userId + createdAt`、`anonymousUserId + createdAt`、`voiceEnrollmentId`、`accessKind + createdAt`、`usageCodeModule + createdAt`
 
 ## 关系说明
 
@@ -209,6 +246,10 @@
 - `AnonymousUser.activePureVoiceEnrollmentId` / `activeSceneVoiceEnrollmentId` 含义与正式用户一致，只是所属主体变为匿名用户
 - `VoiceEnrollment.recordingId` 表示某条声纹记录来源于哪条录音素材
 - `TtsJob.voiceEnrollmentId` 表示某次语音合成使用了哪条声纹记录
+- `TtsJob.accessKind` 标识本次生成是免费生成、通用使用码生成还是非通用一次性使用码生成
+- `TtsJob.usageCodeId` 表示某次非通用一次性使用码生成消耗了哪条使用码记录
+- `TtsJob.usageCodeValue` 保存本次生成输入的使用码快照，免费生成时为空
+- `UsageCode.consumedByUserId` / `consumedTtsJobId` 用于后续后台查询消费归属
 - 当前项目未使用数据库层外键，所以以上“指向”关系由应用逻辑保证，不由数据库强约束保证
 
 ## 当前已废弃字段说明
