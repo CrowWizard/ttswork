@@ -7,8 +7,8 @@ import { useRecordingElapsedSeconds } from "./use-recording-elapsed-seconds";
 function RecordingElapsedStatus({ recording, recordStartedAt }: { recording: boolean; recordStartedAt: number | null }) {
   const elapsedSeconds = useRecordingElapsedSeconds(recording, recordStartedAt);
   const recordingStatusText = recording
-    ? `录音中，当前已录制 ${formatDuration(elapsedSeconds)}。再次按键或松开按钮即可结束。`
-    : `可通过按住按钮或使用键盘操作开始录音，至少录制 ${MIN_RECORD_SECONDS} 秒。`;
+    ? `录音中，当前已录制 ${formatDuration(elapsedSeconds)}。再次点击按钮即可结束。`
+    : `点击按钮开始录音，再次点击结束，至少录制 ${MIN_RECORD_SECONDS} 秒。`;
 
   return (
     <>
@@ -42,8 +42,8 @@ function TaskHintList() {
       <div className="hidden rounded-xl border border-border-subtle bg-surface-muted sm:grid sm:grid-cols-3 sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0">
         <div className="p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Step 1</div>
-          <div className="mt-1 font-medium text-text-primary">录一段清晰语音</div>
-          <p className="mt-1 leading-5">保持环境安静，说满 {MIN_RECORD_SECONDS} 秒后松开按钮。</p>
+          <div className="mt-1 font-medium text-text-primary">录音或上传清晰语音</div>
+          <p className="mt-1 leading-5">可点击开始/结束录音，也可上传 MP3、WAV、W4V 文件，音频时长需不少于 {MIN_RECORD_SECONDS} 秒。</p>
         </div>
 
         <div className="border-t border-border-subtle p-3 sm:rounded-xl sm:border sm:border-border-subtle sm:bg-surface-muted">
@@ -75,15 +75,10 @@ export function RecordingPanel({
   selectedRecordingId,
   onSelectRecording,
   onDeleteRecording,
+  onUploadAudioFile,
   workspaceError,
   workspaceNotice,
-  onRecordButtonMouseDown,
-  onRecordButtonMouseUp,
-  onRecordButtonMouseLeave,
-  onRecordButtonTouchStart,
-  onRecordButtonTouchEnd,
-  onRecordButtonTouchCancel,
-  onRecordButtonKeyDown,
+  onRecordButtonClick,
   onCreatePureVoice,
   onCreateSceneVoice,
   onInvalidateVoice,
@@ -131,7 +126,7 @@ export function RecordingPanel({
     <div className="app-card w-full p-6 sm:p-8">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-2xl font-semibold">1. 建声录音</h2>
-        <span className="rounded-full bg-surface-muted px-3 py-1 text-xs text-text-muted">先上传录音，再建立声纹</span>
+        <span className="rounded-full bg-surface-muted px-3 py-1 text-xs text-text-muted">支持录音和文件上传</span>
       </div>
 
       <div className="app-panel mt-6 p-4 sm:p-5">
@@ -177,24 +172,24 @@ export function RecordingPanel({
           </div>
         ) : (
           <div className="mt-3 space-y-1 text-sm text-text-muted">
-            <p>还没有上传录音，请先录制至少 {MIN_RECORD_SECONDS} 秒语音。</p>
-            <p>上传后的录音会存入 MinIO，并作为后续建立纯粹版/场景版声纹的素材。</p>
+            <p>还没有上传录音，请先录制或上传至少 {MIN_RECORD_SECONDS} 秒语音。</p>
+            <p>上传后的录音会先保存，并作为后续建立纯粹版/场景版声纹的素材。</p>
           </div>
         )}
       </div>
 
       <div className="mt-8 flex flex-col gap-4">
         <div className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3 text-sm text-text-secondary">
-          三步完成：录音上传 - 建立声纹 - 输入文本生成语音。
+          三步完成：录音或上传 - 建立声纹 - 输入文本生成语音。
         </div>
 
         <p id="recording-help" className="text-center text-sm text-text-muted">
-          鼠标或触屏按住开始、松开结束。
+          点击开始录音，再次点击结束，也可直接上传 MP3、WAV、W4V 文件。
         </p>
 
         {uploading ? (
           <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
-            录音已结束，正在上传到 MinIO。
+            音频正在上传并保存。
           </p>
         ) : deletingRecordingId ? (
           <p id="recording-status" className="text-center text-sm text-text-secondary" aria-live="polite">
@@ -210,13 +205,7 @@ export function RecordingPanel({
 
         <button
           type="button"
-          onMouseDown={onRecordButtonMouseDown}
-          onMouseUp={onRecordButtonMouseUp}
-          onMouseLeave={onRecordButtonMouseLeave}
-          onTouchStart={onRecordButtonTouchStart}
-          onTouchEnd={onRecordButtonTouchEnd}
-          onTouchCancel={onRecordButtonTouchCancel}
-          onKeyDown={onRecordButtonKeyDown}
+          onClick={onRecordButtonClick}
           className={`touch-none rounded-2xl px-6 py-8 text-lg font-semibold transition ${
             recording ? "bg-action-record-active text-text-inverse" : "bg-action-record text-text-primary hover:bg-action-record-hover"
           }`}
@@ -226,6 +215,22 @@ export function RecordingPanel({
         >
           {recording ? "结束录音" : uploading ? "上传录音中..." : `开始录音（至少 ${MIN_RECORD_SECONDS} 秒）`}
         </button>
+
+        <div className="flex justify-center">
+          <label className={`inline-flex cursor-pointer items-center justify-center rounded-2xl border border-border-subtle bg-surface-elevated px-5 py-3 text-sm font-medium text-text-primary transition hover:bg-surface-muted ${uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId) || recording ? "pointer-events-none opacity-60" : ""}`}>
+            <input
+              type="file"
+              accept=".mp3,.wav,.w4v,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,video/mp4"
+              className="sr-only"
+              disabled={uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId) || recording}
+              onChange={(event) => {
+                onUploadAudioFile(event.target.files?.[0] ?? null);
+                event.currentTarget.value = "";
+              }}
+            />
+            选择音频文件上传
+          </label>
+        </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <button type="button" className="app-button-primary w-full" disabled={!selectedRecordingId || creatingPureVoice || uploading || Boolean(deletingRecordingId)} onClick={onCreatePureVoice}>

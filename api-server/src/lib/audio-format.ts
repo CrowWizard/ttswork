@@ -1,9 +1,17 @@
 const SUPPORTED_AUDIO_MIME_TYPES = ["audio/wav", "audio/mpeg", "audio/mp4"] as const;
+const SUPPORTED_AUDIO_EXTENSIONS = ["wav", "mp3", "w4v"] as const;
 const AUDIO_MIME_TYPE_ALIASES: Record<string, SupportedAudioMimeType> = {
   "audio/x-wav": "audio/wav",
+  "video/mp4": "audio/mp4",
+};
+const AUDIO_EXTENSION_TO_MIME_TYPE: Record<SupportedAudioExtension, SupportedAudioMimeType> = {
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+  w4v: "audio/mp4",
 };
 
 export type SupportedAudioMimeType = (typeof SUPPORTED_AUDIO_MIME_TYPES)[number];
+export type SupportedAudioExtension = (typeof SUPPORTED_AUDIO_EXTENSIONS)[number];
 
 export function normalizeSupportedAudioMimeType(value: string) {
   const normalizedValue = value.trim().toLowerCase();
@@ -19,6 +27,33 @@ export function getSupportedAudioMimeTypes() {
   return [...SUPPORTED_AUDIO_MIME_TYPES];
 }
 
+export function getSupportedAudioExtensions() {
+  return [...SUPPORTED_AUDIO_EXTENSIONS];
+}
+
+export function getAudioExtensionFromFilename(filename: string) {
+  const normalizedFilename = filename.trim().toLowerCase();
+  const extension = normalizedFilename.includes(".") ? normalizedFilename.split(".").pop() : "";
+
+  if (!extension || !SUPPORTED_AUDIO_EXTENSIONS.includes(extension as SupportedAudioExtension)) {
+    return null;
+  }
+
+  return extension as SupportedAudioExtension;
+}
+
+export function resolveSupportedAudioMimeType(value: string, filename?: string) {
+  const normalizedMimeType = normalizeSupportedAudioMimeType(value);
+
+  if (SUPPORTED_AUDIO_MIME_TYPES.includes(normalizedMimeType as SupportedAudioMimeType)) {
+    return normalizedMimeType as SupportedAudioMimeType;
+  }
+
+  const extension = filename ? getAudioExtensionFromFilename(filename) : null;
+
+  return extension ? AUDIO_EXTENSION_TO_MIME_TYPE[extension] : null;
+}
+
 export function getAudioExtension(mimeType: SupportedAudioMimeType) {
   if (mimeType === "audio/wav") {
     return "wav";
@@ -28,5 +63,5 @@ export function getAudioExtension(mimeType: SupportedAudioMimeType) {
     return "mp3";
   }
 
-  return "m4a";
+  return "w4v";
 }
