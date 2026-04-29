@@ -28,6 +28,16 @@ enum TtsJobStatus {
   FAILED
 }
 
+enum TtsAccessKind {
+  FREE_TRIAL
+  GENERAL_USAGE_CODE
+  USAGE_CODE
+}
+
+enum UsageCodeModule {
+  VOICE_TO_TEXT
+}
+
 enum SmsScene {
   REGISTER
   LOGIN
@@ -45,6 +55,7 @@ model User {
   phoneNumber                  String  @unique
   passwordHash                 String?
   phoneVerifiedAt              DateTime?
+  freeTtsUsedAt                DateTime?
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
   activePureVoiceEnrollmentId  String?  @unique
@@ -56,6 +67,7 @@ model AnonymousUser {
   tokenHash                    String   @unique
   expiresAt                    DateTime
   lastSeenAt                   DateTime @default(now())
+  freeTtsUsedAt                DateTime?
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
   activePureVoiceEnrollmentId  String?  @unique
@@ -139,12 +151,31 @@ model VoiceEnrollment {
   @@index([anonymousUserId, createdAt])
 }
 
+model UsageCode {
+  id               String          @id @default(cuid())
+  module           UsageCodeModule @default(VOICE_TO_TEXT)
+  code             String          @unique
+  consumedAt       DateTime?
+  consumedByUserId String?
+  consumedTtsJobId String?         @unique
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([module, consumedAt])
+  @@index([consumedAt])
+  @@index([consumedByUserId, consumedAt])
+}
+
 model TtsJob {
   id                 String          @id @default(cuid())
   userId             String?
   anonymousUserId    String?
   voiceEnrollmentId  String?
   profileKind        VoiceProfileKind
+  accessKind         TtsAccessKind   @default(FREE_TRIAL)
+  usageCodeId        String?         @unique
+  usageCodeModule    UsageCodeModule?
+  usageCodeValue     String?
   voiceIdSnapshot   String
   text             String
   sceneKey         String?
@@ -161,4 +192,6 @@ model TtsJob {
   @@index([userId, createdAt])
   @@index([anonymousUserId, createdAt])
   @@index([voiceEnrollmentId])
+  @@index([accessKind, createdAt])
+  @@index([usageCodeModule, createdAt])
 }

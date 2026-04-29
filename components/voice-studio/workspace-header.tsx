@@ -6,7 +6,7 @@ export function WorkspaceHeader({ authResolving, authUser, onLogout }: Workspace
     ? "正在检查登录状态..."
     : authUser
       ? "支持点击开始/结束录音建声，也支持上传 MP3、WAV、W4V 文件；建立声纹后即可输入文本生成语音。"
-      : "未登录用户可试用 1 次，单次最多 30 字；登录后可解锁完整使用。";
+      : "未登录用户可免费生成 1 次，单次最多 30 字；登录后继续建声与生成。";
 
   return (
     <section className="app-card w-full p-6 sm:p-8">
@@ -17,8 +17,8 @@ export function WorkspaceHeader({ authResolving, authUser, onLogout }: Workspace
 
           {!authUser ? (
             <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-2xl border border-info-border bg-info-surface px-4 py-3 text-sm text-info">
-              <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold tracking-[0.12em]">TRY</span>
-              <span>先试 1 次 30 字短句，登录后继续录音建声与无限生成。</span>
+              <span className="rounded-full bg-surface-elevated px-2 py-1 text-xs font-semibold tracking-[0.12em]">TRY</span>
+              <span>先试 1 次 30 字短句，登录后继续录音建声与输入使用码生成。</span>
             </div>
           ) : null}
         </div>

@@ -47,9 +47,12 @@ export type TtsResult = {
   downloadUrl: string;
   voiceIdSnapshot: string;
   profileKind: VoiceProfileKind;
+  accessKind: TtsAccessKind;
   sceneKey?: string | null;
   instruction?: string | null;
 };
+
+export type TtsAccessKind = "FREE_TRIAL" | "GENERAL_USAGE_CODE" | "USAGE_CODE";
 
 export type TtsHistoryItem = {
   jobId: string;
@@ -58,6 +61,7 @@ export type TtsHistoryItem = {
   createdAt: string;
   downloadUrl: string;
   profileKind: VoiceProfileKind;
+  accessKind: TtsAccessKind;
   sceneKey?: string | null;
   instruction?: string | null;
 };
@@ -66,6 +70,15 @@ export type TtsSceneItem = {
   key: string;
   label: string;
   instruction: string;
+};
+
+export type TtsUsageState = {
+  isAuthenticated: boolean;
+  freeTtsUsedAt: string | null;
+  freeUsesRemaining: number;
+  requiresLoginForNextUse: boolean;
+  requiresUsageCode: boolean;
+  usageCodeModule: "VOICE_TO_TEXT" | null;
 };
 
 export type AuthUser = {
@@ -139,12 +152,16 @@ export type TtsPanelProps = {
   hasSceneVoice: boolean;
   canSubmitTts: boolean;
   ttsText: string;
+  usageCode: string;
+  ttsUsage: TtsUsageState | null;
   ttsLoading: boolean;
   ttsResult: TtsResult | null;
+  ttsError: string | null;
   ttsHistory: TtsHistoryItem[];
   scenes: TtsSceneItem[];
   selectedSceneKey: string;
   onTtsTextChange: (value: string) => void;
+  onUsageCodeChange: (value: string) => void;
   onSceneChange: (value: string) => void;
   onSubmitTts: () => void;
 };

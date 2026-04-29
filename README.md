@@ -37,6 +37,7 @@
 - `GET /api/voice/enrollments/[enrollmentId]/audio`
 - `POST /api/voice/enrollments/[enrollmentId]/invalidate`
 - `GET /api/tts`
+- `GET /api/tts/usage`
 - `POST /api/tts`
 - `GET /api/tts/[jobId]/download`
 
@@ -81,6 +82,27 @@ cp .env.example .env
   - `SMS_REGISTER_SCHEME_NAME`
   - `SMS_LOGIN_SCHEME_NAME`
 - `SMS_TEMPLATE_PARAM` 默认按 `{"code":"##code##","min":"5"}` 组织，若你的模板变量名不同，需要同步调整该配置。
+
+### 3.2 TTS 使用码配置
+
+- 文本转语音免费生成单次最多 30 字。
+- 匿名用户和登录用户各只有一次免费生成机会；匿名免费机会用完后必须先登录。
+- 同一匿名 Cookie 会话登录后，已使用的匿名免费机会会迁移到注册账号，避免重复领取免费机会。
+- 注册用户免费机会用完后，后续生成必须输入 6 位使用码。
+- 默认通用使用码为 `123456`，可通过 `USAGE_CODE_GENERAL_CODE` 或 `config.yaml` 的 `usageCode.generalCode` 修改；注册用户可输入该码继续生成。
+- 使用码按模块管理。当前只有 `VOICE_TO_TEXT` 模块，后续新增模块时继续复用 `UsageCode.module` 区分。
+- 匿名用户不能使用使用码；前台只展示必要输入框，不展示使用码库存、消费记录或后台查询结果。
+- 使用码以明文存储在数据库中，便于后台查询和多次分发。
+
+生成一批使用码：
+
+```bash
+cd api-server
+bun run usage-codes:generate -- --module VOICE_TO_TEXT --count 100 > usage-codes.txt
+```
+
+`usage-codes.txt` 只用于运营发放，不要提交到 Git。一次性使用码库存表只保存使用码哈希、模块与消费状态。
+每条 TTS 任务会通过 `TtsJob.accessKind` 标记免费生成、通用使用码生成或非通用一次性使用码生成，并在 `TtsJob.usageCodeValue` 保存本次输入的使用码快照；免费生成时该字段为空。
 
 ### 4. 生成 Prisma Client 并同步数据库
 
@@ -171,7 +193,8 @@ bun run dev
 - `SmsVerification`：短信发送与校验状态追踪
 - `VoiceRecording`：上传录音记录与 MinIO 元数据（公网地址由运行时配置拼接）
 - `VoiceEnrollment`：基于录音建立的纯粹版/场景版声纹、生成的 `voiceId`、`isInvalidated`
-- `TtsJob`：文本转语音任务、`voiceIdSnapshot`、声纹类型/场景信息与输出音频 MinIO 元数据
+- `UsageCode`：模块化一次性使用码库存，保存哈希、预览与消费归属，不保存明文码
+- `TtsJob`：文本转语音任务、权益来源、使用码关联、`voiceIdSnapshot`、声纹类型/场景信息与输出音频 MinIO 元数据
 
 ## 已知边界
 

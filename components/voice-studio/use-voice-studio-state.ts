@@ -3,7 +3,17 @@ import { isRecordDurationAccepted } from "@/lib/audio";
 import { convertBlobToWavFile, getBlobDurationSeconds } from "@/lib/audio-browser";
 import { resolveSupportedAudioMimeType } from "@/lib/audio-format";
 import { INPUT_AUDIO_FIELD, MAX_RECORD_SECONDS, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
-import type { AuthMode, AuthUser, StatusState, TtsHistoryItem, TtsResult, TtsSceneItem, VoiceProfileKind, VoiceProfileResponse } from "./types";
+import type {
+  AuthMode,
+  AuthUser,
+  StatusState,
+  TtsHistoryItem,
+  TtsResult,
+  TtsSceneItem,
+  TtsUsageState,
+  VoiceProfileKind,
+  VoiceProfileResponse,
+} from "./types";
 import { pickRecordingMimeType, readJsonSafely, toUserFacingErrorMessage } from "./utils";
 
 export function useVoiceStudioState() {
@@ -40,6 +50,9 @@ export function useVoiceStudioState() {
   const [deletingRecordingId, setDeletingRecordingId] = useState<string | null>(null);
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [ttsText, setTtsText] = useState("");
+  const [usageCode, setUsageCode] = useState("");
+  const [ttsUsage, setTtsUsage] = useState<TtsUsageState | null>(null);
+  const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsResult, setTtsResult] = useState<TtsResult | null>(null);
   const [ttsHistory, setTtsHistory] = useState<TtsHistoryItem[]>([]);
@@ -50,7 +63,11 @@ export function useVoiceStudioState() {
   const hasSceneVoice = Boolean(profile?.activeVoices.scene?.voiceId && !profile.activeVoices.scene.isInvalidated);
   const usingSceneVoice = Boolean(selectedSceneKey);
   const canUseActiveVoiceTts = usingSceneVoice ? hasSceneVoice : hasPureVoice;
-  const canSubmitTts = ttsTextLength > 0 && canUseActiveVoiceTts;
+  const usageCodeReady = !authUser || !ttsUsage?.requiresUsageCode || /^[0-9A-Za-z]{6}$/.test(usageCode.trim());
+  const anonymousBlocked = Boolean(ttsUsage?.requiresLoginForNextUse);
+  const ttsTextLimit = authUser && ttsUsage?.requiresUsageCode ? 500 : 30;
+  const canSubmitTts =
+    ttsTextLength > 0 && ttsTextLength <= ttsTextLimit && canUseActiveVoiceTts && usageCodeReady && !anonymousBlocked;
 
   const clearWorkspaceFeedback = useCallback(() => {
     setWorkspaceError(null);
@@ -71,7 +88,25 @@ export function useVoiceStudioState() {
     setTtsLoading(false);
     setTtsResult(null);
     setTtsHistory([]);
+    setTtsUsage(null);
+    setUsageCode("");
   }, [clearWorkspaceFeedback]);
+
+  const refreshTtsUsage = useCallback(async () => {
+    try {
+      const response = await fetch("/api/tts/usage", {
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data = await readJsonSafely(response);
+      setTtsUsage(data as TtsUsageState);
+    } catch {}
+  }, []);
 
   const handleUnauthorized = useCallback(
     (message = "登录已失效，请重新登录") => {
@@ -168,6 +203,7 @@ export function useVoiceStudioState() {
         setAuthResolving(false);
         void refreshProfile();
         void refreshTtsHistory();
+        void refreshTtsUsage();
         return;
       }
 
@@ -186,8 +222,9 @@ export function useVoiceStudioState() {
       setAuthResolving(false);
       void refreshProfile();
       void refreshTtsHistory();
+      void refreshTtsUsage();
     }
-  }, [refreshProfile, refreshTtsHistory]);
+  }, [refreshProfile, refreshTtsHistory, refreshTtsUsage]);
 
   useEffect(() => {
     void refreshAuth();
@@ -205,7 +242,8 @@ export function useVoiceStudioState() {
 
     void refreshProfile();
     void refreshTtsHistory();
-  }, [authUser, refreshProfile, refreshTtsHistory]);
+    void refreshTtsUsage();
+  }, [authUser, refreshProfile, refreshTtsHistory, refreshTtsUsage]);
 
   useEffect(() => {
     if (smsCountdown <= 0) {
@@ -383,6 +421,8 @@ export function useVoiceStudioState() {
       setAuthUser(null);
       setProfile(null);
       setTtsHistory([]);
+      setTtsUsage(null);
+      setUsageCode("");
       clearWorkspaceFeedback();
       setSmsCode("");
       setPassword("");
@@ -717,12 +757,13 @@ export function useVoiceStudioState() {
 
   const submitTts = useCallback(async () => {
     if (!canUseActiveVoiceTts) {
-      setWorkspaceError(usingSceneVoice ? "请先建立场景版声纹后再进行文本转语音" : "请先建立纯粹版声纹后再进行文本转语音");
+      setTtsError(usingSceneVoice ? "请先建立场景版声纹后再进行文本转语音" : "请先建立纯粹版声纹后再进行文本转语音");
       return;
     }
 
     setTtsLoading(true);
     setTtsResult(null);
+    setTtsError(null);
     clearWorkspaceFeedback();
 
     try {
@@ -739,6 +780,7 @@ export function useVoiceStudioState() {
           profileKind: selectedScene ? "SCENE" : "PURE",
           sceneKey: selectedScene?.key,
           instruction: selectedScene?.instruction,
+          usageCode: authUser && ttsUsage?.requiresUsageCode ? usageCode.trim() : undefined,
         }),
       });
       const payload = (await readJsonSafely(response)) as TtsResult & { error?: string };
@@ -753,16 +795,29 @@ export function useVoiceStudioState() {
       }
 
       setTtsResult(payload);
+      setUsageCode("");
       setWorkspaceNotice({ type: "success", title: "语音合成完成", text: "可在右侧结果区直接播放或下载。" });
-      if (authUser) {
-        void refreshTtsHistory();
-      }
+      void refreshTtsHistory();
+      void refreshTtsUsage();
     } catch (error) {
-      setWorkspaceError(toUserFacingErrorMessage(error, "语音合成失败，请稍后重试"));
+      setTtsError(toUserFacingErrorMessage(error, "语音合成失败，请稍后重试"));
     } finally {
       setTtsLoading(false);
     }
-  }, [authUser, canUseActiveVoiceTts, clearWorkspaceFeedback, handleUnauthorized, refreshTtsHistory, scenes, selectedSceneKey, ttsText, usingSceneVoice]);
+  }, [
+    authUser,
+    canUseActiveVoiceTts,
+    clearWorkspaceFeedback,
+    handleUnauthorized,
+    refreshTtsHistory,
+    refreshTtsUsage,
+    scenes,
+    selectedSceneKey,
+    ttsText,
+    ttsUsage?.requiresUsageCode,
+    usageCode,
+    usingSceneVoice,
+  ]);
 
   const handleRecordButtonClick = useCallback(() => {
     console.info("[voice enroll] record button clicked", {
@@ -830,12 +885,16 @@ export function useVoiceStudioState() {
       hasSceneVoice,
       canSubmitTts,
       ttsText,
+      usageCode,
+      ttsUsage,
       ttsLoading,
       ttsResult,
+      ttsError,
       ttsHistory,
       scenes,
       selectedSceneKey,
       onTtsTextChange: setTtsText,
+      onUsageCodeChange: setUsageCode,
       onSceneChange: setSelectedSceneKey,
       onSubmitTts: () => void submitTts(),
     },
