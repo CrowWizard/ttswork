@@ -73,6 +73,34 @@ BEGIN
     CREATE TYPE "VoiceProfileKind" AS ENUM ('PURE', 'SCENE');
   END IF;
 
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TtsAccessKind') THEN
+    CREATE TYPE "TtsAccessKind" AS ENUM ('FREE_TRIAL', 'GENERAL_USAGE_CODE', 'USAGE_CODE');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UsageCodeModule') THEN
+    CREATE TYPE "UsageCodeModule" AS ENUM ('VOICE_TO_TEXT');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'User'
+      AND column_name = 'freeTtsUsedAt'
+  ) THEN
+    ALTER TABLE "User" ADD COLUMN "freeTtsUsedAt" TIMESTAMP(3);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'AnonymousUser'
+      AND column_name = 'freeTtsUsedAt'
+  ) THEN
+    ALTER TABLE "AnonymousUser" ADD COLUMN "freeTtsUsedAt" TIMESTAMP(3);
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -182,8 +210,50 @@ BEGIN
   ) THEN
     ALTER TABLE "TtsJob" ADD COLUMN "instruction" TEXT;
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'accessKind'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "accessKind" "TtsAccessKind" NOT NULL DEFAULT 'FREE_TRIAL';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'usageCodeId'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "usageCodeId" TEXT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'usageCodeModule'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "usageCodeModule" "UsageCodeModule";
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'TtsJob'
+      AND column_name = 'usageCodeValue'
+  ) THEN
+    ALTER TABLE "TtsJob" ADD COLUMN "usageCodeValue" TEXT;
+  END IF;
 END
 $$;
+
+ALTER TYPE "TtsAccessKind" ADD VALUE IF NOT EXISTS 'GENERAL_USAGE_CODE';
 
 CREATE TABLE IF NOT EXISTS "VoiceRecording" (
   "id" TEXT NOT NULL,
@@ -200,6 +270,21 @@ CREATE TABLE IF NOT EXISTS "VoiceRecording" (
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   CONSTRAINT "VoiceRecording_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "UsageCode" (
+  "id" TEXT NOT NULL,
+  "module" "UsageCodeModule" NOT NULL DEFAULT 'VOICE_TO_TEXT',
+  "code" TEXT NOT NULL,
+  "consumedAt" TIMESTAMP(3),
+  "consumedByUserId" TEXT,
+  "consumedTtsJobId" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "UsageCode_pkey" PRIMARY KEY ("id"),
+  CONSTRAINT "UsageCode_code_key" UNIQUE ("code"),
+  CONSTRAINT "UsageCode_consumedTtsJobId_key" UNIQUE ("consumedTtsJobId")
 );
 SQL
     ) || {
@@ -290,6 +375,26 @@ $$;
 
 ALTER TABLE "User" DROP CONSTRAINT IF EXISTS "User_activeVoiceEnrollmentId_key";
 ALTER TABLE "AnonymousUser" DROP CONSTRAINT IF EXISTS "AnonymousUser_activeVoiceEnrollmentId_key";
+
+UPDATE "User" u
+SET "freeTtsUsedAt" = first_job."createdAt"
+FROM (
+  SELECT "userId", MIN("createdAt") AS "createdAt"
+  FROM "TtsJob"
+  WHERE "userId" IS NOT NULL AND "status" = 'READY'
+  GROUP BY "userId"
+) first_job
+WHERE u."id" = first_job."userId" AND u."freeTtsUsedAt" IS NULL;
+
+UPDATE "AnonymousUser" a
+SET "freeTtsUsedAt" = first_job."createdAt"
+FROM (
+  SELECT "anonymousUserId", MIN("createdAt") AS "createdAt"
+  FROM "TtsJob"
+  WHERE "anonymousUserId" IS NOT NULL AND "status" = 'READY'
+  GROUP BY "anonymousUserId"
+) first_job
+WHERE a."id" = first_job."anonymousUserId" AND a."freeTtsUsedAt" IS NULL;
 SQL
     ) || {
       echo "  ❌ 建声历史数据回填失败，已中止后续 prisma db push"
@@ -327,6 +432,24 @@ CREATE INDEX IF NOT EXISTS "VoiceEnrollment_profileKind_createdAt_idx"
 
 CREATE INDEX IF NOT EXISTS "TtsJob_voiceEnrollmentId_idx"
   ON "TtsJob"("voiceEnrollmentId");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "TtsJob_usageCodeId_key"
+  ON "TtsJob"("usageCodeId");
+
+CREATE INDEX IF NOT EXISTS "TtsJob_accessKind_createdAt_idx"
+  ON "TtsJob"("accessKind", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "TtsJob_usageCodeModule_createdAt_idx"
+  ON "TtsJob"("usageCodeModule", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "UsageCode_module_consumedAt_idx"
+  ON "UsageCode"("module", "consumedAt");
+
+CREATE INDEX IF NOT EXISTS "UsageCode_consumedAt_idx"
+  ON "UsageCode"("consumedAt");
+
+CREATE INDEX IF NOT EXISTS "UsageCode_consumedByUserId_consumedAt_idx"
+  ON "UsageCode"("consumedByUserId", "consumedAt");
 SQL
     ) || {
       echo "  ❌ 两步建声索引创建失败，已中止后续 prisma db push"

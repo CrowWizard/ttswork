@@ -129,12 +129,20 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
     const user = await tx.user.findUnique({
       where: { id: userId },
       select: {
+        freeTtsUsedAt: true,
         activePureVoiceEnrollmentId: true,
         activeSceneVoiceEnrollmentId: true,
       },
     });
     const anonymousActivePureVoiceId = anonymousUser.activePureVoiceEnrollmentId;
     const anonymousActiveSceneVoiceId = anonymousUser.activeSceneVoiceEnrollmentId;
+
+    if (!user?.freeTtsUsedAt && anonymousUser.freeTtsUsedAt) {
+      await tx.user.update({
+        where: { id: userId },
+        data: { freeTtsUsedAt: anonymousUser.freeTtsUsedAt },
+      });
+    }
 
     await tx.voiceRecording.updateMany({
       where: { anonymousUserId: anonymousUser.id },

@@ -40,6 +40,20 @@
 | `READY` | 文本转语音成功，输出音频已生成 |
 | `FAILED` | 文本转语音失败 |
 
+### `TtsAccessKind`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `FREE_TRIAL` | 免费生成机会 |
+| `GENERAL_USAGE_CODE` | 通用使用码生成 |
+| `USAGE_CODE` | 非通用一次性使用码生成 |
+
+### `UsageCodeModule`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `VOICE_TO_TEXT` | 文本转语音模块 |
+
 ### `SmsScene`
 
 | 枚举值 | 中文说明 |
@@ -56,6 +70,28 @@
 | `VERIFIED` | 短信验证码已验证通过 |
 | `FAILED` | 短信发送或验证失败 |
 
+### `AnalyticsEventName`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `PAGE_VIEW` | 页面访问 |
+| `REGISTER_SUCCESS` | 注册成功 |
+| `VOICEPRINT_CREATED` | 建声成功 |
+| `VOICE_GENERATED` | 语音生成成功 |
+| `INVITE_CODE_USED` | 使用码被消费 |
+
+### `AnalyticsChannel`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `DIRECT` | 直接访问 |
+| `REFERRAL` | 外部引荐 |
+| `ORGANIC` | 自然搜索/自然来源 |
+| `SOCIAL` | 社交媒体 |
+| `PAID` | 付费投放 |
+| `EMAIL` | 邮件渠道 |
+| `UNKNOWN` | 无法判定 |
+
 ## 表结构说明
 
 ### `User`
@@ -68,6 +104,7 @@
 | `phoneNumber` | `String` | 唯一 | 用户手机号 |
 | `passwordHash` | `String?` | 可空 | 用户密码哈希，未设置密码时为空 |
 | `phoneVerifiedAt` | `DateTime?` | 可空 | 手机号完成验证的时间 |
+| `freeTtsUsedAt` | `DateTime?` | 可空 | 注册用户免费 TTS 机会使用时间 |
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 | `activePureVoiceEnrollmentId` | `String?` | 唯一，可空 | 当前生效的纯粹版声纹记录 ID |
@@ -83,6 +120,7 @@
 | `tokenHash` | `String` | 唯一 | 匿名身份 Cookie 的哈希值 |
 | `expiresAt` | `DateTime` | 必填 | 匿名身份过期时间 |
 | `lastSeenAt` | `DateTime` | 默认 `now()` | 匿名用户最近活跃时间 |
+| `freeTtsUsedAt` | `DateTime?` | 可空 | 匿名用户免费 TTS 机会使用时间 |
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 | `activePureVoiceEnrollmentId` | `String?` | 唯一，可空 | 当前生效的纯粹版声纹记录 ID |
@@ -176,6 +214,23 @@
 
 索引：`recordingId`、`profileKind + createdAt`、`userId + createdAt`、`anonymousUserId + createdAt`
 
+### `UsageCode`
+
+用于保存一次性使用码库存与消费状态。使用码以明文存储，便于后台查询和多次分发。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | 使用码记录主键 ID |
+| `module` | `UsageCodeModule` | 默认 `VOICE_TO_TEXT` | 使用码所属模块 |
+| `code` | `String` | 唯一 | 6 位明文使用码，可直接查询和分发 |
+| `consumedAt` | `DateTime?` | 可空 | 使用码消费时间，空表示未消费 |
+| `consumedByUserId` | `String?` | 可空 | 消费使用码的注册用户 ID |
+| `consumedTtsJobId` | `String?` | 唯一，可空 | 使用码对应的 TTS 任务 ID |
+| `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
+| `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
+
+索引：`module + consumedAt`、`consumedAt`、`consumedByUserId + consumedAt`
+
 ### `TtsJob`
 
 用于保存文本转语音任务及输出结果。
@@ -187,6 +242,10 @@
 | `anonymousUserId` | `String?` | 可空 | 任务所属匿名用户 ID |
 | `voiceEnrollmentId` | `String?` | 可空 | 本次合成使用的声纹记录 ID |
 | `profileKind` | `VoiceProfileKind` | 必填 | 本次合成所使用的声纹类型 |
+| `accessKind` | `TtsAccessKind` | 默认 `FREE_TRIAL` | 本次 TTS 任务的权益来源 |
+| `usageCodeId` | `String?` | 唯一，可空 | 使用码生成时关联的使用码 ID |
+| `usageCodeModule` | `UsageCodeModule?` | 可空 | 使用码生成时的模块标识 |
+| `usageCodeValue` | `String?` | 可空 | 本次生成输入的使用码快照；免费生成时为空 |
 | `voiceIdSnapshot` | `String` | 必填 | 提交任务时使用的 `voiceId` 快照，避免后续 active voice 变化影响历史追溯 |
 | `text` | `String` | 必填 | 待合成文本 |
 | `sceneKey` | `String?` | 可空 | 场景版 TTS 所选场景标识，纯粹版通常为空 |
@@ -200,7 +259,68 @@
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 
-索引：`userId + createdAt`、`anonymousUserId + createdAt`、`voiceEnrollmentId`
+索引：`userId + createdAt`、`anonymousUserId + createdAt`、`voiceEnrollmentId`、`accessKind + createdAt`、`usageCodeModule + createdAt`
+
+### `AnalyticsVisitor`
+
+用于保存前端埋点的匿名访客主体，并弱绑定到注册用户，作为 UV 去重基础。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | 访客记录主键 ID |
+| `anonymousId` | `String` | 唯一 | 前端传入的匿名访客标识 |
+| `userId` | `String?` | 可空 | 若该匿名访客已与注册用户建立弱绑定，则记录用户 ID |
+| `firstSeenAt` | `DateTime` | 默认 `now()` | 首次被采集到的时间 |
+| `lastSeenAt` | `DateTime` | 默认 `now()` | 最近一次被采集到的时间 |
+| `firstReferrer` | `String?` | 可空 | 首次访问时的 referrer |
+| `firstUtmSource` | `String?` | 可空 | 首次访问时的 `utm_source` |
+| `firstUtmMedium` | `String?` | 可空 | 首次访问时的 `utm_medium` |
+| `firstUtmCampaign` | `String?` | 可空 | 首次访问时的 `utm_campaign` |
+| `firstLandingPage` | `String?` | 可空 | 首次落地页 URL |
+
+索引：`userId`、`firstSeenAt`、`lastSeenAt`
+
+### `AnalyticsSession`
+
+用于保存 analytics 维度的访客会话，和登录 `Session` 表完全独立。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | analytics 会话主键 ID |
+| `anonymousId` | `String` | 必填 | 会话所属匿名访客标识 |
+| `userId` | `String?` | 可空 | 若会话期间已识别到注册用户，则记录用户 ID |
+| `clientSessionId` | `String?` | 可空 | 前端透传的 `session_id`，仅用于对齐，不作为切分规则 |
+| `startedAt` | `DateTime` | 默认 `now()` | 会话开始时间 |
+| `endedAt` | `DateTime` | 默认 `now()` | 会话最近一次事件时间 |
+| `entryPage` | `String` | 必填 | 该会话首个事件对应的页面 URL |
+| `entryReferrer` | `String?` | 可空 | 该会话首个事件对应的 referrer |
+| `utmSource` | `String?` | 可空 | 当前会话归因的 `utm_source` |
+| `utmMedium` | `String?` | 可空 | 当前会话归因的 `utm_medium` |
+| `utmCampaign` | `String?` | 可空 | 当前会话归因的 `utm_campaign` |
+| `channel` | `AnalyticsChannel` | 默认 `UNKNOWN` | 当前会话的渠道归类 |
+
+索引：`anonymousId + startedAt`、`userId + startedAt`、`channel + startedAt`、`clientSessionId`
+
+### `AnalyticsEvent`
+
+用于保存每一次上报的 analytics 事件，是 PV、渠道与趋势分析的基础事实表。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | analytics 事件主键 ID |
+| `anonymousId` | `String` | 必填 | 事件所属匿名访客标识 |
+| `userId` | `String?` | 可空 | 若事件已识别到注册用户，则记录用户 ID |
+| `analyticsSessionId` | `String` | 必填 | 事件归属的 analytics 会话 ID |
+| `eventName` | `AnalyticsEventName` | 必填 | 事件名称 |
+| `url` | `String` | 必填 | 事件发生页面 URL |
+| `referrer` | `String?` | 可空 | 事件对应的 referrer |
+| `utmSource` | `String?` | 可空 | 事件对应的 `utm_source` |
+| `utmMedium` | `String?` | 可空 | 事件对应的 `utm_medium` |
+| `utmCampaign` | `String?` | 可空 | 事件对应的 `utm_campaign` |
+| `channel` | `AnalyticsChannel` | 默认 `UNKNOWN` | 事件对应的渠道归类 |
+| `occurredAt` | `DateTime` | 默认 `now()` | 事件发生时间 |
+
+索引：`occurredAt`、`eventName + occurredAt`、`channel + occurredAt`、`userId + occurredAt`、`anonymousId + occurredAt`
 
 ## 关系说明
 
@@ -209,6 +329,14 @@
 - `AnonymousUser.activePureVoiceEnrollmentId` / `activeSceneVoiceEnrollmentId` 含义与正式用户一致，只是所属主体变为匿名用户
 - `VoiceEnrollment.recordingId` 表示某条声纹记录来源于哪条录音素材
 - `TtsJob.voiceEnrollmentId` 表示某次语音合成使用了哪条声纹记录
+- `TtsJob.accessKind` 标识本次生成是免费生成、通用使用码生成还是非通用一次性使用码生成
+- `TtsJob.usageCodeId` 表示某次非通用一次性使用码生成消耗了哪条使用码记录
+- `TtsJob.usageCodeValue` 保存本次生成输入的使用码快照，免费生成时为空
+- `UsageCode.consumedByUserId` / `consumedTtsJobId` 用于后续后台查询消费归属
+- `AnalyticsVisitor.anonymousId` 作为 analytics 访客主键，和业务侧 `AnonymousUser.id` 不直接等同
+- `AnalyticsVisitor.userId` 用于把匿名访客弱绑定到注册用户，便于后台按 `anonymousId` 反查用户
+- `AnalyticsSession` 表示 analytics 维度的访问会话，和登录 `Session` 表完全独立
+- `AnalyticsEvent.analyticsSessionId` 表示单条埋点事件归属于哪一个 analytics 会话
 - 当前项目未使用数据库层外键，所以以上“指向”关系由应用逻辑保证，不由数据库强约束保证
 
 ## 当前已废弃字段说明

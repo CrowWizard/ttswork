@@ -1,18 +1,28 @@
-import type { KeyboardEvent, MouseEvent, TouchEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MultiRecorder, PCM_WORKLET_URL } from "react-ts-audio-recorder";
 import { isRecordDurationAccepted } from "@/lib/audio";
-import { convertBlobToWavFile } from "@/lib/audio-browser";
-import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
-import type { AuthMode, AuthUser, StatusState, TtsHistoryItem, TtsResult, TtsSceneItem, VoiceProfileKind, VoiceProfileResponse } from "./types";
-import { pickRecordingMimeType, readJsonSafely, toUserFacingErrorMessage } from "./utils";
+import { getBlobDurationSeconds } from "@/lib/audio-browser";
+import { resolveSupportedAudioMimeType } from "@/lib/audio-format";
+import { INPUT_AUDIO_FIELD, MAX_RECORD_SECONDS, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "@/lib/constants";
+import type {
+  AuthMode,
+  AuthUser,
+  StatusState,
+  TtsHistoryItem,
+  TtsResult,
+  TtsSceneItem,
+  TtsUsageState,
+  VoiceProfileKind,
+  VoiceProfileResponse,
+} from "./types";
+import { readJsonSafely, toUserFacingErrorMessage } from "./utils";
 
 export function useVoiceStudioState() {
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recorderRef = useRef<MultiRecorder | null>(null);
   const finalRecordDurationRef = useRef(0);
   const recordStartedAtRef = useRef<number | null>(null);
-  const pointerRecordingActiveRef = useRef(false);
+  const recordingStartingRef = useRef(false);
+  const recordingStopReasonRef = useRef<"manual" | "auto">("manual");
 
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authResolving, setAuthResolving] = useState(true);
@@ -39,6 +49,10 @@ export function useVoiceStudioState() {
   const [deletingRecordingId, setDeletingRecordingId] = useState<string | null>(null);
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [ttsText, setTtsText] = useState("");
+  const [usageCode, setUsageCode] = useState("");
+  const [useFreeTrial, setUseFreeTrial] = useState(false);
+  const [ttsUsage, setTtsUsage] = useState<TtsUsageState | null>(null);
+  const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsResult, setTtsResult] = useState<TtsResult | null>(null);
   const [ttsHistory, setTtsHistory] = useState<TtsHistoryItem[]>([]);
@@ -49,7 +63,13 @@ export function useVoiceStudioState() {
   const hasSceneVoice = Boolean(profile?.activeVoices.scene?.voiceId && !profile.activeVoices.scene.isInvalidated);
   const usingSceneVoice = Boolean(selectedSceneKey);
   const canUseActiveVoiceTts = usingSceneVoice ? hasSceneVoice : hasPureVoice;
-  const canSubmitTts = ttsTextLength > 0 && canUseActiveVoiceTts;
+  const hasFreeTrialRemaining = Boolean(authUser && (ttsUsage?.freeUsesRemaining ?? 0) > 0);
+  const usingUsageCode = Boolean(authUser && !useFreeTrial);
+  const usageCodeReady = !usingUsageCode || /^[0-9A-Za-z]{6}$/.test(usageCode.trim());
+  const anonymousBlocked = Boolean(ttsUsage?.requiresLoginForNextUse);
+  const ttsTextLimit = usingUsageCode ? 500 : 30;
+  const canSubmitTts =
+    ttsTextLength > 0 && ttsTextLength <= ttsTextLimit && canUseActiveVoiceTts && usageCodeReady && !anonymousBlocked;
 
   const clearWorkspaceFeedback = useCallback(() => {
     setWorkspaceError(null);
@@ -70,7 +90,35 @@ export function useVoiceStudioState() {
     setTtsLoading(false);
     setTtsResult(null);
     setTtsHistory([]);
+    setTtsUsage(null);
+    setUsageCode("");
+    setUseFreeTrial(false);
   }, [clearWorkspaceFeedback]);
+
+  useEffect(() => {
+    if (!authUser) {
+      setUseFreeTrial(false);
+      return;
+    }
+
+    setUseFreeTrial(hasFreeTrialRemaining);
+  }, [authUser, hasFreeTrialRemaining]);
+
+  const refreshTtsUsage = useCallback(async () => {
+    try {
+      const response = await fetch("/api/tts/usage", {
+        cache: "no-store",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data = await readJsonSafely(response);
+      setTtsUsage(data as TtsUsageState);
+    } catch {}
+  }, []);
 
   const handleUnauthorized = useCallback(
     (message = "登录已失效，请重新登录") => {
@@ -141,10 +189,12 @@ export function useVoiceStudioState() {
       setProfile(data);
       setSelectedRecordingId((current) => {
         if (!current) {
-          return data.recordings[0]?.id ?? null;
+          return data.recordings[data.recordings.length - 1]?.id ?? null;
         }
 
-        return data.recordings.some((item) => item.id === current) ? current : (data.recordings[0]?.id ?? null);
+        return data.recordings.some((item) => item.id === current)
+          ? current
+          : (data.recordings[data.recordings.length - 1]?.id ?? null);
       });
     } catch (error) {
       setWorkspaceError(toUserFacingErrorMessage(error, "加载声纹信息失败，请稍后重试"));
@@ -167,6 +217,7 @@ export function useVoiceStudioState() {
         setAuthResolving(false);
         void refreshProfile();
         void refreshTtsHistory();
+        void refreshTtsUsage();
         return;
       }
 
@@ -185,15 +236,17 @@ export function useVoiceStudioState() {
       setAuthResolving(false);
       void refreshProfile();
       void refreshTtsHistory();
+      void refreshTtsUsage();
     }
-  }, [refreshProfile, refreshTtsHistory]);
+  }, [refreshProfile, refreshTtsHistory, refreshTtsUsage]);
 
   useEffect(() => {
     void refreshAuth();
     void refreshScenes();
 
     return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      recorderRef.current?.close();
+      recorderRef.current = null;
     };
   }, [refreshAuth, refreshScenes]);
 
@@ -204,7 +257,8 @@ export function useVoiceStudioState() {
 
     void refreshProfile();
     void refreshTtsHistory();
-  }, [authUser, refreshProfile, refreshTtsHistory]);
+    void refreshTtsUsage();
+  }, [authUser, refreshProfile, refreshTtsHistory, refreshTtsUsage]);
 
   useEffect(() => {
     if (smsCountdown <= 0) {
@@ -382,6 +436,8 @@ export function useVoiceStudioState() {
       setAuthUser(null);
       setProfile(null);
       setTtsHistory([]);
+      setTtsUsage(null);
+      setUsageCode("");
       clearWorkspaceFeedback();
       setSmsCode("");
       setPassword("");
@@ -414,7 +470,7 @@ export function useVoiceStudioState() {
 
       await refreshProfile();
       setSelectedRecordingId(payload.recordingId ?? null);
-      setWorkspaceNotice({ type: "success", title: "录音上传完成", text: "录音已存入 MinIO，可继续建立纯粹版或场景版声纹。" });
+      setWorkspaceNotice({ type: "success", title: "录音上传完成", text: "录音已先保存，可继续建立纯粹版或场景版声纹。" });
     } catch (error) {
       setWorkspaceError(toUserFacingErrorMessage(error, "上传录音失败，请稍后重试"));
     } finally {
@@ -422,87 +478,168 @@ export function useVoiceStudioState() {
     }
   }, [handleUnauthorized, refreshProfile]);
 
-  const startRecording = useCallback(async () => {
-    if (recording || uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId)) {
+  const uploadSelectedAudioFile = useCallback(async (audioFile: File | null) => {
+    if (!audioFile || uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId) || recording) {
       return;
     }
 
     clearWorkspaceFeedback();
     setTtsResult(null);
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = pickRecordingMimeType();
+    const supportedMimeType = resolveSupportedAudioMimeType(audioFile.type, audioFile.name);
 
-      if (!mimeType) {
-        stream.getTracks().forEach((track) => track.stop());
-        setWorkspaceError("当前浏览器不支持录音。请更换支持 MediaRecorder 的浏览器。");
-        return;
+    if (!supportedMimeType) {
+      setWorkspaceError("上传文件仅支持 MP3、WAV、W4V 格式");
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const normalizedFile = supportedMimeType === audioFile.type ? audioFile : new File([audioFile], audioFile.name, { type: supportedMimeType });
+      const durationSeconds = await getBlobDurationSeconds(normalizedFile);
+
+      if (!isRecordDurationAccepted(durationSeconds)) {
+        throw new Error(`录音不足 ${MIN_RECORD_SECONDS} 秒，请上传不少于 ${MIN_RECORD_SECONDS} 秒的音频。`);
       }
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      await uploadRecording(normalizedFile, durationSeconds);
+    } catch (error) {
+      setWorkspaceError(toUserFacingErrorMessage(error, "上传录音失败，请稍后重试"));
+      setUploading(false);
+    }
+  }, [uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, recording, clearWorkspaceFeedback, uploadRecording]);
 
-      streamRef.current = stream;
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
+  const startRecording = useCallback(async () => {
+    if (
+      recording ||
+      recordingStartingRef.current ||
+      uploading ||
+      creatingPureVoice ||
+      creatingSceneVoice ||
+      Boolean(invalidatingVoiceId) ||
+      Boolean(deletingRecordingId)
+    ) {
+      return;
+    }
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
+    recordingStartingRef.current = true;
+    clearWorkspaceFeedback();
+    setTtsResult(null);
 
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        mediaRecorderRef.current = null;
+    console.info("[voice enroll] recording start requested", {
+      recording,
+      uploading,
+      creatingPureVoice,
+      creatingSceneVoice,
+      invalidatingVoiceId,
+      deletingRecordingId,
+    });
 
-        const audioBlob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType });
-        const recordDurationSeconds = finalRecordDurationRef.current;
+    try {
+      const recorder = new MultiRecorder({
+        format: "wav",
+        sampleRate: 48000,
+        workletURL: PCM_WORKLET_URL,
+      });
 
-        console.info("[voice enroll] recorded blob", {
-          sourceMimeType: mediaRecorder.mimeType,
-          blobType: audioBlob.type,
-          size: audioBlob.size,
-          durationSeconds: recordDurationSeconds,
-          chunkCount: chunksRef.current.length,
-        });
-
-        try {
-          if (!isRecordDurationAccepted(recordDurationSeconds)) {
-            setWorkspaceError(`录音不足 ${MIN_RECORD_SECONDS} 秒，请按住按钮说满 ${MIN_RECORD_SECONDS} 秒。`);
-            setUploading(false);
-            return;
-          }
-
-          const audioFile = await convertBlobToWavFile(audioBlob);
-          await uploadRecording(audioFile, recordDurationSeconds);
-        } catch (error) {
-          setWorkspaceError(toUserFacingErrorMessage(error, "录音处理失败，请重新录制"));
-          setUploading(false);
-        }
-      };
-
-      mediaRecorder.start();
+      recorderRef.current = recorder;
+      recordingStopReasonRef.current = "manual";
+      await recorder.init();
+      await recorder.startRecording();
       startRecordTimer();
       setRecording(true);
+      recordingStartingRef.current = false;
+
+      console.info("[voice enroll] recording started", {
+        format: "wav",
+        workletURL: PCM_WORKLET_URL,
+      });
     } catch (error) {
+      recorderRef.current?.close();
+      recorderRef.current = null;
+      recordingStartingRef.current = false;
       stopRecordTimer();
       setWorkspaceError(toUserFacingErrorMessage(error, "无法访问麦克风，请检查浏览器权限后重试"));
     }
-  }, [recording, uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, clearWorkspaceFeedback, uploadRecording]);
+  }, [recording, uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, clearWorkspaceFeedback]);
 
   const stopRecording = useCallback(() => {
-    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") {
+    const recorder = recorderRef.current;
+
+    if (!recorder) {
       return;
     }
+
+    recorderRef.current = null;
+
+    const isAutoStop = recordingStopReasonRef.current === "auto";
+    recordingStopReasonRef.current = "manual";
+
+    console.info("[voice enroll] recording stop requested", {
+      reason: isAutoStop ? "auto" : "manual",
+    });
 
     finalRecordDurationRef.current = stopRecordTimer();
     setUploading(true);
     clearWorkspaceFeedback();
-    mediaRecorderRef.current.stop();
+
+    if (isAutoStop) {
+      setWorkspaceNotice({
+        type: "info",
+        title: "录音已自动结束",
+        text: `单次录音最长 ${MAX_RECORD_SECONDS} 秒，已自动停止并开始上传。`,
+      });
+    }
+
     setRecording(false);
-  }, [clearWorkspaceFeedback]);
+    void (async () => {
+      try {
+        const audioBlob = await recorder.stopRecording();
+        const recordDurationSeconds = finalRecordDurationRef.current;
+
+        console.info("[voice enroll] recorded blob", {
+          blobType: audioBlob.type,
+          size: audioBlob.size,
+          durationSeconds: recordDurationSeconds,
+        });
+
+        if (!isRecordDurationAccepted(recordDurationSeconds)) {
+          setWorkspaceError(`录音不足 ${MIN_RECORD_SECONDS} 秒，请继续录满 ${MIN_RECORD_SECONDS} 秒后再结束。`);
+          setUploading(false);
+          return;
+        }
+
+        const audioFile = new File([audioBlob], "enrollment.wav", { type: audioBlob.type || "audio/wav" });
+        await uploadRecording(audioFile, recordDurationSeconds);
+      } catch (error) {
+        setWorkspaceError(toUserFacingErrorMessage(error, "录音处理失败，请重新录制"));
+        setUploading(false);
+      } finally {
+        recorder.close();
+      }
+    })();
+  }, [clearWorkspaceFeedback, uploadRecording]);
+
+  useEffect(() => {
+    if (!recording || !recordStartedAt) {
+      return;
+    }
+
+    const elapsedMilliseconds = Date.now() - recordStartedAt;
+    const remainingMilliseconds = Math.max(MAX_RECORD_SECONDS * 1000 - elapsedMilliseconds, 0);
+
+    const timer = window.setTimeout(() => {
+      if (!recorderRef.current) {
+        return;
+      }
+
+      recordingStopReasonRef.current = "auto";
+      stopRecording();
+    }, remainingMilliseconds);
+
+    return () => window.clearTimeout(timer);
+  }, [recording, recordStartedAt, stopRecording]);
 
   const createVoiceEnrollment = useCallback(async (profileKind: VoiceProfileKind) => {
     if (!selectedRecordingId) {
@@ -620,12 +757,13 @@ export function useVoiceStudioState() {
 
   const submitTts = useCallback(async () => {
     if (!canUseActiveVoiceTts) {
-      setWorkspaceError(usingSceneVoice ? "请先建立场景版声纹后再进行文本转语音" : "请先建立纯粹版声纹后再进行文本转语音");
+      setTtsError(usingSceneVoice ? "请先建立场景版声纹后再进行文本转语音" : "请先建立纯粹版声纹后再进行文本转语音");
       return;
     }
 
     setTtsLoading(true);
     setTtsResult(null);
+    setTtsError(null);
     clearWorkspaceFeedback();
 
     try {
@@ -642,6 +780,7 @@ export function useVoiceStudioState() {
           profileKind: selectedScene ? "SCENE" : "PURE",
           sceneKey: selectedScene?.key,
           instruction: selectedScene?.instruction,
+          usageCode: usingUsageCode ? usageCode.trim() : undefined,
         }),
       });
       const payload = (await readJsonSafely(response)) as TtsResult & { error?: string };
@@ -656,79 +795,43 @@ export function useVoiceStudioState() {
       }
 
       setTtsResult(payload);
+      setUsageCode("");
       setWorkspaceNotice({ type: "success", title: "语音合成完成", text: "可在右侧结果区直接播放或下载。" });
-      if (authUser) {
-        void refreshTtsHistory();
-      }
+      void refreshTtsHistory();
+      void refreshTtsUsage();
     } catch (error) {
-      setWorkspaceError(toUserFacingErrorMessage(error, "语音合成失败，请稍后重试"));
+      setTtsError(toUserFacingErrorMessage(error, "语音合成失败，请稍后重试"));
     } finally {
       setTtsLoading(false);
     }
-  }, [authUser, canUseActiveVoiceTts, clearWorkspaceFeedback, handleUnauthorized, refreshTtsHistory, scenes, selectedSceneKey, ttsText, usingSceneVoice]);
+  }, [
+    canUseActiveVoiceTts,
+    clearWorkspaceFeedback,
+    handleUnauthorized,
+    refreshTtsHistory,
+    refreshTtsUsage,
+    scenes,
+    selectedSceneKey,
+    ttsText,
+    usageCode,
+    usingUsageCode,
+    usingSceneVoice,
+  ]);
 
-  const handleRecordButtonMouseDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) {
+  const handleRecordButtonClick = useCallback(() => {
+    console.info("[voice enroll] record button clicked", {
+      recording,
+      recordingStarting: recordingStartingRef.current,
+      recorderReady: Boolean(recorderRef.current),
+    });
+
+    if (recording) {
+      stopRecording();
       return;
     }
 
-    pointerRecordingActiveRef.current = true;
     void startRecording();
-  }, [startRecording]);
-
-  const handleRecordButtonMouseUp = useCallback(() => {
-    if (!pointerRecordingActiveRef.current) {
-      return;
-    }
-
-    pointerRecordingActiveRef.current = false;
-    stopRecording();
-  }, [stopRecording]);
-
-  const handleRecordButtonMouseLeave = useCallback(() => {
-    if (!pointerRecordingActiveRef.current) {
-      return;
-    }
-
-    pointerRecordingActiveRef.current = false;
-    stopRecording();
-  }, [stopRecording]);
-
-  const handleRecordButtonTouchStart = useCallback((event: TouchEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    pointerRecordingActiveRef.current = true;
-    void startRecording();
-  }, [startRecording]);
-
-  const handleRecordButtonTouchEnd = useCallback((event: TouchEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-
-    if (!pointerRecordingActiveRef.current) {
-      return;
-    }
-
-    pointerRecordingActiveRef.current = false;
-    stopRecording();
-  }, [stopRecording]);
-
-  const handleRecordButtonTouchCancel = useCallback((event: TouchEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-
-    if (!pointerRecordingActiveRef.current) {
-      return;
-    }
-
-    pointerRecordingActiveRef.current = false;
-    stopRecording();
-  }, [stopRecording]);
-
-  const handleRecordButtonKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-
-    event.preventDefault();
-  }, []);
+  }, [recording, startRecording, stopRecording]);
 
   return {
     authPanel: {
@@ -767,15 +870,10 @@ export function useVoiceStudioState() {
       selectedRecordingId,
       onSelectRecording: setSelectedRecordingId,
       onDeleteRecording: (recordingId: string) => void deleteRecording(recordingId),
+      onUploadAudioFile: (file: File | null) => void uploadSelectedAudioFile(file),
       workspaceError,
       workspaceNotice,
-      onRecordButtonMouseDown: handleRecordButtonMouseDown,
-      onRecordButtonMouseUp: handleRecordButtonMouseUp,
-      onRecordButtonMouseLeave: handleRecordButtonMouseLeave,
-      onRecordButtonTouchStart: handleRecordButtonTouchStart,
-      onRecordButtonTouchEnd: handleRecordButtonTouchEnd,
-      onRecordButtonTouchCancel: handleRecordButtonTouchCancel,
-      onRecordButtonKeyDown: handleRecordButtonKeyDown,
+      onRecordButtonClick: handleRecordButtonClick,
       onCreatePureVoice: () => void createVoiceEnrollment("PURE"),
       onCreateSceneVoice: () => void createVoiceEnrollment("SCENE"),
       onInvalidateVoice: (enrollmentId: string) => void invalidateVoice(enrollmentId),
@@ -785,13 +883,19 @@ export function useVoiceStudioState() {
       hasPureVoice,
       hasSceneVoice,
       canSubmitTts,
+      useFreeTrial,
       ttsText,
+      usageCode,
+      ttsUsage,
       ttsLoading,
       ttsResult,
+      ttsError,
       ttsHistory,
       scenes,
       selectedSceneKey,
+      onUseFreeTrialChange: setUseFreeTrial,
       onTtsTextChange: setTtsText,
+      onUsageCodeChange: setUsageCode,
       onSceneChange: setSelectedSceneKey,
       onSubmitTts: () => void submitTts(),
     },

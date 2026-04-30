@@ -45,6 +45,10 @@ export type AppConfig = {
     sessionTtlSeconds: number;
     sessionTouchIntervalSeconds: number;
   };
+  admin: {
+    username: string;
+    password: string;
+  };
   sms: {
     mockMode: boolean;
     accessKeyId: string;
@@ -61,6 +65,9 @@ export type AppConfig = {
     intervalSeconds: number;
     codeType: number;
     returnVerifyCode: boolean;
+  };
+  usageCode: {
+    generalCode: string;
   };
 };
 
@@ -178,7 +185,13 @@ export function loadConfig(): AppConfig {
   };
   const cookie: Partial<AppConfig["cookie"]> = file?.cookie ?? {};
   const auth: Partial<AppConfig["auth"]> = file?.auth ?? {};
+  const admin: Partial<AppConfig["admin"]> = file?.admin ?? {};
   const sms: Partial<AppConfig["sms"]> = file?.sms ?? {};
+  const usageCode: Partial<AppConfig["usageCode"]> = file?.usageCode ?? {};
+  const configuredGeneralUsageCode = envString("USAGE_CODE_GENERAL_CODE", usageCode.generalCode ?? "123456").trim();
+  const generalUsageCode = /^[0-9A-Za-z]{6}$/.test(configuredGeneralUsageCode)
+    ? configuredGeneralUsageCode
+    : "123456";
 
   const config: AppConfig = {
     server: {
@@ -248,6 +261,10 @@ export function loadConfig(): AppConfig {
         auth.sessionTouchIntervalSeconds ?? 300,
       ),
     },
+    admin: {
+      username: envString("ADMIN_USERNAME", admin.username ?? "").trim(),
+      password: envString("ADMIN_PASSWORD", admin.password ?? ""),
+    },
     sms: {
       mockMode: envBool("SMS_MOCK_MODE", sms.mockMode ?? true),
       accessKeyId: envString("SMS_ACCESS_KEY_ID", sms.accessKeyId ?? ""),
@@ -264,6 +281,9 @@ export function loadConfig(): AppConfig {
       intervalSeconds: envInt("SMS_INTERVAL_SECONDS", sms.intervalSeconds ?? 60),
       codeType: envInt("SMS_CODE_TYPE", sms.codeType ?? 1),
       returnVerifyCode: envBool("SMS_RETURN_VERIFY_CODE", sms.returnVerifyCode ?? false),
+    },
+    usageCode: {
+      generalCode: generalUsageCode,
     },
   };
 
