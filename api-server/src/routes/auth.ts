@@ -27,6 +27,7 @@ function buildAuthUser(user: {
   phoneNumber: string;
   passwordHash: string | null;
   phoneVerifiedAt: Date | null;
+  pointsBalance: number;
   createdAt: Date;
 }) {
   return {
@@ -34,9 +35,12 @@ function buildAuthUser(user: {
     phoneNumber: user.phoneNumber,
     hasPassword: Boolean(user.passwordHash),
     phoneVerifiedAt: user.phoneVerifiedAt,
+    pointsBalance: user.pointsBalance,
     createdAt: user.createdAt,
   };
 }
+
+const REGISTER_BONUS_POINTS = 100;
 
 export function createAuthRoutes(cfg: AppConfig) {
   const auth = new Hono();
@@ -115,12 +119,27 @@ export function createAuthRoutes(cfg: AppConfig) {
     }
 
     try {
-      const user = await prisma.user.create({
-        data: {
-          phoneNumber,
-          passwordHash: password ? await hashPassword(password) : null,
-          phoneVerifiedAt: new Date(),
-        },
+      const passwordHash = password ? await hashPassword(password) : null;
+      const user = await prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            phoneNumber,
+            passwordHash,
+            phoneVerifiedAt: new Date(),
+            pointsBalance: REGISTER_BONUS_POINTS,
+          },
+        });
+
+        await tx.pointTransaction.create({
+          data: {
+            userId: createdUser.id,
+            type: "REGISTER_BONUS",
+            delta: REGISTER_BONUS_POINTS,
+            balanceAfter: REGISTER_BONUS_POINTS,
+          },
+        });
+
+        return createdUser;
       });
 
       await migrateAnonymousDataToUser(c, cfg, user.id);
@@ -184,15 +203,36 @@ export function createAuthRoutes(cfg: AppConfig) {
       return errorResponse(c, "验证码校验失败，请稍后重试", 502);
     }
 
-    const user = await prisma.user.upsert({
-      where: { phoneNumber: parsedBody.data.phoneNumber },
-      update: {
-        phoneVerifiedAt: new Date(),
-      },
-      create: {
-        phoneNumber: parsedBody.data.phoneNumber,
-        phoneVerifiedAt: new Date(),
-      },
+    const user = await prisma.$transaction(async (tx) => {
+      const existingUser = await tx.user.findUnique({
+        where: { phoneNumber: parsedBody.data.phoneNumber },
+      });
+
+      if (existingUser) {
+        return tx.user.update({
+          where: { id: existingUser.id },
+          data: { phoneVerifiedAt: new Date() },
+        });
+      }
+
+      const createdUser = await tx.user.create({
+        data: {
+          phoneNumber: parsedBody.data.phoneNumber,
+          phoneVerifiedAt: new Date(),
+          pointsBalance: REGISTER_BONUS_POINTS,
+        },
+      });
+
+      await tx.pointTransaction.create({
+        data: {
+          userId: createdUser.id,
+          type: "REGISTER_BONUS",
+          delta: REGISTER_BONUS_POINTS,
+          balanceAfter: REGISTER_BONUS_POINTS,
+        },
+      });
+
+      return createdUser;
     });
 
     await migrateAnonymousDataToUser(c, cfg, user.id);

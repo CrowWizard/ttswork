@@ -1,14 +1,102 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { RecordingStatus } from "@prisma/client";
+import { EnrollmentStatus, Prisma, RecordingStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
 import { requireCurrentUser, resolveAnonymousUser, unauthorizedResponse } from "../lib/auth";
 import { isRecordDurationAccepted } from "../lib/audio";
 import { getAudioExtension, resolveSupportedAudioMimeType } from "../lib/audio-format";
 import { errorResponse } from "../lib/http";
 import { INPUT_AUDIO_FIELD, MIN_RECORD_SECONDS, RECORD_DURATION_SECONDS_FIELD } from "../lib/constants";
-import { removeObject, uploadBuffer } from "../lib/minio";
+import { buildPublicObjectUrl, getObjectBuffer, removeObject, uploadBuffer } from "../lib/minio";
 import { prisma } from "../lib/prisma";
+import { buildErrorLogContext, loggerError } from "../lib/logger";
+import { enrollPureVoice, enrollSceneVoice } from "../lib/qwen";
+
+function buildVoicePrefix(profileKind: "PURE" | "SCENE") {
+  const randomPart = randomUUID().replace(/-/g, "").slice(0, 6);
+  return `${profileKind === "PURE" ? "pure" : "scn"}${randomPart}`;
+}
+
+async function processEnrollmentAsync(
+  cfg: AppConfig,
+  params: {
+    enrollmentId: string;
+    recordingId: string;
+    profileKind: "PURE" | "SCENE";
+    userId?: string | null;
+    anonymousUserId?: string | null;
+  },
+) {
+  try {
+    const recording = await prisma.voiceRecording.findUnique({
+      where: { id: params.recordingId },
+    });
+
+    if (!recording) {
+      throw new Error("录音记录不存在");
+    }
+
+    const result = params.profileKind === "PURE"
+      ? await enrollPureVoice(cfg.qwen, {
+          audioBuffer: await getObjectBuffer(cfg.minio, recording.objectKey),
+          mimeType: recording.inputContentType,
+        })
+      : await enrollSceneVoice(cfg.qwen, {
+          publicAudioUrl: buildPublicObjectUrl(cfg.minio, recording.objectKey),
+          prefix: buildVoicePrefix(params.profileKind),
+        });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.voiceEnrollment.update({
+        where: { id: params.enrollmentId },
+        data: {
+          status: EnrollmentStatus.READY,
+          voiceId: result.voiceId,
+          errorMessage: null,
+        },
+      });
+
+      const updateData = params.profileKind === "PURE"
+        ? { activePureVoiceEnrollmentId: params.enrollmentId }
+        : { activeSceneVoiceEnrollmentId: params.enrollmentId };
+
+      await tx.voiceProfile.upsert({
+        where: params.userId
+          ? { userId: params.userId }
+          : { anonymousUserId: params.anonymousUserId! },
+        create: {
+          ...(params.userId ? { userId: params.userId } : { anonymousUserId: params.anonymousUserId }),
+          ...updateData,
+        },
+        update: updateData,
+      });
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "建声失败";
+
+    loggerError("voice_enrollment.qwen_failed", {
+      enrollmentId: params.enrollmentId,
+      recordingId: params.recordingId,
+      profileKind: params.profileKind,
+      ...buildErrorLogContext(error),
+    });
+
+    try {
+      await prisma.voiceEnrollment.update({
+        where: { id: params.enrollmentId },
+        data: {
+          status: EnrollmentStatus.FAILED,
+          errorMessage: message,
+        },
+      });
+    } catch (updateError) {
+      loggerError("voice_enrollment.status_update_failed", {
+        enrollmentId: params.enrollmentId,
+        ...buildErrorLogContext(updateError),
+      });
+    }
+  }
+}
 
 export function createVoiceRecordingRoutes(cfg: AppConfig) {
   const voiceRecordings = new Hono();
@@ -69,11 +157,88 @@ export function createVoiceRecordingRoutes(cfg: AppConfig) {
       },
     });
 
+    try {
+      await prisma.voiceProfile.upsert({
+        where: currentUser
+          ? { userId: currentUser.id }
+          : { anonymousUserId: anonymousUser!.id },
+        create: {
+          ...(currentUser ? { userId: currentUser.id } : { anonymousUserId: anonymousUser!.id }),
+        },
+        update: {},
+      });
+    } catch (error) {
+      loggerError("voice_recording.profile_upsert_failed", {
+        recordingId: recording.id,
+        ...buildErrorLogContext(error),
+      });
+    }
+
+    const enrollmentBase = {
+      recordingId: recording.id,
+      userId: currentUser?.id,
+      anonymousUserId: anonymousUser?.id,
+      status: EnrollmentStatus.PENDING,
+      durationSeconds: recording.durationSeconds,
+      originalFilename: recording.originalFilename,
+      inputContentType: recording.inputContentType,
+      bucket: recording.bucket,
+      objectKey: recording.objectKey,
+      minioUri: recording.minioUri,
+    };
+
+    let pureEnrollmentId: string | null = null;
+    let sceneEnrollmentId: string | null = null;
+
+    try {
+      const [pureEnrollment, sceneEnrollment] = await prisma.$transaction(
+        async (tx) => Promise.all([
+          tx.voiceEnrollment.create({
+            data: { ...enrollmentBase, profileKind: "PURE" as const },
+          }),
+          tx.voiceEnrollment.create({
+            data: { ...enrollmentBase, profileKind: "SCENE" as const },
+          }),
+        ]),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+
+      pureEnrollmentId = pureEnrollment.id;
+      sceneEnrollmentId = sceneEnrollment.id;
+    } catch (error) {
+      loggerError("voice_recording.auto_enrollment_create_failed", {
+        recordingId: recording.id,
+        ...buildErrorLogContext(error),
+      });
+    }
+
+    if (pureEnrollmentId) {
+      void processEnrollmentAsync(cfg, {
+        enrollmentId: pureEnrollmentId,
+        recordingId: recording.id,
+        profileKind: "PURE",
+        userId: currentUser?.id,
+        anonymousUserId: anonymousUser?.id,
+      });
+    }
+
+    if (sceneEnrollmentId) {
+      void processEnrollmentAsync(cfg, {
+        enrollmentId: sceneEnrollmentId,
+        recordingId: recording.id,
+        profileKind: "SCENE",
+        userId: currentUser?.id,
+        anonymousUserId: anonymousUser?.id,
+      });
+    }
+
     return c.json({
       recordingId: recording.id,
       status: recording.status,
       durationSeconds: recording.durationSeconds,
       playbackUrl: `/api/voice/enrollments/recordings/${recording.id}/audio`,
+      pureEnrollmentId,
+      sceneEnrollmentId,
     });
   });
 
@@ -104,8 +269,33 @@ export function createVoiceRecordingRoutes(cfg: AppConfig) {
       return errorResponse(c, `删除录音素材失败：${message}`, 502);
     }
 
-    await prisma.voiceRecording.delete({
-      where: { id: recording.id },
+    await prisma.$transaction(async (tx) => {
+      const relatedEnrollments = await tx.voiceEnrollment.findMany({
+        where: { recordingId: recording.id },
+        select: { id: true },
+      });
+      const relatedEnrollmentIds = relatedEnrollments.map((item) => item.id);
+
+      if (relatedEnrollmentIds.length > 0) {
+        await tx.voiceEnrollment.updateMany({
+          where: { id: { in: relatedEnrollmentIds } },
+          data: { isInvalidated: true },
+        });
+
+        await tx.voiceProfile.updateMany({
+          where: { activePureVoiceEnrollmentId: { in: relatedEnrollmentIds } },
+          data: { activePureVoiceEnrollmentId: null },
+        });
+
+        await tx.voiceProfile.updateMany({
+          where: { activeSceneVoiceEnrollmentId: { in: relatedEnrollmentIds } },
+          data: { activeSceneVoiceEnrollmentId: null },
+        });
+      }
+
+      await tx.voiceRecording.delete({
+        where: { id: recording.id },
+      });
     });
 
     return c.json({

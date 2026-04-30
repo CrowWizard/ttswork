@@ -1,5 +1,25 @@
 # operations-log
 
+- 2026-04-30 17:40 +08:00：按用户要求隐藏工作区模块导航：移除首页与 B 站视频分析页的 `WorkspaceModuleNav` 渲染；将首页 header 已登录态中的手机号、个人设置、退出登录收口为账号菜单；积分展示移到“兑换”按钮之后，改为 SVG 图标加余额数字，不再使用圆角 label 容器。验证：`npm run lint`、`npm run typecheck` 通过；首次 `npm run build` 命中 Next 增量构建产物缺失 `/_not-found`，清理 `.next` 后重跑通过，仍保留项目既有 `output: export` 与 rewrites 组合警告。
+
+- 2026-04-30 17:28 +08:00：按 `/impeccable layout` 恢复首页工作区模块导航：在 `VoiceStudio` 主内容容器顶部接入现有 `WorkspaceModuleNav`，使首页与 `/video-analysis` 使用一致的模块切换模型；主容器改为 `flex flex-col gap-6` 并移除任务区额外 `mt-8`，让导航、标题卡与任务区节奏与视频分析页一致。验证通过：`npm run lint`、`npm run typecheck`、`npm run build`；build 仍保留项目既有 `output: export` 与 rewrites 组合警告。
+
+- 2026-04-30 17:25 +08:00：按 `/impeccable polish` 收口首页 token 与顶部栏：将未定义的 `bg-surface-primary` 改为现有 `bg-surface` 并复用 `shadow-panel`，避免 sticky 顶部栏背景失效；登录弹窗遮罩从硬编码 `bg-black/50` 改为语义化 `bg-text-primary/50`，移除纯黑中性面残留。验证通过：检索 `components` 下已无 `bg-surface-primary` / `bg-black`，`npm run lint`、`npm run typecheck`、`npm run build` 通过；build 仍保留项目既有 `output: export` 与 rewrites 组合警告。
+
+- 2026-04-30 17:22 +08:00：按 `/impeccable adapt` 统一首页移动端触控目标：登录弹窗关闭/取消按钮、登录模式 tab、顶部 header 的积分/使用码输入/兑换/个人设置/退出登录、录音素材删除按钮、历史语音下载入口均调整为不低于 44px 的可触控区域，保持现有低干扰 token 与组件语汇不变。验证通过：`npm run lint`、`npm run typecheck`、`npm run build`；build 仍保留项目既有 `output: export` 与 rewrites 组合警告。
+
+- 2026-04-30 17:21 +08:00：按 `/impeccable harden` 加固首页登录与上传控件：`AuthPanel` 改为语义化 form，支持当前登录模式下按 Enter 提交短信/密码登录，并将非当前 tab 输入禁用以避免隐藏必填项参与校验；上传音频 label 增加 `focus-within` 可见焦点环，隐藏 file input 获焦时仍能定位焦点。验证：首次 `npm run typecheck` 暴露可选回调类型问题后改为可选调用，随后 `npm run lint`、`npm run typecheck` 通过；首次 `npm run build` 命中 Next 增量缓存式 `/admin/invite-codes` PageNotFoundError，未改代码重跑后通过，仍保留既有 `output: export` 与 rewrites 组合警告。
+
+- 2026-04-30 15:34 +08:00：按 `.kilo/plans/1777532181126-mighty-forest.md` 完成语音工作台权益调整：新增 `User.pointsBalance`、`PointTransaction` 与 `POINTS` TTS 来源；注册/短信自动创建用户赠送 100 积分；使用码改为兑换 200 积分；TTS 创建改为登录用户每次扣 20 积分，Qwen 合成失败自动返还积分并记录流水。
+- 2026-04-30 15:34 +08:00：前端移除首页模块导航与 TTS 试用/使用码输入；header 新增积分余额、6 位使用码兑换入口与兑换反馈；TTS 面板统一 500 字上限并按积分余额控制提交；登录弹窗文案改为积分体系。
+- 2026-04-30 15:34 +08:00：录音删除改为同步作废相关纯粹版/场景版声纹并清空 active voice；前端移除单独作废声纹按钮，删除录音提示同步更新；上传与录音按钮视觉颜色已交换。
+- 2026-04-30 15:34 +08:00：后台用户列表/详情增加积分余额；同步更新 `README.md`、`.env.example`、`api-server/DATABASE_DICTIONARY.md`、`api-server/init-db.sql` 的积分与使用码说明。
+- 2026-04-30 15:34 +08:00：本地验证通过：根目录 `bunx prisma validate && bunx prisma generate`、API 目录 `bunx prisma validate && bunx prisma generate`、API `bunx tsc --noEmit`、API `bun run build`、API `bun test src/lib/usage-code.test.ts`、前端 `npm run typecheck`、`npm run lint`、`npm run build`、API 目录 `bunx prisma db push`。前端 build 仍保留项目既有 `output: export` 与 rewrites 组合警告。
+
+- 2026-04-30 14:07 +08:00：按计划开始语音工作台 UI 与声纹模型重构；已同步更新前端/API Prisma schema，新增 `VoiceProfile` 并移除 `User`/`AnonymousUser` 上的 active voice 字段，后端路由改为基于 `VoiceProfile` 读取与更新 active voice。
+- 2026-04-30 14:07 +08:00：将录音上传流程改为自动创建纯粹版/场景版建声任务并后台异步调用 Qwen；前端移除手动建声按钮，新增轮询 `/api/voice/profile` 的声纹生成状态提示与超时提示。
+- 2026-04-30 14:07 +08:00：完成顶部 `UserHeader`、工作台文案与录音面板重构；本地执行根/API Prisma generate、`npm run lint`、`npm run typecheck`、API `bunx tsc --noEmit`、前端 `npm run build` 与 API `bun run build` 均通过。未执行 `prisma db push`，因为删除旧列属于破坏性数据库变更，需在部署前按迁移顺序先搬迁现有 active voice 数据。
+
 - 2026-04-24 15:08 +08:00：初始化 Next.js 15 + React 19 + TypeScript + Tailwind CSS 项目骨架与基础配置。
 - 2026-04-24 15:10 +08:00：建立 Prisma 数据模型，覆盖匿名用户、建声记录、TTS 任务与 active voice 约束。
 - 2026-04-24 15:14 +08:00：实现 MinIO、Qwen Mock/Live、音频时长解析、匿名 Cookie 会话与接口层。

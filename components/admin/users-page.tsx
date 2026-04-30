@@ -31,6 +31,7 @@ const { Text } = Typography;
 type UserListItem = {
   id: string;
   phoneNumber: string;
+  pointsBalance: number;
   createdAt: string;
   hasCreatedVoiceprint: boolean;
   hasPureVoiceprint: boolean;
@@ -53,6 +54,7 @@ type UserDetailResponse = {
   user: {
     id: string;
     phoneNumber: string;
+    pointsBalance: number;
     phoneVerifiedAt: string | null;
     createdAt: string;
     updatedAt: string;
@@ -258,6 +260,12 @@ export function AdminUsersPage() {
       ),
     },
     {
+      title: "积分",
+      dataIndex: "pointsBalance",
+      key: "pointsBalance",
+      align: "right" as const,
+    },
+    {
       title: "创建时间",
       dataIndex: "createdAt",
       key: "createdAt",
@@ -418,6 +426,7 @@ export function AdminUsersPage() {
               <Descriptions.Item label="User ID">
                 <Text copyable style={{ fontSize: 12 }}>{detailData.user.id}</Text>
               </Descriptions.Item>
+              <Descriptions.Item label="积分余额">{detailData.user.pointsBalance}</Descriptions.Item>
               <Descriptions.Item label="创建时间">{formatAdminDateTime(detailData.user.createdAt)}</Descriptions.Item>
               <Descriptions.Item label="最近活跃">{formatAdminDateTime(detailData.analytics.lastActiveAt)}</Descriptions.Item>
             </Descriptions>

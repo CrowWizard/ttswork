@@ -2,6 +2,10 @@ import type { TtsPanelProps } from "./types";
 import { buildAudioFilename } from "./utils";
 
 function formatAccessKind(accessKind: NonNullable<TtsPanelProps["ttsResult"]>["accessKind"]) {
+  if (accessKind === "POINTS") {
+    return "积分消耗";
+  }
+
   if (accessKind === "GENERAL_USAGE_CODE") {
     return "通用使用码";
   }
@@ -18,9 +22,7 @@ export function TtsPanel({
   hasPureVoice,
   hasSceneVoice,
   canSubmitTts,
-  useFreeTrial,
   ttsText,
-  usageCode,
   ttsUsage,
   ttsLoading,
   ttsResult,
@@ -28,28 +30,25 @@ export function TtsPanel({
   ttsHistory,
   scenes,
   selectedSceneKey,
-  onUseFreeTrialChange,
   onTtsTextChange,
-  onUsageCodeChange,
   onSceneChange,
   onSubmitTts,
 }: TtsPanelProps) {
   const trimmedLength = ttsText.trim().length;
-  const hasFreeTrialRemaining = Boolean(isAuthenticated && (ttsUsage?.freeUsesRemaining ?? 0) > 0);
-  const textLimit = isAuthenticated && !useFreeTrial ? 500 : 30;
+  const textLimit = 500;
+  const pointsBalance = ttsUsage?.pointsBalance ?? 0;
+  const ttsCostPoints = ttsUsage?.ttsCostPoints ?? 20;
   const selectedScene = scenes.find((item) => item.key === selectedSceneKey) ?? null;
   const sceneSelectionDisabled = isAuthenticated && !hasSceneVoice && scenes.length > 0;
   const helperText = isAuthenticated
     ? selectedSceneKey
       ? hasSceneVoice
         ? `已选择场景：${selectedScene?.label ?? "场景版"}，接口会携带 instruction 字段。`
-        : "如需选择场景，请先建立场景版声纹。"
+        : "如需选择场景，请先上传或录制语音并等待场景版声纹自动生成。"
       : hasPureVoice
         ? "纯粹版声纹已就绪，可以直接输入文本生成语音。"
-        : "完成纯粹版声纹后，这里会开放语音合成。"
-    : selectedSceneKey
-      ? "未登录时如需生成场景版语音，请先建立场景版声纹。"
-      : "未登录时也必须先建立纯粹版声纹，才可进行文本转语音。";
+        : "上传或录制语音后，系统会自动生成声纹，完成后即可进行语音合成。"
+    : "登录后获赠 100 积分，每次文本转语音消耗 20 积分。";
   const buttonText = ttsLoading ? "合成中..." : "生成语音";
   const selectedSceneSummary = selectedScene
     ? {
@@ -67,7 +66,7 @@ export function TtsPanel({
     <div className="app-card w-full p-6 sm:p-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">2. 文本转语音</h2>
+          <h2 className="text-2xl font-semibold">文本转语音</h2>
           <p className="mt-2 text-sm leading-6 text-text-muted">
             {helperText}
           </p>
@@ -117,43 +116,18 @@ export function TtsPanel({
       </div>
 
       {isAuthenticated && !hasSceneVoice ? (
-        <p className="mt-2 text-xs leading-5 text-danger">若要选择场景，请先到左侧建立场景版声纹。</p>
+        <p className="mt-2 text-xs leading-5 text-danger">若要选择场景，请先到左侧上传或录制语音，等待场景版声纹自动生成。</p>
       ) : null}
 
       {isAuthenticated ? (
         <div className="mt-5 rounded-2xl border border-info-border bg-info-surface p-4 text-sm text-info">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="font-medium">使用码</div>
-            {hasFreeTrialRemaining ? (
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-text-secondary">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border-subtle"
-                  checked={useFreeTrial}
-                  onChange={(event) => onUseFreeTrialChange(event.target.checked)}
-                />
-                试用（最多 30 个字）
-              </label>
-            ) : null}
-          </div>
+          <div className="font-medium">积分生成</div>
           <p className="mt-1 leading-6">
-            可直接输入 6 位使用码继续生成；如仍有试用机会，试用单次最多 30 个字。
+            每次生成消耗 {ttsCostPoints} 积分，当前余额 {pointsBalance} 积分。余额不足可在顶部输入使用码兑换。
           </p>
-          {hasFreeTrialRemaining ? (
-            <p className="mt-2 text-xs leading-5 text-text-secondary">勾选试用后，不用输入使用码。</p>
+          {pointsBalance < ttsCostPoints ? (
+            <p className="mt-2 text-xs leading-5 text-danger">积分余额不足，请先兑换积分。</p>
           ) : null}
-          <label className="mt-4 block font-medium text-text-secondary" htmlFor="usage-code">
-            使用码
-            <input
-              id="usage-code"
-              className="app-input mt-3 tracking-[0.2em]"
-              value={usageCode}
-              onChange={(event) => onUsageCodeChange(event.target.value.trim().slice(0, 6))}
-              placeholder="6 位使用码"
-              autoComplete="one-time-code"
-              disabled={useFreeTrial}
-            />
-          </label>
         </div>
       ) : null}
 
@@ -166,12 +140,12 @@ export function TtsPanel({
         value={ttsText}
         onChange={(event) => onTtsTextChange(event.target.value)}
         maxLength={textLimit}
-        placeholder={textLimit === 30 ? "请输入 30 字以内文本" : "请输入需要生成的文本"}
+        placeholder="请输入需要生成的文本"
       />
 
-      {!isAuthenticated && ttsUsage?.requiresLoginForNextUse ? (
+      {!isAuthenticated ? (
         <p className="mt-3 rounded-xl border border-warning-border bg-warning-surface px-4 py-3 text-sm leading-6 text-warning">
-          免费生成次数已用完，请先登录后继续使用。匿名用户不能使用使用码。
+          请先登录后使用积分生成语音。
         </p>
       ) : null}
 
@@ -228,7 +202,7 @@ export function TtsPanel({
                 </div>
                 <div className="mt-3 flex justify-end">
                   <a
-                    className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-xs font-semibold text-text-secondary transition hover:bg-surface-selected"
+                    className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-subtle bg-surface-muted px-3 py-2 text-xs font-semibold text-text-secondary transition hover:bg-surface-selected"
                     href={item.downloadUrl}
                     download={buildAudioFilename(item.jobId)}
                   >

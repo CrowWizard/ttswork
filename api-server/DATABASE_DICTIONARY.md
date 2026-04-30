@@ -47,6 +47,15 @@
 | `FREE_TRIAL` | 免费生成机会 |
 | `GENERAL_USAGE_CODE` | 通用使用码生成 |
 | `USAGE_CODE` | 非通用一次性使用码生成 |
+| `POINTS` | 积分消耗生成 |
+
+### `PointTransactionType`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `REGISTER_BONUS` | 新用户注册赠送积分 |
+| `USAGE_CODE_REDEEM` | 使用码兑换积分 |
+| `TTS_CONSUME` | 文本转语音消费或失败返还积分 |
 
 ### `UsageCodeModule`
 
@@ -104,7 +113,8 @@
 | `phoneNumber` | `String` | 唯一 | 用户手机号 |
 | `passwordHash` | `String?` | 可空 | 用户密码哈希，未设置密码时为空 |
 | `phoneVerifiedAt` | `DateTime?` | 可空 | 手机号完成验证的时间 |
-| `freeTtsUsedAt` | `DateTime?` | 可空 | 注册用户免费 TTS 机会使用时间 |
+| `pointsBalance` | `Int` | 默认 `0` | 当前积分余额，新注册用户默认赠送 100 积分 |
+| `freeTtsUsedAt` | `DateTime?` | 可空 | 旧版免费 TTS 机会使用时间，当前积分流程不再使用 |
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 | `activePureVoiceEnrollmentId` | `String?` | 唯一，可空 | 当前生效的纯粹版声纹记录 ID |
@@ -216,7 +226,7 @@
 
 ### `UsageCode`
 
-用于保存一次性使用码库存与消费状态。使用码以明文存储，便于后台查询和多次分发。
+用于保存一次性使用码库存与兑换状态。使用码以明文存储，便于后台查询和多次分发。
 
 | 字段名 | 类型 | 约束/默认值 | 中文说明 |
 | --- | --- | --- | --- |
@@ -225,11 +235,28 @@
 | `code` | `String` | 唯一 | 6 位明文使用码，可直接查询和分发 |
 | `consumedAt` | `DateTime?` | 可空 | 使用码消费时间，空表示未消费 |
 | `consumedByUserId` | `String?` | 可空 | 消费使用码的注册用户 ID |
-| `consumedTtsJobId` | `String?` | 唯一，可空 | 使用码对应的 TTS 任务 ID |
+| `consumedTtsJobId` | `String?` | 唯一，可空 | 旧版直接生成 TTS 时对应的任务 ID，积分兑换流程不再写入 |
 | `createdAt` | `DateTime` | 默认 `now()` | 记录创建时间 |
 | `updatedAt` | `DateTime` | `@updatedAt` | 记录最后更新时间 |
 
 索引：`module + consumedAt`、`consumedAt`、`consumedByUserId + consumedAt`
+
+### `PointTransaction`
+
+用于保存用户积分赠送、兑换、消费和失败返还流水，便于审计余额变化。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | 积分流水主键 ID |
+| `userId` | `String` | 必填 | 流水所属用户 ID |
+| `type` | `PointTransactionType` | 必填 | 积分流水类型 |
+| `delta` | `Int` | 必填 | 本次积分变化，正数为增加，负数为扣减 |
+| `balanceAfter` | `Int` | 必填 | 本次变化后的用户积分余额 |
+| `usageCodeId` | `String?` | 可空 | 使用码兑换积分时关联的使用码 ID |
+| `ttsJobId` | `String?` | 可空 | TTS 消费或失败返还时关联的任务 ID |
+| `createdAt` | `DateTime` | 默认 `now()` | 流水创建时间 |
+
+索引：`userId + createdAt`、`usageCodeId`、`ttsJobId`
 
 ### `TtsJob`
 
@@ -242,10 +269,10 @@
 | `anonymousUserId` | `String?` | 可空 | 任务所属匿名用户 ID |
 | `voiceEnrollmentId` | `String?` | 可空 | 本次合成使用的声纹记录 ID |
 | `profileKind` | `VoiceProfileKind` | 必填 | 本次合成所使用的声纹类型 |
-| `accessKind` | `TtsAccessKind` | 默认 `FREE_TRIAL` | 本次 TTS 任务的权益来源 |
-| `usageCodeId` | `String?` | 唯一，可空 | 使用码生成时关联的使用码 ID |
-| `usageCodeModule` | `UsageCodeModule?` | 可空 | 使用码生成时的模块标识 |
-| `usageCodeValue` | `String?` | 可空 | 本次生成输入的使用码快照；免费生成时为空 |
+| `accessKind` | `TtsAccessKind` | 默认 `FREE_TRIAL` | 本次 TTS 任务的权益来源，新流程使用 `POINTS` |
+| `usageCodeId` | `String?` | 唯一，可空 | 旧版使用码直接生成时关联的使用码 ID |
+| `usageCodeModule` | `UsageCodeModule?` | 可空 | 旧版使用码直接生成时的模块标识 |
+| `usageCodeValue` | `String?` | 可空 | 旧版生成输入的使用码快照；积分生成时为空 |
 | `voiceIdSnapshot` | `String` | 必填 | 提交任务时使用的 `voiceId` 快照，避免后续 active voice 变化影响历史追溯 |
 | `text` | `String` | 必填 | 待合成文本 |
 | `sceneKey` | `String?` | 可空 | 场景版 TTS 所选场景标识，纯粹版通常为空 |
@@ -329,10 +356,9 @@
 - `AnonymousUser.activePureVoiceEnrollmentId` / `activeSceneVoiceEnrollmentId` 含义与正式用户一致，只是所属主体变为匿名用户
 - `VoiceEnrollment.recordingId` 表示某条声纹记录来源于哪条录音素材
 - `TtsJob.voiceEnrollmentId` 表示某次语音合成使用了哪条声纹记录
-- `TtsJob.accessKind` 标识本次生成是免费生成、通用使用码生成还是非通用一次性使用码生成
-- `TtsJob.usageCodeId` 表示某次非通用一次性使用码生成消耗了哪条使用码记录
-- `TtsJob.usageCodeValue` 保存本次生成输入的使用码快照，免费生成时为空
-- `UsageCode.consumedByUserId` / `consumedTtsJobId` 用于后续后台查询消费归属
+- `TtsJob.accessKind` 标识本次生成的权益来源，新流程统一记录为积分生成 `POINTS`
+- `PointTransaction.ttsJobId` 表示某次积分消费或失败返还对应的 TTS 任务
+- `UsageCode.consumedByUserId` 用于记录使用码兑换积分的用户归属，`consumedTtsJobId` 仅兼容旧版直接生成流程
 - `AnalyticsVisitor.anonymousId` 作为 analytics 访客主键，和业务侧 `AnonymousUser.id` 不直接等同
 - `AnalyticsVisitor.userId` 用于把匿名访客弱绑定到注册用户，便于后台按 `anonymousId` 反查用户
 - `AnalyticsSession` 表示 analytics 维度的访问会话，和登录 `Session` 表完全独立

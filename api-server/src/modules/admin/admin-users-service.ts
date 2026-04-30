@@ -178,6 +178,7 @@ export async function listAdminUsers(input: AdminUsersListInput) {
     return {
       id: user.id,
       phoneNumber: user.phoneNumber,
+      pointsBalance: user.pointsBalance,
       createdAt: user.createdAt,
       hasCreatedVoiceprint: latestReadyEnrollmentMap.has(user.id),
       hasPureVoiceprint: pureEnrollmentMap.has(user.id),
@@ -202,7 +203,17 @@ export async function getAdminUserDetail(id: string) {
     return null;
   }
 
-  const [latestReadyEnrollment, pureEnrollment, sceneEnrollment, usageCodes, ttsJobs, firstVisitor, lastVisitor, linkedVisitors] = await Promise.all([
+  const [
+    latestReadyEnrollment,
+    pureEnrollment,
+    sceneEnrollment,
+    usageCodes,
+    ttsJobs,
+    firstVisitor,
+    lastVisitor,
+    linkedVisitors,
+    voiceProfile,
+  ] = await Promise.all([
     prisma.voiceEnrollment.findFirst({
       where: {
         userId: id,
@@ -263,6 +274,7 @@ export async function getAdminUserDetail(id: string) {
         lastSeenAt: true,
       },
     }),
+    prisma.voiceProfile.findUnique({ where: { userId: id } }),
   ]);
 
   return {
@@ -270,10 +282,11 @@ export async function getAdminUserDetail(id: string) {
       id: user.id,
       phoneNumber: user.phoneNumber,
       phoneVerifiedAt: user.phoneVerifiedAt,
+      pointsBalance: user.pointsBalance,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      activePureVoiceEnrollmentId: user.activePureVoiceEnrollmentId,
-      activeSceneVoiceEnrollmentId: user.activeSceneVoiceEnrollmentId,
+      activePureVoiceEnrollmentId: voiceProfile?.activePureVoiceEnrollmentId ?? null,
+      activeSceneVoiceEnrollmentId: voiceProfile?.activeSceneVoiceEnrollmentId ?? null,
     },
     voiceprint: {
       hasCreatedVoiceprint: Boolean(latestReadyEnrollment),

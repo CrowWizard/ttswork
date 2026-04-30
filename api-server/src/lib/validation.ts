@@ -48,10 +48,10 @@ export const ttsRequestSchema = z.object({
   profileKind: z.enum(["PURE", "SCENE"]).default("PURE"),
   sceneKey: z.string().trim().min(1).max(50).optional(),
   instruction: z.string().trim().max(100, "场景提示词不能超过 100 个字符").optional(),
-  usageCode: z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    usageCodeSchema.optional(),
-  ),
+});
+
+export const usageCodeRedeemRequestSchema = z.object({
+  usageCode: usageCodeSchema,
 });
 
 export const voiceEnrollmentCreateSchema = z.object({

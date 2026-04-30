@@ -1,66 +1,10 @@
-import Link from "next/link";
-import type { WorkspaceHeaderProps } from "./types";
-
-export function WorkspaceHeader({ authResolving, authUser, onLogout }: WorkspaceHeaderProps) {
-  const guestNotice = authResolving
-    ? "正在检查登录状态..."
-    : authUser
-      ? "支持点击开始/结束录音建声，也支持上传 MP3、WAV、W4V 文件；建立声纹后即可输入文本生成语音。"
-      : "未登录用户可免费生成 1 次，单次最多 30 字；登录后继续建声与生成。";
-
+export function WorkspaceHeader() {
   return (
     <section className="app-card w-full p-6 sm:p-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">语音复刻工作台</h1>
-          <p className="mt-3 text-sm leading-6 text-text-muted">{guestNotice}</p>
-
-          {!authUser ? (
-            <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-2xl border border-info-border bg-info-surface px-4 py-3 text-sm text-info">
-              <span className="rounded-full bg-surface-elevated px-2 py-1 text-xs font-semibold tracking-[0.12em]">TRY</span>
-              <span>先试 1 次 30 字短句，登录后继续录音建声与输入使用码生成。</span>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {!authUser ? (
-            <button
-              type="button"
-              className="app-button-primary"
-              onClick={() => {
-                const event = new CustomEvent("open-voice-login-modal");
-                window.dispatchEvent(event);
-              }}
-            >
-              登录
-            </button>
-          ) : null}
-          {authUser ? (
-            <div className="app-panel px-4 py-4 text-sm text-text-secondary sm:max-w-xs">
-              <div className="text-xs uppercase tracking-[0.18em] text-text-muted">当前账号</div>
-              <div className="mt-1 break-all font-medium text-text-primary">{authUser.phoneNumber}</div>
-              <div className="mt-1 text-xs text-text-muted">
-                {authUser.hasPassword ? "已设置密码，可用密码或短信登录" : "未设置密码，目前仅支持短信登录"}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link href="/settings" className="app-button-chip h-11 items-center justify-center">
-                  个人设置
-                </Link>
-                <button type="button" className="app-button-chip h-11 items-center justify-center" onClick={onLogout}>
-                  退出登录
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle bg-surface-muted text-text-muted">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-          )}
-        </div>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">语音复刻工作台</h1>
+      <p className="mt-3 text-sm leading-6 text-text-muted">
+        上传或录制清晰语音，系统将自动生成声纹，随后即可输入文本生成语音。
+      </p>
     </section>
   );
 }

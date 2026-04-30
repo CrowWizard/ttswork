@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { Prisma, TtsJobStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
-import { requireCurrentUser, resolveAnonymousUser } from "../lib/auth";
+import { requireCurrentUser } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { buildErrorLogContext, loggerError } from "../lib/logger";
 import { uploadBuffer } from "../lib/minio";
@@ -10,7 +10,7 @@ import { prisma } from "../lib/prisma";
 import { synthesizePureSpeech, synthesizeSceneSpeech } from "../lib/qwen";
 import { getTtsScene, listTtsScenes } from "../lib/scene";
 import { normalizeUsageCodeInput } from "../lib/usage-code";
-import { ttsRequestSchema } from "../lib/validation";
+import { ttsRequestSchema, usageCodeRedeemRequestSchema } from "../lib/validation";
 
 function getRequestId(c: Context) {
   return (c as Context & { get: (key: string) => unknown }).get("requestId") as string | undefined;
@@ -20,9 +20,9 @@ export function createTtsRoutes(cfg: AppConfig) {
   const tts = new Hono();
 
   const TTS_HISTORY_LIMIT = 3;
-  const FREE_TTS_TEXT_LIMIT = 30;
   const USAGE_CODE_MODULE = "VOICE_TO_TEXT";
-  const generalUsageCode = normalizeUsageCodeInput(cfg.usageCode.generalCode);
+  const TTS_COST_POINTS = 20;
+  const USAGE_CODE_REDEEM_POINTS = 200;
 
   tts.get("/scenes", async (c) => {
     return c.json(listTtsScenes());
@@ -30,31 +30,111 @@ export function createTtsRoutes(cfg: AppConfig) {
 
   tts.get("/usage", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
-    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
-    const freeTtsUsedAt = currentUser?.freeTtsUsedAt ?? anonymousUser?.freeTtsUsedAt ?? null;
 
     return c.json({
       isAuthenticated: Boolean(currentUser),
-      freeTtsUsedAt,
-      freeUsesRemaining: freeTtsUsedAt ? 0 : 1,
-      requiresLoginForNextUse: !currentUser && Boolean(freeTtsUsedAt),
-      requiresUsageCode: Boolean(currentUser && freeTtsUsedAt),
-      usageCodeModule: currentUser && freeTtsUsedAt ? USAGE_CODE_MODULE : null,
+      pointsBalance: currentUser?.pointsBalance ?? 0,
+      ttsCostPoints: TTS_COST_POINTS,
+      usageCodeRedeemPoints: USAGE_CODE_REDEEM_POINTS,
     });
+  });
+
+  class ActiveVoiceUnavailableError extends Error {}
+  class ActiveVoiceChangedError extends Error {}
+
+  tts.post("/usage/redeem", async (c) => {
+    const currentUser = await requireCurrentUser(c, cfg);
+
+    if (!currentUser) {
+      return errorResponse(c, "请先登录后兑换积分", 401);
+    }
+
+    const body = await c.req.json().catch(() => null);
+    const parsedBody = usageCodeRedeemRequestSchema.safeParse(body);
+
+    if (!parsedBody.success) {
+      return errorResponse(c, parsedBody.error.issues[0]?.message ?? "请求参数无效");
+    }
+
+    try {
+      const result = await prisma.$transaction(
+        async (tx) => {
+          const usageCodeValue = normalizeUsageCodeInput(parsedBody.data.usageCode);
+          const usageCode = await tx.usageCode.findFirst({
+            where: {
+              code: usageCodeValue,
+              module: USAGE_CODE_MODULE,
+              consumedAt: null,
+            },
+            select: { id: true },
+          });
+
+          if (!usageCode) {
+            throw new ActiveVoiceUnavailableError("使用码无效或已使用");
+          }
+
+          const consumed = await tx.usageCode.updateMany({
+            where: { id: usageCode.id, consumedAt: null },
+            data: {
+              consumedAt: new Date(),
+              consumedByUserId: currentUser.id,
+            },
+          });
+
+          if (consumed.count !== 1) {
+            throw new ActiveVoiceUnavailableError("使用码无效或已使用");
+          }
+
+          const updatedUser = await tx.user.update({
+            where: { id: currentUser.id },
+            data: { pointsBalance: { increment: USAGE_CODE_REDEEM_POINTS } },
+            select: { pointsBalance: true },
+          });
+
+          await tx.pointTransaction.create({
+            data: {
+              userId: currentUser.id,
+              type: "USAGE_CODE_REDEEM",
+              delta: USAGE_CODE_REDEEM_POINTS,
+              balanceAfter: updatedUser.pointsBalance,
+              usageCodeId: usageCode.id,
+            },
+          });
+
+          return { pointsBalance: updatedUser.pointsBalance };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+
+      return c.json({
+        ...result,
+        redeemedPoints: USAGE_CODE_REDEEM_POINTS,
+        ttsCostPoints: TTS_COST_POINTS,
+      });
+    } catch (error) {
+      if (error instanceof ActiveVoiceUnavailableError) {
+        return errorResponse(c, error.message, 400);
+      }
+
+      loggerError("tts_usage.redeem_failed", {
+        requestId: getRequestId(c),
+        userId: currentUser.id,
+        ...buildErrorLogContext(error),
+      });
+
+      return errorResponse(c, "兑换失败，请稍后重试", 500);
+    }
   });
 
   tts.get("/", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
-    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
 
-    if (!currentUser && !anonymousUser) {
+    if (!currentUser) {
       return c.json([]);
     }
 
     const jobs = await prisma.ttsJob.findMany({
-      where: currentUser
-        ? { userId: currentUser.id, status: TtsJobStatus.READY }
-        : { anonymousUserId: anonymousUser?.id, status: TtsJobStatus.READY },
+      where: { userId: currentUser.id, status: TtsJobStatus.READY },
       orderBy: { createdAt: "desc" },
       take: TTS_HISTORY_LIMIT,
       select: {
@@ -84,13 +164,8 @@ export function createTtsRoutes(cfg: AppConfig) {
     );
   });
 
-  class ActiveVoiceUnavailableError extends Error {}
-  class ActiveVoiceChangedError extends Error {}
-
   tts.post("/", async (c) => {
     const currentUser = await requireCurrentUser(c, cfg);
-    const anonymousUser = currentUser ? null : await resolveAnonymousUser(c, cfg, { createIfMissing: true });
-    const ownerId = currentUser?.id ?? anonymousUser?.id;
 
     const body = await c.req.json().catch(() => null);
     const parsedBody = ttsRequestSchema.safeParse(body);
@@ -99,8 +174,8 @@ export function createTtsRoutes(cfg: AppConfig) {
       return errorResponse(c, parsedBody.error.issues[0]?.message ?? "请求参数无效");
     }
 
-    if (!ownerId) {
-      return errorResponse(c, "无法建立匿名会话", 500);
+    if (!currentUser) {
+      return errorResponse(c, "请先登录后使用积分生成", 401);
     }
 
     let job;
@@ -109,23 +184,12 @@ export function createTtsRoutes(cfg: AppConfig) {
       job = await prisma.$transaction(
         async (tx) => {
           const scene = parsedBody.data.profileKind === "SCENE" ? getTtsScene(parsedBody.data.sceneKey) : null;
-          const activeVoiceEnrollmentId = currentUser
-            ? parsedBody.data.profileKind === "PURE"
-              ? (
-                  await tx.user.findUnique({
-                    where: { id: currentUser.id },
-                    select: { activePureVoiceEnrollmentId: true },
-                  })
-                )?.activePureVoiceEnrollmentId
-              : (
-                  await tx.user.findUnique({
-                    where: { id: currentUser.id },
-                    select: { activeSceneVoiceEnrollmentId: true },
-                  })
-                )?.activeSceneVoiceEnrollmentId
-            : parsedBody.data.profileKind === "PURE"
-              ? anonymousUser?.activePureVoiceEnrollmentId
-              : anonymousUser?.activeSceneVoiceEnrollmentId;
+          const voiceProfile = await tx.voiceProfile.findFirst({
+            where: { userId: currentUser.id },
+          });
+          const activeVoiceEnrollmentId = parsedBody.data.profileKind === "PURE"
+            ? voiceProfile?.activePureVoiceEnrollmentId
+            : voiceProfile?.activeSceneVoiceEnrollmentId;
 
           if (parsedBody.data.profileKind === "SCENE" && !scene) {
             throw new ActiveVoiceUnavailableError("请选择有效场景后再合成");
@@ -147,95 +211,37 @@ export function createTtsRoutes(cfg: AppConfig) {
             throw new ActiveVoiceChangedError("所选声纹类型已发生变化，请重试");
           }
 
-          if (currentUser && activeVoice.userId !== currentUser.id) {
+          if (activeVoice.userId !== currentUser.id) {
             throw new ActiveVoiceChangedError("当前 active voice 已发生变化，请重试");
           }
 
-          if (anonymousUser && activeVoice.anonymousUserId !== anonymousUser.id) {
-            throw new ActiveVoiceChangedError("当前 active voice 已发生变化，请重试");
+          const charged = await tx.user.updateMany({
+            where: {
+              id: currentUser.id,
+              pointsBalance: { gte: TTS_COST_POINTS },
+            },
+            data: { pointsBalance: { decrement: TTS_COST_POINTS } },
+          });
+
+          if (charged.count !== 1) {
+            throw new ActiveVoiceUnavailableError("积分余额不足，请先兑换积分");
           }
 
-          const now = new Date();
-          const usageCodeInput = parsedBody.data.usageCode;
-          const isGeneralUsageCode = Boolean(
-            currentUser && usageCodeInput && usageCodeInput === generalUsageCode,
-          );
-          let accessKind: "FREE_TRIAL" | "GENERAL_USAGE_CODE" | "USAGE_CODE" = "FREE_TRIAL";
-          let usageCodeId: string | null = null;
-          let usageCodeValue: string | null = null;
-
-          if (!currentUser) {
-            if (usageCodeInput) {
-              throw new ActiveVoiceUnavailableError("匿名用户不能使用使用码，请先登录");
-            }
-
-            if (parsedBody.data.text.length > FREE_TTS_TEXT_LIMIT) {
-              throw new ActiveVoiceUnavailableError(`文本长度不能超过 ${FREE_TTS_TEXT_LIMIT} 字`);
-            }
-
-            const freshAnonymousUser = await tx.anonymousUser.findUnique({
-              where: { id: anonymousUser?.id ?? "" },
-              select: { freeTtsUsedAt: true },
-            });
-
-            if (freshAnonymousUser?.freeTtsUsedAt) {
-              throw new ActiveVoiceUnavailableError("免费次数已用完，请先登录后继续使用");
-            }
-
-            await tx.anonymousUser.update({
-              where: { id: anonymousUser!.id },
-              data: { freeTtsUsedAt: now },
-            });
-          } else if (isGeneralUsageCode) {
-            accessKind = "GENERAL_USAGE_CODE";
-            usageCodeValue = usageCodeInput ?? null;
-          } else if (usageCodeInput) {
-            const usageCode = await tx.usageCode.findFirst({
-              where: {
-                code: usageCodeInput,
-                module: USAGE_CODE_MODULE,
-                consumedAt: null,
-              },
-              select: { id: true },
-            });
-
-            if (!usageCode) {
-              throw new ActiveVoiceUnavailableError("使用码无效或已使用");
-            }
-
-            accessKind = "USAGE_CODE";
-            usageCodeId = usageCode.id;
-            usageCodeValue = usageCodeInput ?? null;
-          } else {
-            if (parsedBody.data.text.length > FREE_TTS_TEXT_LIMIT) {
-              throw new ActiveVoiceUnavailableError(`文本长度不能超过 ${FREE_TTS_TEXT_LIMIT} 字`);
-            }
-
-            const freshUser = await tx.user.findUnique({
-              where: { id: currentUser.id },
-              select: { freeTtsUsedAt: true },
-            });
-
-            if (freshUser?.freeTtsUsedAt) {
-              throw new ActiveVoiceUnavailableError("免费次数已用完，请输入使用码继续生成");
-            }
-
-            await tx.user.update({
-              where: { id: currentUser.id },
-              data: { freeTtsUsedAt: now },
-            });
-          }
+          const chargedUser = await tx.user.findUniqueOrThrow({
+            where: { id: currentUser.id },
+            select: { pointsBalance: true },
+          });
 
           const createdJob = await tx.ttsJob.create({
             data: {
-              userId: currentUser?.id,
-              anonymousUserId: anonymousUser?.id,
+              userId: currentUser.id,
+              anonymousUserId: null,
               voiceEnrollmentId: activeVoice.id,
               profileKind: parsedBody.data.profileKind,
-              accessKind,
-              usageCodeId,
-              usageCodeModule: accessKind === "FREE_TRIAL" ? null : USAGE_CODE_MODULE,
-              usageCodeValue,
+              accessKind: "POINTS",
+              usageCodeId: null,
+              usageCodeModule: null,
+              usageCodeValue: null,
               voiceIdSnapshot: activeVoice.voiceId,
               text: parsedBody.data.text,
               sceneKey: parsedBody.data.sceneKey,
@@ -244,23 +250,15 @@ export function createTtsRoutes(cfg: AppConfig) {
             },
           });
 
-          if (usageCodeId) {
-            const consumed = await tx.usageCode.updateMany({
-              where: {
-                id: usageCodeId,
-                consumedAt: null,
-              },
-              data: {
-                consumedAt: now,
-                consumedByUserId: currentUser!.id,
-                consumedTtsJobId: createdJob.id,
-              },
-            });
-
-            if (consumed.count !== 1) {
-              throw new ActiveVoiceUnavailableError("使用码无效或已使用");
-            }
-          }
+          await tx.pointTransaction.create({
+            data: {
+              userId: currentUser.id,
+              type: "TTS_CONSUME",
+              delta: -TTS_COST_POINTS,
+              balanceAfter: chargedUser.pointsBalance,
+              ttsJobId: createdJob.id,
+            },
+          });
 
           return createdJob;
         },
@@ -277,7 +275,7 @@ export function createTtsRoutes(cfg: AppConfig) {
 
       loggerError("tts_job.create_failed", {
         requestId: getRequestId(c),
-        ownerId,
+        ownerId: currentUser.id,
         profileKind: parsedBody.data.profileKind,
         sceneKey: parsedBody.data.sceneKey,
         textLength: parsedBody.data.text.length,
@@ -300,7 +298,7 @@ export function createTtsRoutes(cfg: AppConfig) {
           });
 
       const extension = qwenResult.extension || "wav";
-      const outputObjectKey = `tts/${ownerId}/${Date.now()}-${randomUUID()}.${extension}`;
+      const outputObjectKey = `tts/${currentUser.id}/${Date.now()}-${randomUUID()}.${extension}`;
       const storedOutput = await uploadBuffer(cfg.minio, {
         objectKey: outputObjectKey,
         buffer: qwenResult.audioBuffer,
@@ -335,7 +333,7 @@ export function createTtsRoutes(cfg: AppConfig) {
       loggerError("tts_job.qwen_failed", {
         requestId: getRequestId(c),
         jobId: job.id,
-        ownerId,
+        ownerId: currentUser.id,
         profileKind: job.profileKind,
         sceneKey: job.sceneKey,
         synthesizeMode: job.profileKind === "PURE" ? "pure-direct-tts" : "scene-instruction-tts",
@@ -344,12 +342,30 @@ export function createTtsRoutes(cfg: AppConfig) {
         ...buildErrorLogContext(error),
       });
 
-      await prisma.ttsJob.update({
-        where: { id: job.id },
-        data: {
-          status: TtsJobStatus.FAILED,
-          errorMessage: message,
-        },
+      await prisma.$transaction(async (tx) => {
+        await tx.ttsJob.update({
+          where: { id: job.id },
+          data: {
+            status: TtsJobStatus.FAILED,
+            errorMessage: message,
+          },
+        });
+
+        const refundedUser = await tx.user.update({
+          where: { id: currentUser.id },
+          data: { pointsBalance: { increment: TTS_COST_POINTS } },
+          select: { pointsBalance: true },
+        });
+
+        await tx.pointTransaction.create({
+          data: {
+            userId: currentUser.id,
+            type: "TTS_CONSUME",
+            delta: TTS_COST_POINTS,
+            balanceAfter: refundedUser.pointsBalance,
+            ttsJobId: job.id,
+          },
+        });
       });
 
       return errorResponse(c, message, 502, {

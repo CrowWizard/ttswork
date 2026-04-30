@@ -51,31 +51,27 @@ export function createVoiceProfileRoutes(cfg: AppConfig) {
       });
     }
 
-    const voiceOwner = currentUser
-      ? await prisma.user.findUnique({
-          where: { id: currentUser.id },
-          select: {
-            activePureVoiceEnrollmentId: true,
-            activeSceneVoiceEnrollmentId: true,
-          },
-        })
-      : anonymousUser;
+    const voiceProfileRow = await prisma.voiceProfile.findFirst({
+      where: currentUser
+        ? { userId: currentUser.id }
+        : { anonymousUserId: anonymousUser?.id },
+    });
 
-    const activePureEnrollment = voiceOwner?.activePureVoiceEnrollmentId
+    const activePureEnrollment = voiceProfileRow?.activePureVoiceEnrollmentId
       ? await prisma.voiceEnrollment.findUnique({
-          where: { id: voiceOwner.activePureVoiceEnrollmentId },
+          where: { id: voiceProfileRow.activePureVoiceEnrollmentId },
         })
       : null;
-    const activeSceneEnrollment = voiceOwner?.activeSceneVoiceEnrollmentId
+    const activeSceneEnrollment = voiceProfileRow?.activeSceneVoiceEnrollmentId
       ? await prisma.voiceEnrollment.findUnique({
-          where: { id: voiceOwner.activeSceneVoiceEnrollmentId },
+          where: { id: voiceProfileRow.activeSceneVoiceEnrollmentId },
         })
       : null;
 
     const recordings = await prisma.voiceRecording.findMany({
       where: currentUser ? { userId: currentUser.id } : { anonymousUserId: anonymousUser?.id },
       orderBy: { createdAt: "desc" },
-      take: 3,
+      take: 1,
     });
 
     const recentEnrollments = await prisma.voiceEnrollment.findMany({
