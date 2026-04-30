@@ -132,8 +132,18 @@ function parseStatus(value: string | null) {
     : undefined;
 }
 
-function toJsonArray(value: Prisma.JsonValue | null) {
-  return Array.isArray(value) ? value : [];
+function toJsonArray(value: string | null) {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function toVideoSourceDto(source: SelectedVideoSource) {

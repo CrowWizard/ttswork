@@ -1,5 +1,7 @@
 # operations-log
 
+- 2026-04-30 17:47 +08:00：按要求将 `prisma/migrate-voice-profile.sql` 改为 PostgreSQL 9.x 兼容写法：用 `DO $$ ... IF NOT EXISTS ... $$` 替代 `CREATE TABLE/INDEX IF NOT EXISTS`，用 `UPDATE + INSERT WHERE NOT EXISTS` 替代 `ON CONFLICT`，并移除破坏性清理示例中的 `DROP COLUMN IF EXISTS`。验证：静态检索确认已无 `ON CONFLICT`、`EXCLUDED`、`DROP COLUMN IF EXISTS`；本机 `psql` 客户端版本为 13.23，但默认连接因缺少 `root` 数据库角色无法执行真实数据库回归。
+
 - 2026-04-30 17:40 +08:00：按用户要求隐藏工作区模块导航：移除首页与 B 站视频分析页的 `WorkspaceModuleNav` 渲染；将首页 header 已登录态中的手机号、个人设置、退出登录收口为账号菜单；积分展示移到“兑换”按钮之后，改为 SVG 图标加余额数字，不再使用圆角 label 容器。验证：`npm run lint`、`npm run typecheck` 通过；首次 `npm run build` 命中 Next 增量构建产物缺失 `/_not-found`，清理 `.next` 后重跑通过，仍保留项目既有 `output: export` 与 rewrites 组合警告。
 
 - 2026-04-30 17:28 +08:00：按 `/impeccable layout` 恢复首页工作区模块导航：在 `VoiceStudio` 主内容容器顶部接入现有 `WorkspaceModuleNav`，使首页与 `/video-analysis` 使用一致的模块切换模型；主容器改为 `flex flex-col gap-6` 并移除任务区额外 `mt-8`，让导航、标题卡与任务区节奏与视频分析页一致。验证通过：`npm run lint`、`npm run typecheck`、`npm run build`；build 仍保留项目既有 `output: export` 与 rewrites 组合警告。
