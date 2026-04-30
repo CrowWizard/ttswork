@@ -38,6 +38,10 @@ auth:
   sessionTtlSeconds: 2592000
   sessionTouchIntervalSeconds: 300
 
+admin:
+  username: ""
+  password: ""
+
 sms:
   mockMode: true
   accessKeyId: ""

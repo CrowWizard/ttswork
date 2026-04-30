@@ -70,6 +70,28 @@
 | `VERIFIED` | 短信验证码已验证通过 |
 | `FAILED` | 短信发送或验证失败 |
 
+### `AnalyticsEventName`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `PAGE_VIEW` | 页面访问 |
+| `REGISTER_SUCCESS` | 注册成功 |
+| `VOICEPRINT_CREATED` | 建声成功 |
+| `VOICE_GENERATED` | 语音生成成功 |
+| `INVITE_CODE_USED` | 使用码被消费 |
+
+### `AnalyticsChannel`
+
+| 枚举值 | 中文说明 |
+| --- | --- |
+| `DIRECT` | 直接访问 |
+| `REFERRAL` | 外部引荐 |
+| `ORGANIC` | 自然搜索/自然来源 |
+| `SOCIAL` | 社交媒体 |
+| `PAID` | 付费投放 |
+| `EMAIL` | 邮件渠道 |
+| `UNKNOWN` | 无法判定 |
+
 ## 表结构说明
 
 ### `User`
@@ -239,6 +261,67 @@
 
 索引：`userId + createdAt`、`anonymousUserId + createdAt`、`voiceEnrollmentId`、`accessKind + createdAt`、`usageCodeModule + createdAt`
 
+### `AnalyticsVisitor`
+
+用于保存前端埋点的匿名访客主体，并弱绑定到注册用户，作为 UV 去重基础。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | 访客记录主键 ID |
+| `anonymousId` | `String` | 唯一 | 前端传入的匿名访客标识 |
+| `userId` | `String?` | 可空 | 若该匿名访客已与注册用户建立弱绑定，则记录用户 ID |
+| `firstSeenAt` | `DateTime` | 默认 `now()` | 首次被采集到的时间 |
+| `lastSeenAt` | `DateTime` | 默认 `now()` | 最近一次被采集到的时间 |
+| `firstReferrer` | `String?` | 可空 | 首次访问时的 referrer |
+| `firstUtmSource` | `String?` | 可空 | 首次访问时的 `utm_source` |
+| `firstUtmMedium` | `String?` | 可空 | 首次访问时的 `utm_medium` |
+| `firstUtmCampaign` | `String?` | 可空 | 首次访问时的 `utm_campaign` |
+| `firstLandingPage` | `String?` | 可空 | 首次落地页 URL |
+
+索引：`userId`、`firstSeenAt`、`lastSeenAt`
+
+### `AnalyticsSession`
+
+用于保存 analytics 维度的访客会话，和登录 `Session` 表完全独立。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | analytics 会话主键 ID |
+| `anonymousId` | `String` | 必填 | 会话所属匿名访客标识 |
+| `userId` | `String?` | 可空 | 若会话期间已识别到注册用户，则记录用户 ID |
+| `clientSessionId` | `String?` | 可空 | 前端透传的 `session_id`，仅用于对齐，不作为切分规则 |
+| `startedAt` | `DateTime` | 默认 `now()` | 会话开始时间 |
+| `endedAt` | `DateTime` | 默认 `now()` | 会话最近一次事件时间 |
+| `entryPage` | `String` | 必填 | 该会话首个事件对应的页面 URL |
+| `entryReferrer` | `String?` | 可空 | 该会话首个事件对应的 referrer |
+| `utmSource` | `String?` | 可空 | 当前会话归因的 `utm_source` |
+| `utmMedium` | `String?` | 可空 | 当前会话归因的 `utm_medium` |
+| `utmCampaign` | `String?` | 可空 | 当前会话归因的 `utm_campaign` |
+| `channel` | `AnalyticsChannel` | 默认 `UNKNOWN` | 当前会话的渠道归类 |
+
+索引：`anonymousId + startedAt`、`userId + startedAt`、`channel + startedAt`、`clientSessionId`
+
+### `AnalyticsEvent`
+
+用于保存每一次上报的 analytics 事件，是 PV、渠道与趋势分析的基础事实表。
+
+| 字段名 | 类型 | 约束/默认值 | 中文说明 |
+| --- | --- | --- | --- |
+| `id` | `String` | 主键，默认 `cuid()` | analytics 事件主键 ID |
+| `anonymousId` | `String` | 必填 | 事件所属匿名访客标识 |
+| `userId` | `String?` | 可空 | 若事件已识别到注册用户，则记录用户 ID |
+| `analyticsSessionId` | `String` | 必填 | 事件归属的 analytics 会话 ID |
+| `eventName` | `AnalyticsEventName` | 必填 | 事件名称 |
+| `url` | `String` | 必填 | 事件发生页面 URL |
+| `referrer` | `String?` | 可空 | 事件对应的 referrer |
+| `utmSource` | `String?` | 可空 | 事件对应的 `utm_source` |
+| `utmMedium` | `String?` | 可空 | 事件对应的 `utm_medium` |
+| `utmCampaign` | `String?` | 可空 | 事件对应的 `utm_campaign` |
+| `channel` | `AnalyticsChannel` | 默认 `UNKNOWN` | 事件对应的渠道归类 |
+| `occurredAt` | `DateTime` | 默认 `now()` | 事件发生时间 |
+
+索引：`occurredAt`、`eventName + occurredAt`、`channel + occurredAt`、`userId + occurredAt`、`anonymousId + occurredAt`
+
 ## 关系说明
 
 - `User.activePureVoiceEnrollmentId` 指向当前用户正在使用的纯粹版声纹记录 ID
@@ -250,6 +333,10 @@
 - `TtsJob.usageCodeId` 表示某次非通用一次性使用码生成消耗了哪条使用码记录
 - `TtsJob.usageCodeValue` 保存本次生成输入的使用码快照，免费生成时为空
 - `UsageCode.consumedByUserId` / `consumedTtsJobId` 用于后续后台查询消费归属
+- `AnalyticsVisitor.anonymousId` 作为 analytics 访客主键，和业务侧 `AnonymousUser.id` 不直接等同
+- `AnalyticsVisitor.userId` 用于把匿名访客弱绑定到注册用户，便于后台按 `anonymousId` 反查用户
+- `AnalyticsSession` 表示 analytics 维度的访问会话，和登录 `Session` 表完全独立
+- `AnalyticsEvent.analyticsSessionId` 表示单条埋点事件归属于哪一个 analytics 会话
 - 当前项目未使用数据库层外键，所以以上“指向”关系由应用逻辑保证，不由数据库强约束保证
 
 ## 当前已废弃字段说明

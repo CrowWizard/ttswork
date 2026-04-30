@@ -2,7 +2,7 @@
 
 ## 项目说明
 
-这是一个基于 Next.js 15、React 19、TypeScript、Tailwind CSS、Prisma、PostgreSQL 与 MinIO 的单页语音 MVP。
+这是一个基于 Next.js 15、React 19、TypeScript、Tailwind CSS、Prisma、PostgreSQL 与 MinIO 的语音 MVP。
 
 - 用户通过手机号注册登录，支持短信验证码与手机号密码两种登录方式。
 - 录音建声要求不少于 5 秒，前端会基于最终 Blob 读取真实时长，服务端再以 0.2 秒容差兜底校验。
@@ -31,15 +31,32 @@
 - `POST /api/auth/login/password`
 - `POST /api/auth/login/sms`
 - `GET /api/auth/me`
+- `POST /api/auth/password/set`
+- `POST /api/auth/password/change`
 - `POST /api/auth/logout`
+- `POST /api/analytics/collect`
 - `GET /api/voice/profile`
-- `POST /api/voice/enroll`
+- `GET /api/voice/recordings`
+- `POST /api/voice/recordings`
+- `DELETE /api/voice/recordings/[recordingId]`
+- `POST /api/voice/enrollments`
+- `GET /api/voice/enrollments/recordings/[recordingId]/audio`
 - `GET /api/voice/enrollments/[enrollmentId]/audio`
 - `POST /api/voice/enrollments/[enrollmentId]/invalidate`
 - `GET /api/tts`
+- `GET /api/tts/scenes`
 - `GET /api/tts/usage`
 - `POST /api/tts`
 - `GET /api/tts/[jobId]/download`
+- `GET /api/admin/analytics/overview`
+- `GET /api/admin/analytics/trend`
+- `GET /api/admin/analytics/channels`
+- `GET /api/admin/users`
+- `GET /api/admin/users/[id]`
+- `GET /api/admin/invite-codes`
+- `POST /api/admin/invite-codes/generate`
+- `GET /api/admin/voice-generations`
+- `GET /api/admin/voice-generations/[id]`
 
 ## 本地启动
 
@@ -93,6 +110,7 @@ cp .env.example .env
 - 使用码按模块管理。当前只有 `VOICE_TO_TEXT` 模块，后续新增模块时继续复用 `UsageCode.module` 区分。
 - 匿名用户不能使用使用码；前台只展示必要输入框，不展示使用码库存、消费记录或后台查询结果。
 - 使用码以明文存储在数据库中，便于后台查询和多次分发。
+- `/api/admin/*` 通过 Basic Auth 保护，需配置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`；未配置时后台接口会返回明确错误，避免误暴露。
 
 生成一批使用码：
 
@@ -101,8 +119,91 @@ cd api-server
 bun run usage-codes:generate -- --module VOICE_TO_TEXT --count 100 > usage-codes.txt
 ```
 
-`usage-codes.txt` 只用于运营发放，不要提交到 Git。一次性使用码库存表只保存使用码哈希、模块与消费状态。
+`usage-codes.txt` 只用于运营发放，不要提交到 Git。一次性使用码库存表保存明文使用码、模块与消费状态，便于后台查询与再次分发。
 每条 TTS 任务会通过 `TtsJob.accessKind` 标记免费生成、通用使用码生成或非通用一次性使用码生成，并在 `TtsJob.usageCodeValue` 保存本次输入的使用码快照；免费生成时该字段为空。
+
+### 3.3 analytics 与后台接口说明
+
+- `POST /api/analytics/collect` 用于采集 `anonymous_id`、`session_id`、`event_name`、`url`、`referrer` 与 UTM 信息，并写入 `AnalyticsVisitor`、`AnalyticsSession`、`AnalyticsEvent` 三张轻量表。
+- 若请求同时带有登录 Cookie，服务端会以当前登录用户 ID 回填 analytics 记录；不会信任客户端自行上报的 `user_id`。
+- 服务端会基于 `utm_medium`、`utm_source`、`referrer` 自动判定 `DIRECT`、`REFERRAL`、`ORGANIC`、`SOCIAL`、`PAID`、`EMAIL`、`UNKNOWN` 渠道，并按“30 分钟无活动或归因变化”切分 analytics session。
+- `/api/admin/analytics/*` 提供概览、按天趋势与按渠道统计。
+- `/api/admin/users/*` 提供注册用户分页查询、按 `anonymousId` 反查用户，以及建声 / 使用码 / 语音生成聚合详情。
+- `/api/admin/invite-codes/*` 直接复用 `UsageCode`，支持分页查询与单次/批量生成，返回明文 code 便于运营分发。
+- `/api/admin/voice-generations/*` 直接复用 `TtsJob`，支持时间范围、用户 ID、是否使用使用码筛选，以及单条记录详情。
+
+后台接口请求头示例：
+
+```http
+Authorization: Basic base64(ADMIN_USERNAME:ADMIN_PASSWORD)
+```
+
+`POST /api/analytics/collect` 响应示例：
+
+```json
+{
+  "success": true,
+  "visitorId": "cm9analyticsvisitor",
+  "sessionId": "cm9analyticssession",
+  "eventId": "cm9analyticsevent",
+  "channel": "DIRECT"
+}
+```
+
+`GET /api/admin/analytics/overview` 响应示例：
+
+```json
+{
+  "range": {
+    "startAt": "2026-04-01T00:00:00.000Z",
+    "endAt": "2026-04-30T23:59:59.999Z"
+  },
+  "metrics": {
+    "pv": 1280,
+    "uv": 315,
+    "sessions": 402,
+    "newUsers": 58,
+    "voiceprintUsers": 41,
+    "voiceGenerations": 226,
+    "voiceGenerationUsers": 73,
+    "inviteCodeUsers": 17
+  }
+}
+```
+
+`POST /api/admin/invite-codes/generate` 响应示例：
+
+```json
+{
+  "count": 2,
+  "items": [
+    {
+      "id": "cm9usagecode1",
+      "code": "A1b2C3",
+      "createdAt": "2026-04-29T12:00:00.000Z"
+    },
+    {
+      "id": "cm9usagecode2",
+      "code": "D4e5F6",
+      "createdAt": "2026-04-29T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+`GET /api/admin/voice-generations/:id` 响应示例：
+
+```json
+{
+  "id": "cm9ttsjob",
+  "status": "READY",
+  "profileKind": "SCENE",
+  "accessKind": "USAGE_CODE",
+  "usageCodeValue": "A1b2C3",
+  "sceneKey": "customer_service",
+  "instruction": "客服接待"
+}
+```
 
 ### 4. 生成 Prisma Client 并同步数据库
 
@@ -193,8 +294,9 @@ bun run dev
 - `SmsVerification`：短信发送与校验状态追踪
 - `VoiceRecording`：上传录音记录与 MinIO 元数据（公网地址由运行时配置拼接）
 - `VoiceEnrollment`：基于录音建立的纯粹版/场景版声纹、生成的 `voiceId`、`isInvalidated`
-- `UsageCode`：模块化一次性使用码库存，保存哈希、预览与消费归属，不保存明文码
+- `UsageCode`：模块化一次性使用码库存，保存明文 code 与消费归属
 - `TtsJob`：文本转语音任务、权益来源、使用码关联、`voiceIdSnapshot`、声纹类型/场景信息与输出音频 MinIO 元数据
+- `AnalyticsVisitor` / `AnalyticsSession` / `AnalyticsEvent`：运营后台使用的轻量 analytics 访客、会话与事件表
 
 ## 已知边界
 

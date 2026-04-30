@@ -362,6 +362,10 @@ qwen:
   pureTtsUrl: ""           # 纯粹版 TTS 接口地址
   sceneTtsUrl: ""          # 场景版 TTS 接口地址
 
+admin:
+  username: "admin"       # 运营后台 Basic Auth 用户名
+  password: "change-me"   # 运营后台 Basic Auth 密码
+
 cookie:
   secure: false            # 生产环境建议 true（需 HTTPS）
   maxAge: 31536000         # Cookie 有效期（秒），默认 1 年
@@ -400,8 +404,12 @@ cookie:
 | `QWEN_SCENE_ENROLL_URL` | qwen.sceneEnrollUrl |
 | `QWEN_PURE_TTS_URL` | qwen.pureTtsUrl |
 | `QWEN_SCENE_TTS_URL` | qwen.sceneTtsUrl |
+| `ADMIN_USERNAME` | admin.username |
+| `ADMIN_PASSWORD` | admin.password |
 | `COOKIE_SECURE` | cookie.secure |
 | `COOKIE_MAX_AGE` | cookie.maxAge |
+
+后台接口统一挂载在 `/api/admin/*`，若未配置 `ADMIN_USERNAME` / `ADMIN_PASSWORD`，接口会返回明确错误而不是匿名开放。
 
 ### 6.3 日志
 
