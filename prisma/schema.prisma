@@ -33,6 +33,13 @@ enum TtsAccessKind {
   FREE_TRIAL
   GENERAL_USAGE_CODE
   USAGE_CODE
+  POINTS
+}
+
+enum PointTransactionType {
+  REGISTER_BONUS
+  USAGE_CODE_REDEEM
+  TTS_CONSUME
 }
 
 enum UsageCodeModule {
@@ -104,27 +111,52 @@ enum AnalyticsChannel {
 }
 
 model User {
-  id                           String  @id @default(cuid())
-  phoneNumber                  String  @unique
-  passwordHash                 String?
-  phoneVerifiedAt              DateTime?
-  freeTtsUsedAt                DateTime?
+  id              String    @id @default(cuid())
+  phoneNumber     String    @unique
+  passwordHash    String?
+  phoneVerifiedAt DateTime?
+  pointsBalance   Int       @default(0)
+  freeTtsUsedAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model PointTransaction {
+  id           String               @id @default(cuid())
+  userId       String
+  type         PointTransactionType
+  delta        Int
+  balanceAfter Int
+  usageCodeId  String?
+  ttsJobId     String?
+  createdAt    DateTime             @default(now())
+
+  @@index([userId, createdAt])
+  @@index([usageCodeId])
+  @@index([ttsJobId])
+}
+
+model VoiceProfile {
+  id                           String   @id @default(cuid())
+  userId                       String?  @unique
+  anonymousUserId              String?  @unique
+  activePureVoiceEnrollmentId  String?
+  activeSceneVoiceEnrollmentId String?
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
-  activePureVoiceEnrollmentId  String?  @unique
-  activeSceneVoiceEnrollmentId String?  @unique
+
+  @@index([userId])
+  @@index([anonymousUserId])
 }
 
 model AnonymousUser {
-  id                           String   @id @default(cuid())
-  tokenHash                    String   @unique
-  expiresAt                    DateTime
-  lastSeenAt                   DateTime @default(now())
-  freeTtsUsedAt                DateTime?
-  createdAt                    DateTime @default(now())
-  updatedAt                    DateTime @updatedAt
-  activePureVoiceEnrollmentId  String?  @unique
-  activeSceneVoiceEnrollmentId String?  @unique
+  id             String    @id @default(cuid())
+  tokenHash      String    @unique
+  expiresAt      DateTime
+  lastSeenAt     DateTime  @default(now())
+  freeTtsUsedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([expiresAt])
 }
@@ -328,77 +360,4 @@ model VideoSource {
   fetchErrorMessage String?
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
-}
-
-model VideoAnalysisJob {
-  id               String                 @id @default(cuid())
-  userId           String
-  videoSourceId    String
-  status           VideoAnalysisJobStatus @default(PENDING)
-  errorMessage     String?
-  summary          String?
-  structureSections Json?
-  highlights       Json?
-  copySuggestions  Json?
-  modelName        String?
-  promptVersion    String?
-  workerId         String?
-  lockedAt         DateTime?
-  retryCount       Int                    @default(0)
-  nextRetryAt      DateTime?
-  completedAt      DateTime?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-
-  @@index([userId, createdAt])
-  @@index([videoSourceId, createdAt])
-  @@index([status, createdAt])
-}
-
-model VideoSource {
-  id                String                @id @default(cuid())
-  platform          VideoPlatform         @default(BILIBILI)
-  inputType         VideoInputType
-  inputValue        String
-  normalizedBvid    String                @unique
-  normalizedUrl     String?
-  title             String?
-  authorName        String?
-  authorMid         String?
-  coverUrl          String?
-  durationSeconds   Float?
-  publishTime       DateTime?
-  subtitleStatus    VideoSubtitleStatus   @default(PENDING)
-  transcriptStatus  VideoTranscriptStatus @default(PENDING)
-  transcriptSource  VideoTranscriptSource?
-  subtitleText      String?
-  transcriptText    String?
-  fetchErrorMessage String?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-}
-
-model VideoAnalysisJob {
-  id               String                 @id @default(cuid())
-  userId           String
-  videoSourceId    String
-  status           VideoAnalysisJobStatus @default(PENDING)
-  errorMessage     String?
-  summary          String?
-  structureSections Json?
-  highlights       Json?
-  copySuggestions  Json?
-  modelName        String?
-  promptVersion    String?
-  workerId         String?
-  lockedAt         DateTime?
-  retryCount       Int                    @default(0)
-  nextRetryAt      DateTime?
-  completedAt      DateTime?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-
-  @@index([userId, createdAt])
-  @@index([videoSourceId, createdAt])
-  @@index([status, createdAt])
 }

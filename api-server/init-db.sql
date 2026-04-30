@@ -47,7 +47,11 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TtsAccessKind') THEN
-    CREATE TYPE "TtsAccessKind" AS ENUM ('FREE_TRIAL', 'GENERAL_USAGE_CODE', 'USAGE_CODE');
+    CREATE TYPE "TtsAccessKind" AS ENUM ('FREE_TRIAL', 'GENERAL_USAGE_CODE', 'USAGE_CODE', 'POINTS');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PointTransactionType') THEN
+    CREATE TYPE "PointTransactionType" AS ENUM ('REGISTER_BONUS', 'USAGE_CODE_REDEEM', 'TTS_CONSUME');
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UsageCodeModule') THEN
@@ -87,6 +91,7 @@ END
 $$;
 
 ALTER TYPE "TtsAccessKind" ADD VALUE IF NOT EXISTS 'GENERAL_USAGE_CODE';
+ALTER TYPE "TtsAccessKind" ADD VALUE IF NOT EXISTS 'POINTS';
 
 -- 5. 创建表（无外键约束，关联关系由应用层保证）
 CREATE TABLE IF NOT EXISTS "User" (
@@ -94,6 +99,7 @@ CREATE TABLE IF NOT EXISTS "User" (
   "phoneNumber" TEXT NOT NULL,
   "passwordHash" TEXT,
   "phoneVerifiedAt" TIMESTAMP(3),
+  "pointsBalance" INTEGER NOT NULL DEFAULT 0,
   "freeTtsUsedAt" TIMESTAMP(3),
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -104,6 +110,19 @@ CREATE TABLE IF NOT EXISTS "User" (
   CONSTRAINT "User_phoneNumber_key" UNIQUE ("phoneNumber"),
   CONSTRAINT "User_activePureVoiceEnrollmentId_key" UNIQUE ("activePureVoiceEnrollmentId"),
   CONSTRAINT "User_activeSceneVoiceEnrollmentId_key" UNIQUE ("activeSceneVoiceEnrollmentId")
+);
+
+CREATE TABLE IF NOT EXISTS "PointTransaction" (
+  "id" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  "type" "PointTransactionType" NOT NULL,
+  "delta" INTEGER NOT NULL,
+  "balanceAfter" INTEGER NOT NULL,
+  "usageCodeId" TEXT,
+  "ttsJobId" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "PointTransaction_pkey" PRIMARY KEY ("id")
 );
 
 CREATE TABLE IF NOT EXISTS "AnonymousUser" (
@@ -122,6 +141,9 @@ CREATE TABLE IF NOT EXISTS "AnonymousUser" (
   CONSTRAINT "AnonymousUser_activePureVoiceEnrollmentId_key" UNIQUE ("activePureVoiceEnrollmentId"),
   CONSTRAINT "AnonymousUser_activeSceneVoiceEnrollmentId_key" UNIQUE ("activeSceneVoiceEnrollmentId")
 );
+
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "pointsBalance" INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS "Session" (
   "id" TEXT NOT NULL,
@@ -327,6 +349,15 @@ CREATE INDEX IF NOT EXISTS "UsageCode_consumedAt_idx"
 CREATE INDEX IF NOT EXISTS "UsageCode_consumedByUserId_consumedAt_idx"
   ON "UsageCode"("consumedByUserId", "consumedAt");
 
+CREATE INDEX IF NOT EXISTS "PointTransaction_userId_createdAt_idx"
+  ON "PointTransaction"("userId", "createdAt");
+
+CREATE INDEX IF NOT EXISTS "PointTransaction_usageCodeId_idx"
+  ON "PointTransaction"("usageCodeId");
+
+CREATE INDEX IF NOT EXISTS "PointTransaction_ttsJobId_idx"
+  ON "PointTransaction"("ttsJobId");
+
 CREATE INDEX IF NOT EXISTS "TtsJob_userId_createdAt_idx"
   ON "TtsJob"("userId", "createdAt");
 
@@ -380,6 +411,7 @@ CREATE INDEX IF NOT EXISTS "AnalyticsEvent_anonymousId_occurredAt_idx"
 
 -- 7. 表和类型所有权授予 voice_mvp 用户
 ALTER TABLE "User" OWNER TO voice_mvp;
+ALTER TABLE "PointTransaction" OWNER TO voice_mvp;
 ALTER TABLE "AnonymousUser" OWNER TO voice_mvp;
 ALTER TABLE "Session" OWNER TO voice_mvp;
 ALTER TABLE "SmsVerification" OWNER TO voice_mvp;
@@ -395,6 +427,7 @@ ALTER TYPE "RecordingStatus" OWNER TO voice_mvp;
 ALTER TYPE "VoiceProfileKind" OWNER TO voice_mvp;
 ALTER TYPE "TtsJobStatus" OWNER TO voice_mvp;
 ALTER TYPE "TtsAccessKind" OWNER TO voice_mvp;
+ALTER TYPE "PointTransactionType" OWNER TO voice_mvp;
 ALTER TYPE "UsageCodeModule" OWNER TO voice_mvp;
 ALTER TYPE "SmsScene" OWNER TO voice_mvp;
 ALTER TYPE "SmsVerificationStatus" OWNER TO voice_mvp;

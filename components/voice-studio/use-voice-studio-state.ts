@@ -12,13 +12,13 @@ import type {
   TtsResult,
   TtsSceneItem,
   TtsUsageState,
-  VoiceProfileKind,
   VoiceProfileResponse,
 } from "./types";
 import { readJsonSafely, toUserFacingErrorMessage } from "./utils";
 
 export function useVoiceStudioState() {
   const recorderRef = useRef<MultiRecorder | null>(null);
+  const enrollmentPollingTimerRef = useRef<number | null>(null);
   const finalRecordDurationRef = useRef(0);
   const recordStartedAtRef = useRef<number | null>(null);
   const recordingStartingRef = useRef(false);
@@ -43,15 +43,15 @@ export function useVoiceStudioState() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceNotice, setWorkspaceNotice] = useState<StatusState | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [creatingPureVoice, setCreatingPureVoice] = useState(false);
-  const [creatingSceneVoice, setCreatingSceneVoice] = useState(false);
-  const [invalidatingVoiceId, setInvalidatingVoiceId] = useState<string | null>(null);
+  const [enrollmentPolling, setEnrollmentPolling] = useState(false);
+  const [enrollmentPollingMessage, setEnrollmentPollingMessage] = useState<string | null>(null);
   const [deletingRecordingId, setDeletingRecordingId] = useState<string | null>(null);
-  const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
+  const [, setSelectedRecordingId] = useState<string | null>(null);
   const [ttsText, setTtsText] = useState("");
-  const [usageCode, setUsageCode] = useState("");
-  const [useFreeTrial, setUseFreeTrial] = useState(false);
   const [ttsUsage, setTtsUsage] = useState<TtsUsageState | null>(null);
+  const [redeemUsageCode, setRedeemUsageCode] = useState("");
+  const [redeemingUsageCode, setRedeemingUsageCode] = useState(false);
+  const [redeemMessage, setRedeemMessage] = useState<StatusState | null>(null);
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsLoading, setTtsLoading] = useState(false);
   const [ttsResult, setTtsResult] = useState<TtsResult | null>(null);
@@ -63,13 +63,11 @@ export function useVoiceStudioState() {
   const hasSceneVoice = Boolean(profile?.activeVoices.scene?.voiceId && !profile.activeVoices.scene.isInvalidated);
   const usingSceneVoice = Boolean(selectedSceneKey);
   const canUseActiveVoiceTts = usingSceneVoice ? hasSceneVoice : hasPureVoice;
-  const hasFreeTrialRemaining = Boolean(authUser && (ttsUsage?.freeUsesRemaining ?? 0) > 0);
-  const usingUsageCode = Boolean(authUser && !useFreeTrial);
-  const usageCodeReady = !usingUsageCode || /^[0-9A-Za-z]{6}$/.test(usageCode.trim());
-  const anonymousBlocked = Boolean(ttsUsage?.requiresLoginForNextUse);
-  const ttsTextLimit = usingUsageCode ? 500 : 30;
+  const ttsTextLimit = 500;
+  const pointsBalance = ttsUsage?.pointsBalance ?? authUser?.pointsBalance ?? 0;
+  const ttsCostPoints = ttsUsage?.ttsCostPoints ?? 20;
   const canSubmitTts =
-    ttsTextLength > 0 && ttsTextLength <= ttsTextLimit && canUseActiveVoiceTts && usageCodeReady && !anonymousBlocked;
+    Boolean(authUser) && ttsTextLength > 0 && ttsTextLength <= ttsTextLimit && canUseActiveVoiceTts && pointsBalance >= ttsCostPoints;
 
   const clearWorkspaceFeedback = useCallback(() => {
     setWorkspaceError(null);
@@ -83,26 +81,16 @@ export function useVoiceStudioState() {
     setRecording(false);
     setRecordStartedAt(null);
     setUploading(false);
-    setCreatingPureVoice(false);
-    setCreatingSceneVoice(false);
-    setInvalidatingVoiceId(null);
+    setEnrollmentPolling(false);
+    setEnrollmentPollingMessage(null);
     setDeletingRecordingId(null);
     setTtsLoading(false);
     setTtsResult(null);
     setTtsHistory([]);
     setTtsUsage(null);
-    setUsageCode("");
-    setUseFreeTrial(false);
+    setRedeemUsageCode("");
+    setRedeemMessage(null);
   }, [clearWorkspaceFeedback]);
-
-  useEffect(() => {
-    if (!authUser) {
-      setUseFreeTrial(false);
-      return;
-    }
-
-    setUseFreeTrial(hasFreeTrialRemaining);
-  }, [authUser, hasFreeTrialRemaining]);
 
   const refreshTtsUsage = useCallback(async () => {
     try {
@@ -203,6 +191,89 @@ export function useVoiceStudioState() {
     }
   }, [handleUnauthorized]);
 
+  const stopEnrollmentPolling = useCallback(() => {
+    if (enrollmentPollingTimerRef.current !== null) {
+      window.clearTimeout(enrollmentPollingTimerRef.current);
+      enrollmentPollingTimerRef.current = null;
+    }
+
+    setEnrollmentPolling(false);
+    setEnrollmentPollingMessage(null);
+  }, []);
+
+  const startEnrollmentPolling = useCallback((recordingId: string) => {
+    if (enrollmentPollingTimerRef.current !== null) {
+      window.clearTimeout(enrollmentPollingTimerRef.current);
+      enrollmentPollingTimerRef.current = null;
+    }
+
+    setEnrollmentPolling(true);
+    setEnrollmentPollingMessage("正在自动生成声纹，请稍等...");
+
+    const poll = async (attempt: number) => {
+      try {
+        const response = await fetch("/api/voice/profile", {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          handleUnauthorized();
+          stopEnrollmentPolling();
+          return;
+        }
+
+        const data = (await readJsonSafely(response)) as VoiceProfileResponse & { error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "刷新声纹状态失败");
+        }
+
+        setProfile(data);
+        setSelectedRecordingId(data.recordings[0]?.id ?? null);
+
+        const relatedEnrollments = data.recentEnrollments.filter((item) => item.recordingId === recordingId);
+        const pendingEnrollments = relatedEnrollments.filter((item) => item.status === "PENDING");
+        const failedEnrollments = relatedEnrollments.filter((item) => item.status === "FAILED");
+        const readyEnrollments = relatedEnrollments.filter((item) => item.status === "READY");
+
+        if (pendingEnrollments.length === 0 && relatedEnrollments.length >= 2) {
+          stopEnrollmentPolling();
+
+          if (failedEnrollments.length > 0) {
+            const failedMessage = failedEnrollments.map((item) => item.errorMessage).find(Boolean);
+            setWorkspaceError(failedMessage ?? "部分声纹自动生成失败，请重新上传或录制语音");
+            return;
+          }
+
+          if (readyEnrollments.length >= 2) {
+            setWorkspaceNotice({ type: "success", title: "声纹已生成", text: "纯粹版和场景版声纹已自动生成，可继续输入文本生成语音。" });
+            return;
+          }
+        }
+
+        if (attempt >= 60) {
+          stopEnrollmentPolling();
+          setWorkspaceNotice({ type: "warning", title: "声纹仍在生成", text: "声纹生成时间较长，请稍后刷新页面查看结果。" });
+          return;
+        }
+
+        setEnrollmentPollingMessage(`正在自动生成声纹，请稍等...（${attempt + 1}/60）`);
+        enrollmentPollingTimerRef.current = window.setTimeout(() => void poll(attempt + 1), 2000);
+      } catch (error) {
+        if (attempt >= 60) {
+          stopEnrollmentPolling();
+          setWorkspaceError(toUserFacingErrorMessage(error, "声纹状态刷新失败，请稍后刷新页面查看结果"));
+          return;
+        }
+
+        enrollmentPollingTimerRef.current = window.setTimeout(() => void poll(attempt + 1), 2000);
+      }
+    };
+
+    void poll(1);
+  }, [handleUnauthorized, stopEnrollmentPolling]);
+
   const refreshAuth = useCallback(async () => {
     setAuthResolving(true);
 
@@ -227,8 +298,10 @@ export function useVoiceStudioState() {
         throw new Error(payload.error ?? "登录状态恢复失败");
       }
 
-      setAuthUser(payload.user);
-      setAuthPhoneNumber(payload.user.phoneNumber);
+      const nextUser = payload.user;
+      setAuthUser(nextUser);
+      setTtsUsage((current) => current ? { ...current, pointsBalance: nextUser.pointsBalance } : current);
+      setAuthPhoneNumber(nextUser.phoneNumber);
       setAuthMessage(null);
       setAuthResolving(false);
     } catch {
@@ -245,6 +318,9 @@ export function useVoiceStudioState() {
     void refreshScenes();
 
     return () => {
+      if (enrollmentPollingTimerRef.current !== null) {
+        window.clearTimeout(enrollmentPollingTimerRef.current);
+      }
       recorderRef.current?.close();
       recorderRef.current = null;
     };
@@ -374,7 +450,9 @@ export function useVoiceStudioState() {
         throw new Error(payload.error ?? "登录失败");
       }
 
-      setAuthUser(payload.user);
+      const nextUser = payload.user;
+      setAuthUser(nextUser);
+      setTtsUsage((current) => current ? { ...current, pointsBalance: nextUser.pointsBalance } : current);
       setSmsCode("");
       setDebugCode(null);
       setAuthMessage({ type: "success", title: "登录成功", text: "正在进入语音复刻工作台。" });
@@ -412,7 +490,9 @@ export function useVoiceStudioState() {
         throw new Error(payload.error ?? "登录失败");
       }
 
-      setAuthUser(payload.user);
+      const nextUser = payload.user;
+      setAuthUser(nextUser);
+      setTtsUsage((current) => current ? { ...current, pointsBalance: nextUser.pointsBalance } : current);
       setPassword("");
       setAuthMessage({ type: "success", title: "登录成功", text: "正在进入语音复刻工作台。" });
     } catch (error) {
@@ -437,7 +517,8 @@ export function useVoiceStudioState() {
       setProfile(null);
       setTtsHistory([]);
       setTtsUsage(null);
-      setUsageCode("");
+      setRedeemUsageCode("");
+      setRedeemMessage(null);
       clearWorkspaceFeedback();
       setSmsCode("");
       setPassword("");
@@ -468,18 +549,23 @@ export function useVoiceStudioState() {
         throw new Error(payload.error ?? "上传录音失败");
       }
 
-      await refreshProfile();
       setSelectedRecordingId(payload.recordingId ?? null);
-      setWorkspaceNotice({ type: "success", title: "录音上传完成", text: "录音已先保存，可继续建立纯粹版或场景版声纹。" });
+      setWorkspaceNotice({ type: "success", title: "录音上传完成", text: "录音已保存，系统正在自动生成纯粹版和场景版声纹。" });
+
+      if (payload.recordingId) {
+        startEnrollmentPolling(payload.recordingId);
+      } else {
+        await refreshProfile();
+      }
     } catch (error) {
       setWorkspaceError(toUserFacingErrorMessage(error, "上传录音失败，请稍后重试"));
     } finally {
       setUploading(false);
     }
-  }, [handleUnauthorized, refreshProfile]);
+  }, [handleUnauthorized, refreshProfile, startEnrollmentPolling]);
 
   const uploadSelectedAudioFile = useCallback(async (audioFile: File | null) => {
-    if (!audioFile || uploading || creatingPureVoice || creatingSceneVoice || Boolean(invalidatingVoiceId) || Boolean(deletingRecordingId) || recording) {
+    if (!audioFile || uploading || enrollmentPolling || Boolean(deletingRecordingId) || recording) {
       return;
     }
 
@@ -508,16 +594,14 @@ export function useVoiceStudioState() {
       setWorkspaceError(toUserFacingErrorMessage(error, "上传录音失败，请稍后重试"));
       setUploading(false);
     }
-  }, [uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, recording, clearWorkspaceFeedback, uploadRecording]);
+  }, [uploading, enrollmentPolling, deletingRecordingId, recording, clearWorkspaceFeedback, uploadRecording]);
 
   const startRecording = useCallback(async () => {
     if (
       recording ||
       recordingStartingRef.current ||
       uploading ||
-      creatingPureVoice ||
-      creatingSceneVoice ||
-      Boolean(invalidatingVoiceId) ||
+      enrollmentPolling ||
       Boolean(deletingRecordingId)
     ) {
       return;
@@ -530,9 +614,7 @@ export function useVoiceStudioState() {
     console.info("[voice enroll] recording start requested", {
       recording,
       uploading,
-      creatingPureVoice,
-      creatingSceneVoice,
-      invalidatingVoiceId,
+      enrollmentPolling,
       deletingRecordingId,
     });
 
@@ -562,7 +644,7 @@ export function useVoiceStudioState() {
       stopRecordTimer();
       setWorkspaceError(toUserFacingErrorMessage(error, "无法访问麦克风，请检查浏览器权限后重试"));
     }
-  }, [recording, uploading, creatingPureVoice, creatingSceneVoice, invalidatingVoiceId, deletingRecordingId, clearWorkspaceFeedback]);
+  }, [recording, uploading, enrollmentPolling, deletingRecordingId, clearWorkspaceFeedback]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -641,61 +723,6 @@ export function useVoiceStudioState() {
     return () => window.clearTimeout(timer);
   }, [recording, recordStartedAt, stopRecording]);
 
-  const createVoiceEnrollment = useCallback(async (profileKind: VoiceProfileKind) => {
-    if (!selectedRecordingId) {
-      setWorkspaceError("请先上传录音，再建立声纹");
-      return;
-    }
-
-    if (profileKind === "PURE") {
-      setCreatingPureVoice(true);
-    } else {
-      setCreatingSceneVoice(true);
-    }
-
-    clearWorkspaceFeedback();
-    setTtsResult(null);
-
-    try {
-      const response = await fetch("/api/voice/enrollments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          recordingId: selectedRecordingId,
-          profileKind,
-        }),
-      });
-      const payload = (await readJsonSafely(response)) as { error?: string; voiceId?: string };
-
-      if (response.status === 401 || response.status === 403) {
-        handleUnauthorized();
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "建立声纹失败");
-      }
-
-      await refreshProfile();
-      setWorkspaceNotice({
-        type: "success",
-        title: profileKind === "PURE" ? "纯粹版声纹已建立" : "场景版声纹已建立",
-        text: payload.voiceId ? `当前声纹 ID：${payload.voiceId}` : "声纹已可用于后续文本转语音。",
-      });
-    } catch (error) {
-      setWorkspaceError(toUserFacingErrorMessage(error, "建立声纹失败，请稍后重试"));
-    } finally {
-      if (profileKind === "PURE") {
-        setCreatingPureVoice(false);
-      } else {
-        setCreatingSceneVoice(false);
-      }
-    }
-  }, [selectedRecordingId, clearWorkspaceFeedback, refreshProfile, handleUnauthorized]);
-
   const deleteRecording = useCallback(async (recordingId: string) => {
     setDeletingRecordingId(recordingId);
     clearWorkspaceFeedback();
@@ -717,7 +744,8 @@ export function useVoiceStudioState() {
       }
 
       await refreshProfile();
-      setWorkspaceNotice({ type: "info", title: "录音素材已删除", text: "后续建声将只能使用当前列表中保留的最新录音素材。" });
+      setTtsResult(null);
+      setWorkspaceNotice({ type: "info", title: "录音素材已删除", text: "录音素材及对应声纹已删除或作废，请重新上传或录制后再生成语音。" });
     } catch (error) {
       setWorkspaceError(toUserFacingErrorMessage(error, "删除录音素材失败，请稍后重试"));
     } finally {
@@ -725,35 +753,54 @@ export function useVoiceStudioState() {
     }
   }, [clearWorkspaceFeedback, handleUnauthorized, refreshProfile]);
 
-  const invalidateVoice = useCallback(async (enrollmentId: string) => {
-    setInvalidatingVoiceId(enrollmentId);
-    clearWorkspaceFeedback();
-    setTtsResult(null);
+  const redeemUsageCodeForPoints = useCallback(async () => {
+    if (redeemingUsageCode) {
+      return;
+    }
+
+    const normalizedCode = redeemUsageCode.trim();
+
+    if (!/^[0-9A-Za-z]{6}$/.test(normalizedCode)) {
+      setRedeemMessage({ type: "error", text: "请输入 6 位使用码" });
+      return;
+    }
+
+    setRedeemingUsageCode(true);
+    setRedeemMessage(null);
 
     try {
-      const response = await fetch(`/api/voice/enrollments/${enrollmentId}/invalidate`, {
+      const response = await fetch("/api/tts/usage/redeem", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ usageCode: normalizedCode }),
       });
-      const payload = (await readJsonSafely(response)) as { error?: string };
+      const payload = (await readJsonSafely(response)) as {
+        error?: string;
+        pointsBalance?: number;
+        redeemedPoints?: number;
+      };
 
       if (response.status === 401 || response.status === 403) {
         handleUnauthorized();
         return;
       }
 
-      if (!response.ok) {
-        throw new Error(payload.error ?? "作废声纹失败");
+      if (!response.ok || typeof payload.pointsBalance !== "number") {
+        throw new Error(payload.error ?? "兑换失败");
       }
 
-      await refreshProfile();
-      setWorkspaceNotice({ type: "info", title: "声纹已作废", text: "如需继续使用，请重新基于录音建立新的声纹。" });
+      setRedeemUsageCode("");
+      setTtsUsage((current) => current ? { ...current, pointsBalance: payload.pointsBalance! } : current);
+      setAuthUser((current) => current ? { ...current, pointsBalance: payload.pointsBalance! } : current);
+      setRedeemMessage({ type: "success", text: `已兑换 ${payload.redeemedPoints ?? 200} 积分` });
+      void refreshTtsUsage();
     } catch (error) {
-      setWorkspaceError(toUserFacingErrorMessage(error, "作废声纹失败，请稍后重试"));
+      setRedeemMessage({ type: "error", text: toUserFacingErrorMessage(error, "兑换失败，请稍后重试") });
     } finally {
-      setInvalidatingVoiceId(null);
+      setRedeemingUsageCode(false);
     }
-  }, [clearWorkspaceFeedback, refreshProfile, handleUnauthorized]);
+  }, [handleUnauthorized, redeemUsageCode, redeemingUsageCode, refreshTtsUsage]);
 
   const submitTts = useCallback(async () => {
     if (!canUseActiveVoiceTts) {
@@ -780,7 +827,6 @@ export function useVoiceStudioState() {
           profileKind: selectedScene ? "SCENE" : "PURE",
           sceneKey: selectedScene?.key,
           instruction: selectedScene?.instruction,
-          usageCode: usingUsageCode ? usageCode.trim() : undefined,
         }),
       });
       const payload = (await readJsonSafely(response)) as TtsResult & { error?: string };
@@ -795,10 +841,10 @@ export function useVoiceStudioState() {
       }
 
       setTtsResult(payload);
-      setUsageCode("");
       setWorkspaceNotice({ type: "success", title: "语音合成完成", text: "可在右侧结果区直接播放或下载。" });
       void refreshTtsHistory();
       void refreshTtsUsage();
+      void refreshAuth();
     } catch (error) {
       setTtsError(toUserFacingErrorMessage(error, "语音合成失败，请稍后重试"));
     } finally {
@@ -810,11 +856,10 @@ export function useVoiceStudioState() {
     handleUnauthorized,
     refreshTtsHistory,
     refreshTtsUsage,
+    refreshAuth,
     scenes,
     selectedSceneKey,
     ttsText,
-    usageCode,
-    usingUsageCode,
     usingSceneVoice,
   ]);
 
@@ -855,6 +900,12 @@ export function useVoiceStudioState() {
     header: {
       authResolving,
       authUser,
+      pointsBalance,
+      redeemUsageCode,
+      redeemingUsageCode,
+      redeemMessage,
+      onRedeemUsageCodeChange: setRedeemUsageCode,
+      onRedeemUsageCode: () => void redeemUsageCodeForPoints(),
       onLogout: () => void logout(),
     },
     recordingPanel: {
@@ -863,29 +914,21 @@ export function useVoiceStudioState() {
       recording,
       recordStartedAt,
       uploading,
-      creatingPureVoice,
-      creatingSceneVoice,
-      invalidatingVoiceId,
       deletingRecordingId,
-      selectedRecordingId,
-      onSelectRecording: setSelectedRecordingId,
       onDeleteRecording: (recordingId: string) => void deleteRecording(recordingId),
       onUploadAudioFile: (file: File | null) => void uploadSelectedAudioFile(file),
       workspaceError,
       workspaceNotice,
       onRecordButtonClick: handleRecordButtonClick,
-      onCreatePureVoice: () => void createVoiceEnrollment("PURE"),
-      onCreateSceneVoice: () => void createVoiceEnrollment("SCENE"),
-      onInvalidateVoice: (enrollmentId: string) => void invalidateVoice(enrollmentId),
+      enrollmentPolling,
+      enrollmentPollingMessage,
     },
     ttsPanel: {
       isAuthenticated: Boolean(authUser),
       hasPureVoice,
       hasSceneVoice,
       canSubmitTts,
-      useFreeTrial,
       ttsText,
-      usageCode,
       ttsUsage,
       ttsLoading,
       ttsResult,
@@ -893,9 +936,7 @@ export function useVoiceStudioState() {
       ttsHistory,
       scenes,
       selectedSceneKey,
-      onUseFreeTrialChange: setUseFreeTrial,
       onTtsTextChange: setTtsText,
-      onUsageCodeChange: setUsageCode,
       onSceneChange: setSelectedSceneKey,
       onSubmitTts: () => void submitTts(),
     },

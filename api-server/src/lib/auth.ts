@@ -126,23 +126,12 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
   }
 
   await prisma.$transaction(async (tx) => {
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: {
-        freeTtsUsedAt: true,
-        activePureVoiceEnrollmentId: true,
-        activeSceneVoiceEnrollmentId: true,
-      },
-    });
-    const anonymousActivePureVoiceId = anonymousUser.activePureVoiceEnrollmentId;
-    const anonymousActiveSceneVoiceId = anonymousUser.activeSceneVoiceEnrollmentId;
-
-    if (!user?.freeTtsUsedAt && anonymousUser.freeTtsUsedAt) {
-      await tx.user.update({
-        where: { id: userId },
-        data: { freeTtsUsedAt: anonymousUser.freeTtsUsedAt },
-      });
-    }
+    const [userVoiceProfile, anonymousVoiceProfile] = await Promise.all([
+      tx.voiceProfile.findUnique({ where: { userId } }),
+      tx.voiceProfile.findUnique({ where: { anonymousUserId: anonymousUser.id } }),
+    ]);
+    const anonymousActivePureVoiceId = anonymousVoiceProfile?.activePureVoiceEnrollmentId;
+    const anonymousActiveSceneVoiceId = anonymousVoiceProfile?.activeSceneVoiceEnrollmentId;
 
     await tx.voiceRecording.updateMany({
       where: { anonymousUserId: anonymousUser.id },
@@ -168,7 +157,7 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
       },
     });
 
-    if (!user?.activePureVoiceEnrollmentId && anonymousActivePureVoiceId) {
+    if (!userVoiceProfile?.activePureVoiceEnrollmentId && anonymousActivePureVoiceId) {
       const anonymousActiveVoice = await tx.voiceEnrollment.findFirst({
         where: {
           id: anonymousActivePureVoiceId,
@@ -180,14 +169,15 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
       });
 
       if (anonymousActiveVoice?.voiceId) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { activePureVoiceEnrollmentId: anonymousActiveVoice.id },
+        await tx.voiceProfile.upsert({
+          where: { userId },
+          create: { userId, activePureVoiceEnrollmentId: anonymousActiveVoice.id },
+          update: { activePureVoiceEnrollmentId: anonymousActiveVoice.id },
         });
       }
     }
 
-    if (!user?.activeSceneVoiceEnrollmentId && anonymousActiveSceneVoiceId) {
+    if (!userVoiceProfile?.activeSceneVoiceEnrollmentId && anonymousActiveSceneVoiceId) {
       const anonymousActiveVoice = await tx.voiceEnrollment.findFirst({
         where: {
           id: anonymousActiveSceneVoiceId,
@@ -199,12 +189,15 @@ export async function migrateAnonymousDataToUser(c: Context, cfg: AppConfig, use
       });
 
       if (anonymousActiveVoice?.voiceId) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { activeSceneVoiceEnrollmentId: anonymousActiveVoice.id },
+        await tx.voiceProfile.upsert({
+          where: { userId },
+          create: { userId, activeSceneVoiceEnrollmentId: anonymousActiveVoice.id },
+          update: { activeSceneVoiceEnrollmentId: anonymousActiveVoice.id },
         });
       }
     }
+
+    await tx.voiceProfile.deleteMany({ where: { anonymousUserId: anonymousUser.id } });
 
     await tx.anonymousUser.deleteMany({ where: { id: anonymousUser.id } });
   });

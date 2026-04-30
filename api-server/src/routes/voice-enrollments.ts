@@ -16,9 +16,90 @@ function getRequestId(c: Context) {
 
 function buildVoicePrefix(profileKind: "PURE" | "SCENE") {
   const randomPart = randomUUID().replace(/-/g, "").slice(0, 6);
-
-  // 阿里云要求 prefix 不超过 10 个字符，这里为场景版使用更短前缀避免超限。
   return `${profileKind === "PURE" ? "pure" : "scn"}${randomPart}`;
+}
+
+async function processEnrollmentAsync(
+  cfg: AppConfig,
+  params: {
+    enrollmentId: string;
+    recordingId: string;
+    profileKind: "PURE" | "SCENE";
+    userId?: string | null;
+    anonymousUserId?: string | null;
+    requestId?: string;
+  },
+) {
+  try {
+    const recording = await prisma.voiceRecording.findUnique({
+      where: { id: params.recordingId },
+    });
+
+    if (!recording) {
+      throw new Error("录音记录不存在");
+    }
+
+    const result = params.profileKind === "PURE"
+      ? await enrollPureVoice(cfg.qwen, {
+          audioBuffer: await getObjectBuffer(cfg.minio, recording.objectKey),
+          mimeType: recording.inputContentType,
+        })
+      : await enrollSceneVoice(cfg.qwen, {
+          publicAudioUrl: buildPublicObjectUrl(cfg.minio, recording.objectKey),
+          prefix: buildVoicePrefix(params.profileKind),
+        });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.voiceEnrollment.update({
+        where: { id: params.enrollmentId },
+        data: {
+          status: EnrollmentStatus.READY,
+          voiceId: result.voiceId,
+          errorMessage: null,
+        },
+      });
+
+      const updateData = params.profileKind === "PURE"
+        ? { activePureVoiceEnrollmentId: params.enrollmentId }
+        : { activeSceneVoiceEnrollmentId: params.enrollmentId };
+
+      await tx.voiceProfile.upsert({
+        where: params.userId
+          ? { userId: params.userId }
+          : { anonymousUserId: params.anonymousUserId! },
+        create: {
+          ...(params.userId ? { userId: params.userId } : { anonymousUserId: params.anonymousUserId }),
+          ...updateData,
+        },
+        update: updateData,
+      });
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "建声失败";
+
+    loggerError("voice_enrollment.qwen_failed", {
+      requestId: params.requestId,
+      enrollmentId: params.enrollmentId,
+      recordingId: params.recordingId,
+      profileKind: params.profileKind,
+      ...buildErrorLogContext(error),
+    });
+
+    try {
+      await prisma.voiceEnrollment.update({
+        where: { id: params.enrollmentId },
+        data: {
+          status: EnrollmentStatus.FAILED,
+          errorMessage: message,
+        },
+      });
+    } catch (updateError) {
+      loggerError("voice_enrollment.status_update_failed", {
+        enrollmentId: params.enrollmentId,
+        ...buildErrorLogContext(updateError),
+      });
+    }
+  }
 }
 
 export function createVoiceEnrollmentRoutes(cfg: AppConfig) {
@@ -77,83 +158,20 @@ export function createVoiceEnrollmentRoutes(cfg: AppConfig) {
       return errorResponse(c, error instanceof Error ? error.message : "创建声纹任务失败", 500);
     }
 
-    try {
-      const result = parsedBody.data.profileKind === "PURE"
-        ? await enrollPureVoice(cfg.qwen, {
-            audioBuffer: await getObjectBuffer(cfg.minio, recording.objectKey),
-            mimeType: recording.inputContentType,
-          })
-        : await enrollSceneVoice(cfg.qwen, {
-            publicAudioUrl: buildPublicObjectUrl(cfg.minio, recording.objectKey),
-            prefix: buildVoicePrefix(parsedBody.data.profileKind),
-          });
+    void processEnrollmentAsync(cfg, {
+      enrollmentId: enrollment.id,
+      recordingId: recording.id,
+      profileKind: parsedBody.data.profileKind,
+      userId: currentUser?.id,
+      anonymousUserId: anonymousUser?.id,
+      requestId: getRequestId(c),
+    });
 
-      const updated = await prisma.$transaction(async (tx) => {
-        const readyEnrollment = await tx.voiceEnrollment.update({
-          where: { id: enrollment.id },
-          data: {
-            status: EnrollmentStatus.READY,
-            voiceId: result.voiceId,
-            errorMessage: null,
-          },
-        });
-
-        if (currentUser) {
-          await tx.user.update({
-            where: { id: currentUser.id },
-            data: parsedBody.data.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: readyEnrollment.id }
-              : { activeSceneVoiceEnrollmentId: readyEnrollment.id },
-          });
-        }
-
-        if (anonymousUser) {
-          await tx.anonymousUser.update({
-            where: { id: anonymousUser.id },
-            data: parsedBody.data.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: readyEnrollment.id }
-              : { activeSceneVoiceEnrollmentId: readyEnrollment.id },
-          });
-        }
-
-        return readyEnrollment;
-      });
-
-      return c.json({
-        enrollmentId: updated.id,
-        voiceId: updated.voiceId,
-        status: updated.status,
-        profileKind: updated.profileKind,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "建声失败";
-
-      loggerError("voice_enrollment.qwen_failed", {
-        requestId: getRequestId(c),
-        enrollmentId: enrollment.id,
-        recordingId: recording.id,
-        profileKind: parsedBody.data.profileKind,
-        enrollMode: parsedBody.data.profileKind === "PURE" ? "pure-direct-audio" : "scene-public-url",
-        publicAudioUrl: parsedBody.data.profileKind === "SCENE" ? buildPublicObjectUrl(cfg.minio, recording.objectKey) : undefined,
-        ...buildErrorLogContext(error),
-      });
-
-      await prisma.voiceEnrollment.update({
-        where: { id: enrollment.id },
-        data: {
-          status: EnrollmentStatus.FAILED,
-          errorMessage: message,
-        },
-      });
-
-      return errorResponse(c, message, 502, {
-        details: {
-          enrollmentId: enrollment.id,
-          recordingId: recording.id,
-          profileKind: parsedBody.data.profileKind,
-        },
-      });
-    }
+    return c.json({
+      enrollmentId: enrollment.id,
+      status: EnrollmentStatus.PENDING,
+      profileKind: enrollment.profileKind,
+    });
   });
 
   return voiceEnrollments;

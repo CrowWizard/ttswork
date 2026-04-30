@@ -27,58 +27,29 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
       return errorResponse(c, "建声记录不存在", 404);
     }
 
-    const activeVoiceEnrollmentId = currentUser
-      ? enrollment.profileKind === "PURE"
-        ? (
-            await prisma.user.findUnique({
-              where: { id: currentUser.id },
-              select: { activePureVoiceEnrollmentId: true },
-            })
-          )?.activePureVoiceEnrollmentId
-        : (
-            await prisma.user.findUnique({
-              where: { id: currentUser.id },
-              select: { activeSceneVoiceEnrollmentId: true },
-            })
-          )?.activeSceneVoiceEnrollmentId
-      : enrollment.profileKind === "PURE"
-        ? anonymousUser?.activePureVoiceEnrollmentId
-        : anonymousUser?.activeSceneVoiceEnrollmentId;
+    const voiceProfileRow = await prisma.voiceProfile.findFirst({
+      where: currentUser
+        ? { userId: currentUser.id }
+        : { anonymousUserId: anonymousUser?.id },
+    });
+
+    const activeVoiceEnrollmentId = enrollment.profileKind === "PURE"
+      ? voiceProfileRow?.activePureVoiceEnrollmentId
+      : voiceProfileRow?.activeSceneVoiceEnrollmentId;
 
     if (activeVoiceEnrollmentId !== enrollment.id) {
       return errorResponse(c, "当前仅允许作废正在启用的声纹", 409);
     }
 
     if (enrollment.isInvalidated) {
-      if (currentUser) {
-        await prisma.user.updateMany({
-          where: {
-            id: currentUser.id,
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: enrollment.id }
-              : { activeSceneVoiceEnrollmentId: enrollment.id }),
-          },
-          data: {
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: null }
-              : { activeSceneVoiceEnrollmentId: null }),
-          },
-        });
-      }
+      const clearData = enrollment.profileKind === "PURE"
+        ? { activePureVoiceEnrollmentId: null }
+        : { activeSceneVoiceEnrollmentId: null };
 
-      if (anonymousUser) {
-        await prisma.anonymousUser.updateMany({
-          where: {
-            id: anonymousUser.id,
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: enrollment.id }
-              : { activeSceneVoiceEnrollmentId: enrollment.id }),
-          },
-          data: {
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: null }
-              : { activeSceneVoiceEnrollmentId: null }),
-          },
+      if (voiceProfileRow) {
+        await prisma.voiceProfile.update({
+          where: { id: voiceProfileRow.id },
+          data: clearData,
         });
       }
 
@@ -99,35 +70,14 @@ export function createEnrollmentInvalidateRoutes(cfg: AppConfig) {
         data: { isInvalidated: true },
       });
 
-      if (currentUser) {
-        await tx.user.updateMany({
-          where: {
-            id: currentUser.id,
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: enrollment.id }
-              : { activeSceneVoiceEnrollmentId: enrollment.id }),
-          },
-          data: {
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: null }
-              : { activeSceneVoiceEnrollmentId: null }),
-          },
-        });
-      }
+      const clearData = enrollment.profileKind === "PURE"
+        ? { activePureVoiceEnrollmentId: null }
+        : { activeSceneVoiceEnrollmentId: null };
 
-      if (anonymousUser) {
-        await tx.anonymousUser.updateMany({
-          where: {
-            id: anonymousUser.id,
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: enrollment.id }
-              : { activeSceneVoiceEnrollmentId: enrollment.id }),
-          },
-          data: {
-            ...(enrollment.profileKind === "PURE"
-              ? { activePureVoiceEnrollmentId: null }
-              : { activeSceneVoiceEnrollmentId: null }),
-          },
+      if (voiceProfileRow) {
+        await tx.voiceProfile.update({
+          where: { id: voiceProfileRow.id },
+          data: clearData,
         });
       }
 

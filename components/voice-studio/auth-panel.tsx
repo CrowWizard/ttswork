@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { KeyboardEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { StatusMessage } from "@/components/ui/status-message";
 import type { AuthPanelProps } from "./types";
 
@@ -21,6 +21,17 @@ export function AuthPanel({
   onSubmitSmsLogin,
   onSubmitPasswordLogin,
 }: AuthPanelProps) {
+  const handleAuthSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (authMode === "sms") {
+      onSubmitSmsLogin?.();
+      return;
+    }
+
+    onSubmitPasswordLogin?.();
+  };
+
   const handleAuthModeKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     let nextMode = authMode;
 
@@ -47,7 +58,7 @@ export function AuthPanel({
 
   return (
     <section className="mx-auto w-full max-w-md">
-      <div className="space-y-6">
+      <form className="space-y-6" onSubmit={handleAuthSubmit}>
         {/* Tab切换 */}
         <div
           className="flex rounded-xl border border-border-subtle bg-surface-muted p-1"
@@ -61,7 +72,7 @@ export function AuthPanel({
             aria-selected={authMode === "sms"}
             aria-controls="auth-mode-sms-panel"
             tabIndex={authMode === "sms" ? 0 : -1}
-            className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
+            className={`flex min-h-11 flex-1 items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
               authMode === "sms"
                 ? "bg-surface-selected text-text-primary shadow-sm"
                 : "text-text-muted hover:text-text-secondary"
@@ -78,7 +89,7 @@ export function AuthPanel({
             aria-selected={authMode === "password"}
             aria-controls="auth-mode-password-panel"
             tabIndex={authMode === "password" ? 0 : -1}
-            className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
+            className={`flex min-h-11 flex-1 items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
               authMode === "password"
                 ? "bg-surface-selected text-text-primary shadow-sm"
                 : "text-text-muted hover:text-text-secondary"
@@ -96,7 +107,7 @@ export function AuthPanel({
             手机号
           </label>
           <div className="relative mt-2">
-            <svg className="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="input-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
             </svg>
             <input
@@ -126,7 +137,7 @@ export function AuthPanel({
               验证码
             </label>
             <div className="relative mt-2 flex w-full items-stretch">
-              <svg className="input-icon !top-1/2 !-translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="input-icon !top-1/2 !-translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
               <input
@@ -138,6 +149,7 @@ export function AuthPanel({
                 autoComplete="one-time-code"
                 required
                 aria-required="true"
+                disabled={authMode !== "sms"}
               />
               <button
                 type="button"
@@ -150,9 +162,8 @@ export function AuthPanel({
             </div>
           </div>
           <button
-            type="button"
+            type="submit"
             className="app-button-primary mt-3 h-14 w-full"
-            onClick={onSubmitSmsLogin}
             disabled={authSubmitting}
           >
             {authSubmitting ? "登录中..." : "登录"}
@@ -172,7 +183,7 @@ export function AuthPanel({
               密码
             </label>
             <div className="relative mt-2">
-              <svg className="input-icon !top-1/2 !-translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="input-icon !top-1/2 !-translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
               <input
@@ -185,13 +196,13 @@ export function AuthPanel({
                 autoComplete="current-password"
                 required
                 aria-required="true"
+                disabled={authMode !== "password"}
               />
             </div>
           </div>
           <button
-            type="button"
+            type="submit"
             className="app-button-primary mt-3 h-14 w-full"
-            onClick={onSubmitPasswordLogin}
             disabled={authSubmitting}
           >
             {authSubmitting ? "登录中..." : "登录"}
@@ -208,7 +219,7 @@ export function AuthPanel({
         {/* 状态消息 */}
         {authMessage ? <StatusMessage message={authMessage.text} type={authMessage.type} title={authMessage.title} /> : null}
         {debugCode ? <StatusMessage message={`调试验证码：${debugCode}`} type="warning" title="Mock 短信模式" /> : null}
-      </div>
+      </form>
     </section>
   );
 }

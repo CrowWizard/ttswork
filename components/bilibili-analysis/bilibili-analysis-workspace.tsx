@@ -1,5 +1,3 @@
-import { WorkspaceModuleNav } from "@/components/workspace-module-nav";
-
 const RESULT_SECTIONS = [
   {
     title: "视频基础信息",
@@ -27,8 +25,6 @@ export function BilibiliAnalysisWorkspace() {
   return (
     <main className="flex min-h-screen w-full min-w-0 flex-col items-center px-4 py-12 sm:px-6">
       <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-6">
-        <WorkspaceModuleNav />
-
         <section className="app-card p-6 sm:p-8">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">B站视频分析</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-text-muted sm:text-base">

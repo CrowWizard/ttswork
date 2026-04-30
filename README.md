@@ -104,16 +104,14 @@ cp .env.example .env
   - `SMS_LOGIN_SCHEME_NAME`
 - `SMS_TEMPLATE_PARAM` 默认按 `{"code":"##code##","min":"5"}` 组织，若你的模板变量名不同，需要同步调整该配置。
 
-### 3.2 TTS 使用码配置
+### 3.2 TTS 积分与使用码配置
 
-- 文本转语音免费生成单次最多 30 字。
-- 匿名用户和登录用户各只有一次免费生成机会；匿名免费机会用完后必须先登录。
-- 同一匿名 Cookie 会话登录后，已使用的匿名免费机会会迁移到注册账号，避免重复领取免费机会。
-- 注册用户免费机会用完后，后续生成必须输入 6 位使用码。
-- 默认通用使用码为 `123456`，可通过 `USAGE_CODE_GENERAL_CODE` 或 `config.yaml` 的 `usageCode.generalCode` 修改；注册用户可输入该码继续生成。
+- 文本转语音要求登录后使用积分生成，新注册或短信登录自动创建用户赠送 100 积分。
+- 每次文本转语音消耗 20 积分；外部 TTS 合成失败时会返还本次扣减积分并记录流水。
+- 一次性使用码通过顶部 header 兑换积分，每个使用码兑换 200 积分。
 - 使用码按模块管理。当前只有 `VOICE_TO_TEXT` 模块，后续新增模块时继续复用 `UsageCode.module` 区分。
-- 匿名用户不能使用使用码；前台只展示必要输入框，不展示使用码库存、消费记录或后台查询结果。
-- 使用码以明文存储在数据库中，便于后台查询和多次分发。
+- 匿名用户不能生成 TTS，也不能兑换使用码；前台只展示积分余额与兑换入口，不展示使用码库存或后台查询结果。
+- 使用码以明文存储在数据库中，便于后台查询和运营分发；`PointTransaction` 记录注册送分、兑换和 TTS 消费流水。
 - `/api/admin/*` 通过 Basic Auth 保护，需配置 `ADMIN_USERNAME`、`ADMIN_PASSWORD`；未配置时后台接口会返回明确错误，避免误暴露。
 
 生成一批使用码：
@@ -124,7 +122,7 @@ bun run usage-codes:generate -- --module VOICE_TO_TEXT --count 100 > usage-codes
 ```
 
 `usage-codes.txt` 只用于运营发放，不要提交到 Git。一次性使用码库存表保存明文使用码、模块与消费状态，便于后台查询与再次分发。
-每条 TTS 任务会通过 `TtsJob.accessKind` 标记免费生成、通用使用码生成或非通用一次性使用码生成，并在 `TtsJob.usageCodeValue` 保存本次输入的使用码快照；免费生成时该字段为空。
+每条新 TTS 任务会通过 `TtsJob.accessKind = POINTS` 标记积分生成，并通过 `PointTransaction.ttsJobId` 追踪扣减或失败返还流水。
 
 ### 3.3 analytics 与后台接口说明
 
@@ -329,7 +327,8 @@ bun run dev
 - `VideoSource`：按 `normalizedBvid` 复用的视频基础信息、字幕状态与转写缓存
 - `VideoAnalysisJob`：单次视频分析任务状态、结构化结果、worker 锁信息与完成时间
 - `UsageCode`：模块化一次性使用码库存，保存明文 code 与消费归属
-- `TtsJob`：文本转语音任务、权益来源、使用码关联、`voiceIdSnapshot`、声纹类型/场景信息与输出音频 MinIO 元数据
+- `PointTransaction`：用户积分赠送、使用码兑换、TTS 消费与失败返还流水
+- `TtsJob`：文本转语音任务、权益来源、`voiceIdSnapshot`、声纹类型/场景信息与输出音频 MinIO 元数据
 - `AnalyticsVisitor` / `AnalyticsSession` / `AnalyticsEvent`：运营后台使用的轻量 analytics 访客、会话与事件表
 
 ## 已知边界

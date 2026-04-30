@@ -6,7 +6,7 @@ import { TtsPanel } from "./voice-studio/tts-panel";
 import { useVoiceStudioState } from "./voice-studio/use-voice-studio-state";
 import { WorkspaceHeader } from "./voice-studio/workspace-header";
 import { AuthPanel } from "./voice-studio/auth-panel";
-import { WorkspaceModuleNav } from "./workspace-module-nav";
+import { UserHeader } from "./voice-studio/user-header";
 
 export function VoiceStudio() {
   const studio = useVoiceStudioState();
@@ -91,9 +91,10 @@ export function VoiceStudio() {
   }, [showLoginModal]);
 
   return (
-    <main className="flex min-h-screen w-full min-w-0 flex-col items-center justify-center overflow-x-hidden px-4 py-12 sm:px-6">
+    <main className="flex min-h-screen w-full min-w-0 flex-col overflow-x-hidden">
+      <UserHeader {...studio.header} />
       {showLoginModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6" onClick={() => setShowLoginModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/50 px-4 py-6" onClick={() => setShowLoginModal(false)}>
           <div
             ref={dialogRef}
             className="app-card w-full max-w-md p-6 shadow-2xl sm:p-8"
@@ -105,14 +106,14 @@ export function VoiceStudio() {
           >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h2 id={dialogTitleId} className="text-xl font-semibold">登录后使用使用码继续生成</h2>
+                <h2 id={dialogTitleId} className="text-xl font-semibold">登录后使用积分生成语音</h2>
                 <p id={dialogDescriptionId} className="mt-2 text-sm leading-6 text-text-muted">
-                  匿名用户和注册用户各可免费生成 1 次，免费生成单次最多 30 字。匿名免费次数用完后需先登录；注册用户免费次数用完后需输入 6 位使用码。
+                  登录后获赠 100 积分；每次生成消耗 20 积分，余额不足时可在顶部输入使用码兑换。
                 </p>
               </div>
               <button
                 type="button"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border-subtle text-text-muted transition hover:bg-surface-muted hover:text-text-primary"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border-subtle text-text-muted transition hover:bg-surface-muted hover:text-text-primary"
                 onClick={() => setShowLoginModal(false)}
                 aria-label="关闭登录弹窗"
               >
@@ -128,18 +129,15 @@ export function VoiceStudio() {
                 studio.authPanel.onSubmitPasswordLogin();
               }}
             />
-            <button type="button" className="mt-5 w-full text-center text-sm text-text-muted underline-offset-4 transition hover:text-text-primary hover:underline" onClick={() => setShowLoginModal(false)}>
+            <button type="button" className="mt-5 flex min-h-11 w-full items-center justify-center text-center text-sm text-text-muted underline-offset-4 transition hover:text-text-primary hover:underline" onClick={() => setShowLoginModal(false)}>
               取消
             </button>
           </div>
         </div>
       )}
-      <div className="mx-auto w-full min-w-0 max-w-5xl">
-        <div className="mb-6">
-          <WorkspaceModuleNav />
-        </div>
-        <WorkspaceHeader {...studio.header} />
-        <section className="mt-8 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
+        <WorkspaceHeader />
+        <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
           <RecordingPanel {...studio.recordingPanel} />
           <TtsPanel {...studio.ttsPanel} />
         </section>

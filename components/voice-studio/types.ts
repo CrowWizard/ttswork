@@ -52,7 +52,7 @@ export type TtsResult = {
   instruction?: string | null;
 };
 
-export type TtsAccessKind = "FREE_TRIAL" | "GENERAL_USAGE_CODE" | "USAGE_CODE";
+export type TtsAccessKind = "FREE_TRIAL" | "GENERAL_USAGE_CODE" | "USAGE_CODE" | "POINTS";
 
 export type TtsHistoryItem = {
   jobId: string;
@@ -74,11 +74,9 @@ export type TtsSceneItem = {
 
 export type TtsUsageState = {
   isAuthenticated: boolean;
-  freeTtsUsedAt: string | null;
-  freeUsesRemaining: number;
-  requiresLoginForNextUse: boolean;
-  requiresUsageCode: boolean;
-  usageCodeModule: "VOICE_TO_TEXT" | null;
+  pointsBalance: number;
+  ttsCostPoints: number;
+  usageCodeRedeemPoints: number;
 };
 
 export type AuthUser = {
@@ -86,6 +84,7 @@ export type AuthUser = {
   phoneNumber: string;
   hasPassword: boolean;
   phoneVerifiedAt: string | null;
+  pointsBalance: number;
   createdAt: string;
 };
 
@@ -118,11 +117,19 @@ export type AuthPanelProps = {
   onSubmitPasswordLogin?: () => void;
 };
 
-export type WorkspaceHeaderProps = {
+export type UserHeaderProps = {
   authResolving: boolean;
   authUser: AuthUser | null;
+  pointsBalance: number;
+  redeemUsageCode: string;
+  redeemingUsageCode: boolean;
+  redeemMessage: StatusState | null;
+  onRedeemUsageCodeChange: (value: string) => void;
+  onRedeemUsageCode: () => void;
   onLogout: () => void;
 };
+
+export type WorkspaceHeaderProps = object;
 
 export type RecordingPanelProps = {
   loadingProfile: boolean;
@@ -130,20 +137,14 @@ export type RecordingPanelProps = {
   recording: boolean;
   recordStartedAt: number | null;
   uploading: boolean;
-  creatingPureVoice: boolean;
-  creatingSceneVoice: boolean;
-  invalidatingVoiceId: string | null;
   deletingRecordingId: string | null;
-  selectedRecordingId: string | null;
-  onSelectRecording: (recordingId: string) => void;
   onDeleteRecording: (recordingId: string) => void;
   onUploadAudioFile: (file: File | null) => void;
   workspaceError: string | null;
   workspaceNotice: StatusState | null;
   onRecordButtonClick: () => void;
-  onCreatePureVoice: () => void;
-  onCreateSceneVoice: () => void;
-  onInvalidateVoice: (enrollmentId: string) => void;
+  enrollmentPolling: boolean;
+  enrollmentPollingMessage: string | null;
 };
 
 export type TtsPanelProps = {
@@ -151,9 +152,7 @@ export type TtsPanelProps = {
   hasPureVoice: boolean;
   hasSceneVoice: boolean;
   canSubmitTts: boolean;
-  useFreeTrial: boolean;
   ttsText: string;
-  usageCode: string;
   ttsUsage: TtsUsageState | null;
   ttsLoading: boolean;
   ttsResult: TtsResult | null;
@@ -161,9 +160,7 @@ export type TtsPanelProps = {
   ttsHistory: TtsHistoryItem[];
   scenes: TtsSceneItem[];
   selectedSceneKey: string;
-  onUseFreeTrialChange: (value: boolean) => void;
   onTtsTextChange: (value: string) => void;
-  onUsageCodeChange: (value: string) => void;
   onSceneChange: (value: string) => void;
   onSubmitTts: () => void;
 };
