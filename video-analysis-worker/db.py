@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
-from psycopg.types.json import Json
 
 
 UNSET = object()
@@ -145,9 +145,9 @@ class Database:
         params = {
             "job_id": job_id,
             "summary": summary,
-            "structure_sections": Json(structure_sections),
-            "highlights": Json(highlights),
-            "copy_suggestions": Json(copy_suggestions),
+            "structure_sections": json.dumps(structure_sections, ensure_ascii=False),
+            "highlights": json.dumps(highlights, ensure_ascii=False),
+            "copy_suggestions": json.dumps(copy_suggestions, ensure_ascii=False),
             "model_name": model_name,
             "prompt_version": prompt_version,
         }

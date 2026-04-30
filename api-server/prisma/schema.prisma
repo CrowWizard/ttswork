@@ -369,9 +369,9 @@ model VideoAnalysisJob {
   status           VideoAnalysisJobStatus @default(PENDING)
   errorMessage     String?
   summary          String?
-  structureSections Json?
-  highlights       Json?
-  copySuggestions  Json?
+  structureSections String?
+  highlights       String?
+  copySuggestions  String?
   modelName        String?
   promptVersion    String?
   workerId         String?
