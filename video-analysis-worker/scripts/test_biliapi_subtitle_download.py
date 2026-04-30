@@ -30,9 +30,20 @@ async def main() -> None:
             "https://api.bilibili.com/x/web-interface/view",
             params={"bvid": args.bvid},
         )
+        aid = view.get("aid")
         pages = view.get("pages") or []
         if not pages:
             raise RuntimeError("视频缺少分 P 信息，无法获取 cid")
+        if not aid:
+            raise RuntimeError("视频缺少 aid，无法请求 player/wbi/v2 字幕接口")
+
+        print(f"视频 aid: {aid}, bvid: {args.bvid}, 标题: {view.get('title', 'N/A')}")
+        print("分 P 列表:")
+        for item in pages:
+            print(
+                f"  page={item.get('page')}, cid={item.get('cid')}, "
+                f"duration={item.get('duration')}, part={item.get('part', 'N/A')}"
+            )
 
         if args.page < 1 or args.page > len(pages):
             raise RuntimeError(f"分 P 序号超出范围，当前视频共有 {len(pages)} 个分 P")
@@ -41,16 +52,19 @@ async def main() -> None:
         cid = int(page_info["cid"])
         print(f"使用分 P: {args.page}, cid: {cid}, 标题: {page_info.get('part', 'N/A')}")
 
+        player_params = {"aid": aid, "cid": cid}
+        print(f"player/wbi/v2 请求参数: {player_params}")
         player = await client.request_json(
-            "https://api.bilibili.com/x/player/v2",
-            params={"bvid": args.bvid, "cid": cid, "web_location": 1315873},
+            "https://api.bilibili.com/x/player/wbi/v2",
+            params=player_params,
+            headers={"Referer": f"https://www.bilibili.com/video/{args.bvid}/?p={args.page}"},
         )
 
         # 检查字幕接口返回的 cid 是否一致
         if player.get("subtitle", {}).get("cid") and int(player["subtitle"]["cid"]) != cid:
             print(f"警告：字幕接口返回的 cid={player['subtitle']['cid']} 与当前分 P cid={cid} 不一致，可能字幕不匹配")
         track = choose_subtitle_track(player, args.language)
-        # 尝试多种字段名
+        # wbi/v2 的字幕下载地址来自 subtitle_url，其他字段仅保留为兼容兜底。
         subtitle_url = track.get("subtitle_url") or track.get("url") or track.get("subtitleUrl")
         if not subtitle_url or not str(subtitle_url).strip():
             raise RuntimeError(f"字幕轨道 URL 为空或无效，可用字段: {list(track.keys())}")
@@ -61,6 +75,7 @@ async def main() -> None:
             raise RuntimeError(f"字幕下载失败 status={response.status}")
 
         subtitle_payload = response.json()
+        print_subtitle_preview(subtitle_payload)
         json_path = output_dir / f"{args.bvid}_p{args.page}.subtitle.json"
         text_path = output_dir / f"{args.bvid}_p{args.page}.subtitle.txt"
         json_path.write_text(json.dumps(subtitle_payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -86,8 +101,8 @@ async def ensure_login(client: PatchrightClient, timeout_seconds: int) -> None:
 
 
 def extract_subtitle_url(track: dict[str, Any]) -> str:
-    # 优先使用 url，其次 subtitle_url
-    url = track.get("url") or track.get("subtitle_url")
+    # 优先使用 wbi/v2 返回的 subtitle_url，避免误取其他接口的兼容字段。
+    url = track.get("subtitle_url") or track.get("url") or track.get("subtitleUrl")
     if not url or not str(url).strip():
         raise RuntimeError(f"字幕轨道 URL 为空或无效，可用字段: {list(track.keys())}")
     url = str(url)
@@ -106,8 +121,11 @@ def choose_subtitle_track(player: dict[str, Any], language: str | None) -> dict[
     for i, track in enumerate(tracks):
         try:
             url = extract_subtitle_url(track)
-            print(f"轨道 {i}: lan={track.get('lan')}, lan_doc={track.get('lan_doc')}, "
-                  f"subtitle_url={track.get('subtitle_url')}, url={track.get('url')} -> 有效 URL: {url[:50]}...")
+            print(
+                f"轨道 {i}: id={track.get('id')}, oid={track.get('oid')}, type={track.get('type')}, "
+                f"lan={track.get('lan')}, lan_doc={track.get('lan_doc')}, ai_type={track.get('ai_type')}, "
+                f"subtitle_url={track.get('subtitle_url')}, url={track.get('url')} -> 有效 URL: {url[:80]}..."
+            )
             valid_tracks.append((i, track, url))
         except RuntimeError as e:
             print(f"轨道 {i}: lan={track.get('lan')}, lan_doc={track.get('lan_doc')} -> 无效: {e}")
@@ -140,6 +158,21 @@ def extract_subtitle_text(payload: dict[str, Any]) -> str:
         if content:
             lines.append(content)
     return "\n".join(lines).strip() + "\n"
+
+
+def print_subtitle_preview(payload: dict[str, Any]) -> None:
+    body = payload.get("body")
+    if not isinstance(body, list):
+        print("字幕预览: body 不是列表，无法预览")
+        return
+
+    print(f"字幕条数: {len(body)}")
+    for index, item in enumerate(body[:5]):
+        if not isinstance(item, dict):
+            print(f"  {index + 1}. 非字典字幕项: {item}")
+            continue
+        content = " ".join(str(item.get("content") or "").strip().split())
+        print(f"  {index + 1}. {item.get('from')} -> {item.get('to')}: {content}")
 
 
 def absolute_url(value: Any) -> str:

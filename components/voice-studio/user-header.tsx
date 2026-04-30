@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppHeader } from "@/components/app-header";
 import type { UserHeaderProps } from "./types";
 
 export function UserHeader({
@@ -13,13 +14,7 @@ export function UserHeader({
   onLogout,
 }: UserHeaderProps) {
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border-subtle bg-surface shadow-panel">
-      <div className="mx-auto flex min-h-14 max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold text-text-primary">语音复刻工作台</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
+    <AppHeader>
           {authResolving ? (
             <span className="text-sm text-text-muted">加载中...</span>
           ) : authUser ? (
@@ -106,8 +101,6 @@ export function UserHeader({
               </button>
             </>
           )}
-        </div>
-      </div>
-    </header>
+    </AppHeader>
   );
 }

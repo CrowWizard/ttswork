@@ -64,11 +64,14 @@ class BiliApi:
             params={"bvid": bvid},
         )
         pages = view_payload.get("pages") or []
+        aid = _optional_int(view_payload.get("aid"))
         cid = int(pages[0]["cid"]) if pages else 0
+        if not aid:
+            raise BiliApiError("B站视频缺少 aid，无法获取字幕信息")
         if cid <= 0:
             raise BiliApiError("B站视频缺少可分析分P信息")
 
-        subtitle_tracks = await self._fetch_subtitle_tracks(bvid, cid)
+        subtitle_tracks = await self._fetch_subtitle_tracks(bvid, aid, cid)
         owner = view_payload.get("owner") or {}
         pubdate = view_payload.get("pubdate")
         publish_time = None
@@ -112,17 +115,18 @@ class BiliApi:
             raise BiliApiError("B站音频地址解析失败")
         return audio_url
 
-    async def _fetch_subtitle_tracks(self, bvid: str, cid: int) -> list[SubtitleTrack]:
+    async def _fetch_subtitle_tracks(self, bvid: str, aid: int, cid: int) -> list[SubtitleTrack]:
         payload = await self._client.request_json(
-            "https://api.bilibili.com/x/player/v2",
-            params={"bvid": bvid, "cid": cid, "web_location": 1315873},
+            "https://api.bilibili.com/x/player/wbi/v2",
+            params={"aid": aid, "cid": cid},
+            headers={"Referer": f"https://www.bilibili.com/video/{bvid}/"},
         )
         subtitle_info = payload.get("subtitle") or {}
         raw_tracks = subtitle_info.get("subtitles") or subtitle_info.get("list") or []
         tracks: list[SubtitleTrack] = []
         for item in raw_tracks:
-            # 优先使用 url，其次 subtitle_url
-            raw = item.get("url") or item.get("subtitle_url")
+            # wbi/v2 的字幕下载地址来自 subtitle_url，其他字段仅作为兼容兜底。
+            raw = item.get("subtitle_url") or item.get("url") or item.get("subtitleUrl")
             url = _absolute_url(raw)
             if not url:
                 continue
@@ -154,5 +158,14 @@ def _optional_float(value: Any) -> float | None:
         return None
     try:
         return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
     except (TypeError, ValueError):
         return None

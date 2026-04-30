@@ -7,13 +7,13 @@ from config import WorkerConfig
 from lib.biliapi import BiliApi
 
 
-@dataclass(slots=True)
+@dataclass
 class SubtitleTrack:
     url: str
     language: str | None
 
 
-@dataclass(slots=True)
+@dataclass
 class VideoSnapshot:
     bvid: str
     cid: int

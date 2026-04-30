@@ -19,7 +19,7 @@ video-analysis-worker/
 1. 创建虚拟环境并安装依赖
 
 ```bash
-python3 -m venv .venv
+python3.9 -m venv .venv
 . .venv/bin/activate
 pip install -r video-analysis-worker/requirements.txt
 patchright install chromium
@@ -34,7 +34,7 @@ patchright install chromium
 3. 启动 worker
 
 ```bash
-python3 video-analysis-worker/worker.py
+python video-analysis-worker/worker.py
 ```
 
 ## 配置约定
@@ -57,8 +57,9 @@ Worker 新增配置：
 - `VIDEO_ANALYSIS_WORKER_ID`
 - `VIDEO_ANALYSIS_POLL_INTERVAL_SECONDS`
 - `VIDEO_ANALYSIS_HTTP_TIMEOUT_SECONDS`
-- `VIDEO_ANALYSIS_ASR_URL`
-- `VIDEO_ANALYSIS_ASR_MODEL`
+- `DASHSCOPE_API_KEY`
+- `DASHSCOPE_ASR_MODEL`
+- `DASHSCOPE_ASR_TIMEOUT`
 - `VIDEO_ANALYSIS_LLM_URL`
 - `VIDEO_ANALYSIS_LLM_MODEL`
 - `BILIBILI_COOKIE`
@@ -69,7 +70,7 @@ Worker 新增配置：
 Worker 内置 `lib/biliapi`，基于 Patchright 启动 Chromium 持久化上下文访问 B 站接口，不再直接使用普通 `requests` 抓取视频元信息与 DASH 音频地址。
 
 - 视频信息：调用 `https://api.bilibili.com/x/web-interface/view` 获取标题、UP 主、封面、时长与分 P `cid`
-- 字幕列表：调用 `https://api.bilibili.com/x/player/v2` 读取 `subtitle.subtitles`，字幕正文仍由 `SubtitleService` 下载 `subtitle_url` JSON 后解析 `body[].content`
+- 字幕列表：调用 `https://api.bilibili.com/x/player/wbi/v2` 读取 `subtitle.subtitles`，字幕正文仍由 `SubtitleService` 下载 `subtitle_url` JSON 后解析 `body[].content`
 - 音频地址：调用 `https://api.bilibili.com/x/player/playurl`，使用 `fnval=4048` 获取 DASH 结构，并选择 `dash.audio` 中带宽最高的音频流
 - 登录：保留 `QrCodeLogin`，二维码登录成功后 Cookie 写入 Patchright 持久化 profile，后续请求自动携带；也兼容 `BILIBILI_COOKIE` 作为部署兜底
 - 不包含弹幕与 WebSocket 功能
@@ -91,7 +92,7 @@ python3 video-analysis-worker/scripts/test_biliapi_subtitle_download.py \
 1. 打开 `https://passport.bilibili.com/login`
 2. 等待检测到 `SESSDATA` Cookie
 3. 调用 `x/web-interface/view` 获取 `cid`
-4. 调用 `x/player/v2` 获取字幕轨道
+4. 调用 `x/player/wbi/v2` 获取字幕轨道
 5. 下载第一条匹配语言的字幕 JSON，并额外导出纯文本
 
 登录态会保存在 Patchright profile 中，后续重复测试通常无需再次扫码。

@@ -1,0 +1,43 @@
+Collecting dashscope
+  Downloading dashscope-1.25.17-py3-none-any.whl (1.3 MB)
+Collecting websocket-client
+  Downloading websocket_client-1.9.0-py3-none-any.whl (82 kB)
+Collecting certifi
+  Downloading certifi-2026.4.22-py3-none-any.whl (135 kB)
+Collecting aiohttp
+  Downloading aiohttp-3.13.5-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.7 MB)
+Collecting cryptography
+  Downloading cryptography-47.0.0-cp38-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+Requirement already satisfied: requests in /usr/lib/python3.9/site-packages (from dashscope) (2.25.1)
+Collecting aiohappyeyeballs>=2.5.0
+  Downloading aiohappyeyeballs-2.6.1-py3-none-any.whl (15 kB)
+Collecting multidict<7.0,>=4.5
+  Downloading multidict-6.7.1-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (240 kB)
+Collecting yarl<2.0,>=1.17.0
+  Downloading yarl-1.22.0-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (346 kB)
+Collecting propcache>=0.2.0
+  Downloading propcache-0.4.1-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (197 kB)
+Collecting frozenlist>=1.1.1
+  Downloading frozenlist-1.8.0-cp39-cp39-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (219 kB)
+Collecting aiosignal>=1.4.0
+  Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+Collecting async-timeout<6.0,>=4.0
+  Downloading async_timeout-5.0.1-py3-none-any.whl (6.2 kB)
+Collecting attrs>=17.3.0
+  Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+Collecting typing-extensions>=4.13.2
+  Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+Collecting cffi>=2.0.0
+  Downloading cffi-2.0.0-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (216 kB)
+Requirement already satisfied: chardet<5,>=3.0.2 in /usr/lib/python3.9/site-packages (from requests->dashscope) (4.0.0)
+Requirement already satisfied: urllib3<1.27,>=1.21.1 in /usr/lib/python3.9/site-packages (from requests->dashscope) (1.26.5)
+Requirement already satisfied: idna<3,>=2.5 in /usr/lib/python3.9/site-packages (from requests->dashscope) (2.10)
+Collecting pycparser
+  Downloading pycparser-2.23-py3-none-any.whl (118 kB)
+Installing collected packages: typing-extensions, pycparser, propcache, multidict, frozenlist, yarl, cffi, attrs, async-timeout, aiosignal, aiohappyeyeballs, websocket-client, cryptography, certifi, aiohttp, dashscope
+  Attempting uninstall: typing-extensions
+    Found existing installation: typing-extensions 4.12.2
+    Uninstalling typing-extensions-4.12.2:
+      Successfully uninstalled typing-extensions-4.12.2
+Successfully installed aiohappyeyeballs-2.6.1 aiohttp-3.13.5 aiosignal-1.4.0 async-timeout-5.0.1 attrs-26.1.0 certifi-2026.4.22 cffi-2.0.0 cryptography-47.0.0 dashscope-1.25.17 frozenlist-1.8.0 multidict-6.7.1 propcache-0.4.1 pycparser-2.23 typing-extensions-4.15.0 websocket-client-1.9.0 yarl-1.22.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv

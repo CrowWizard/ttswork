@@ -12,7 +12,7 @@ from psycopg.rows import dict_row
 UNSET = object()
 
 
-@dataclass(slots=True)
+@dataclass
 class ClaimedJob:
     id: str
     user_id: str
@@ -21,7 +21,7 @@ class ClaimedJob:
     created_at: datetime
 
 
-@dataclass(slots=True)
+@dataclass
 class VideoSourceRecord:
     id: str
     normalized_bvid: str
@@ -46,21 +46,19 @@ class Database:
 
     def claim_pending_job(self, worker_id: str) -> ClaimedJob | None:
         query = """
-        WITH candidate AS (
-            SELECT id
-            FROM "VideoAnalysisJob"
-            WHERE status = 'PENDING'
-            ORDER BY "createdAt" ASC
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-        )
         UPDATE "VideoAnalysisJob" AS job
         SET status = 'PROCESSING',
             "workerId" = %(worker_id)s,
             "lockedAt" = NOW(),
             "updatedAt" = NOW()
-        FROM candidate
-        WHERE job.id = candidate.id
+        WHERE job.id = (
+            SELECT candidate.id
+            FROM "VideoAnalysisJob" AS candidate
+            WHERE candidate.status = 'PENDING'
+            ORDER BY candidate."createdAt" ASC
+            LIMIT 1
+        )
+          AND job.status = 'PENDING'
         RETURNING job.id, job."userId", job."videoSourceId", job.status, job."createdAt"
         """
 

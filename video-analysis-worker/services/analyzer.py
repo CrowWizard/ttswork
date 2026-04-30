@@ -7,39 +7,58 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from config import WorkerConfig
 
 PROMPT_VERSION = "video-analysis-v1"
 
 
+class AnalysisResultFormatError(RuntimeError):
+    pass
+
+
 class StructureSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str = Field(min_length=1)
     startSeconds: int = Field(ge=0)
     endSeconds: int = Field(ge=0)
     summary: str = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "StructureSection":
+        if self.endSeconds < self.startSeconds:
+            raise ValueError("endSeconds must be greater than or equal to startSeconds")
+
+        return self
+
 
 class Highlight(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     quote: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     timestampSeconds: int = Field(ge=0)
 
 
 class CopySuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: str = Field(min_length=1)
     content: str = Field(min_length=1)
 
 
 class AnalysisResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     summary: str = Field(min_length=1)
     structureSections: list[StructureSection]
     highlights: list[Highlight]
     copySuggestions: list[CopySuggestion]
 
 
-@dataclass(slots=True)
+@dataclass
 class AnalysisOutput:
     summary: str
     structure_sections: list[dict[str, Any]]
@@ -88,10 +107,11 @@ class AnalyzerService:
     def _build_prompt(self, title: str, transcript_text: str, duration_seconds: float | None) -> str:
         duration_text = str(int(duration_seconds)) if duration_seconds else "unknown"
         transcript = transcript_text.strip()
-        return self._prompt_template.format(
-            title=title,
-            duration_seconds=duration_text,
-            transcript_text=transcript[:20000],
+        return (
+            self._prompt_template
+            .replace("{title}", title)
+            .replace("{duration_seconds}", duration_text)
+            .replace("{transcript_text}", transcript[:20000])
         )
 
     def _parse_result(self, raw_text: str) -> AnalysisResult:
@@ -99,12 +119,12 @@ class AnalyzerService:
         try:
             payload = json.loads(normalized_text)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("分析结果格式不合法") from exc
+            raise AnalysisResultFormatError("分析结果格式不合法") from exc
 
         try:
             return AnalysisResult.model_validate(payload)
         except ValidationError as exc:
-            raise RuntimeError("分析结果格式不合法") from exc
+            raise AnalysisResultFormatError("分析结果格式不合法") from exc
 
     def _build_mock_result(
         self,

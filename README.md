@@ -225,10 +225,11 @@ npm run dev
 ### 6. 启动视频分析 worker
 
 ```bash
-python3 -m venv .venv
+python3.9 -m venv .venv
 . .venv/bin/activate
 pip install -r video-analysis-worker/requirements.txt
-python3 video-analysis-worker/worker.py
+patchright install chromium
+python video-analysis-worker/worker.py
 ```
 
 视频分析 worker 会：
@@ -242,6 +243,8 @@ python3 video-analysis-worker/worker.py
 - 有字幕视频仍会访问 B 站接口并走真实字幕链路
 - 无字幕视频会先访问 B 站接口获取音频地址，再走 mock ASR 文本
 - 结构化分析走 mock JSON 输出，不依赖外部 LLM
+
+真实无字幕 ASR 使用 DashScope 文件转写，需配置 `DASHSCOPE_API_KEY`；可通过 `DASHSCOPE_ASR_MODEL` 和 `DASHSCOPE_ASR_TIMEOUT` 调整模型与等待时长。
 
 ## Qwen 集成说明
 

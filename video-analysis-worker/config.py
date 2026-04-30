@@ -14,7 +14,7 @@ WORKER_DIR = Path(__file__).resolve().parent
 ROOT_DIR = WORKER_DIR.parent
 
 
-@dataclass(slots=True)
+@dataclass
 class WorkerConfig:
     db_host: str
     db_port: int
@@ -31,8 +31,9 @@ class WorkerConfig:
     qwen_api_key: str
     bilibili_cookie: str
     bilibili_user_agent: str
-    video_analysis_asr_url: str
-    video_analysis_asr_model: str
+    dashscope_api_key: str
+    dashscope_asr_model: str
+    dashscope_asr_timeout: int
     video_analysis_llm_url: str
     video_analysis_llm_model: str
     loaded_env_paths: list[str]
@@ -101,7 +102,7 @@ def load_config() -> WorkerConfig:
             f"video-analysis-worker-{hostname}",
         ),
         poll_interval_seconds=_env_int("VIDEO_ANALYSIS_POLL_INTERVAL_SECONDS", env_values, 5),
-        http_timeout_seconds=_env_int("VIDEO_ANALYSIS_HTTP_TIMEOUT_SECONDS", env_values, 20),
+        http_timeout_seconds=_env_int("VIDEO_ANALYSIS_HTTP_TIMEOUT_SECONDS", env_values, 600),
         qwen_mock_mode=_env_bool("QWEN_MOCK_MODE", env_values, qwen_config.get("mockMode", True)),
         qwen_api_key=_env_string("QWEN_API_KEY", env_values, qwen_config.get("apiKey", "")),
         bilibili_cookie=_env_string("BILIBILI_COOKIE", env_values, ""),
@@ -113,8 +114,9 @@ def load_config() -> WorkerConfig:
                 "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
             ),
         ),
-        video_analysis_asr_url=_env_string("VIDEO_ANALYSIS_ASR_URL", env_values, ""),
-        video_analysis_asr_model=_env_string("VIDEO_ANALYSIS_ASR_MODEL", env_values, ""),
+        dashscope_api_key=_env_string("DASHSCOPE_API_KEY", env_values, qwen_config.get("apiKey", "")),
+        dashscope_asr_model=_env_string("DASHSCOPE_ASR_MODEL", env_values, "qwen3-asr-flash-filetrans"),
+        dashscope_asr_timeout=_env_int("DASHSCOPE_ASR_TIMEOUT", env_values, 300),
         video_analysis_llm_url=_env_string(
             "VIDEO_ANALYSIS_LLM_URL",
             env_values,
