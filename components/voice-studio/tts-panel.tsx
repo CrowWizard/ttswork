@@ -139,6 +139,9 @@ export function TtsPanel({
           <p className="mt-1 leading-6">
             可直接输入 6 位使用码继续生成；如仍有试用机会，试用单次最多 30 个字。
           </p>
+          {hasFreeTrialRemaining ? (
+            <p className="mt-2 text-xs leading-5 text-text-secondary">勾选试用后，不用输入使用码。</p>
+          ) : null}
           <label className="mt-4 block font-medium text-text-secondary" htmlFor="usage-code">
             使用码
             <input

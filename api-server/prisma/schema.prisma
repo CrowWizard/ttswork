@@ -50,6 +50,24 @@ enum SmsVerificationStatus {
   FAILED
 }
 
+enum AnalyticsEventName {
+  PAGE_VIEW
+  REGISTER_SUCCESS
+  VOICEPRINT_CREATED
+  VOICE_GENERATED
+  INVITE_CODE_USED
+}
+
+enum AnalyticsChannel {
+  DIRECT
+  REFERRAL
+  ORGANIC
+  SOCIAL
+  PAID
+  EMAIL
+  UNKNOWN
+}
+
 model User {
   id                           String  @id @default(cuid())
   phoneNumber                  String  @unique
@@ -194,4 +212,62 @@ model TtsJob {
   @@index([voiceEnrollmentId])
   @@index([accessKind, createdAt])
   @@index([usageCodeModule, createdAt])
+}
+
+model AnalyticsVisitor {
+  id               String   @id @default(cuid())
+  anonymousId      String   @unique
+  userId           String?
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+  firstReferrer    String?
+  firstUtmSource   String?
+  firstUtmMedium   String?
+  firstUtmCampaign String?
+  firstLandingPage String?
+
+  @@index([userId])
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+model AnalyticsSession {
+  id              String           @id @default(cuid())
+  anonymousId     String
+  userId          String?
+  clientSessionId String?
+  startedAt       DateTime         @default(now())
+  endedAt         DateTime         @default(now())
+  entryPage       String
+  entryReferrer   String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  channel         AnalyticsChannel @default(UNKNOWN)
+
+  @@index([anonymousId, startedAt])
+  @@index([userId, startedAt])
+  @@index([channel, startedAt])
+  @@index([clientSessionId])
+}
+
+model AnalyticsEvent {
+  id                 String             @id @default(cuid())
+  anonymousId        String
+  userId             String?
+  analyticsSessionId String
+  eventName          AnalyticsEventName
+  url                String
+  referrer           String?
+  utmSource          String?
+  utmMedium          String?
+  utmCampaign        String?
+  channel            AnalyticsChannel   @default(UNKNOWN)
+  occurredAt         DateTime           @default(now())
+
+  @@index([occurredAt])
+  @@index([eventName, occurredAt])
+  @@index([channel, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([anonymousId, occurredAt])
 }
