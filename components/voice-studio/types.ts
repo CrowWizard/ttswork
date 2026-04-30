@@ -1,5 +1,3 @@
-import type { KeyboardEvent, MouseEvent, TouchEvent } from "react";
-
 export type VoiceProfileResponse = {
   userId: string | null;
   anonymousUserId?: string | null;
@@ -49,9 +47,12 @@ export type TtsResult = {
   downloadUrl: string;
   voiceIdSnapshot: string;
   profileKind: VoiceProfileKind;
+  accessKind: TtsAccessKind;
   sceneKey?: string | null;
   instruction?: string | null;
 };
+
+export type TtsAccessKind = "FREE_TRIAL" | "GENERAL_USAGE_CODE" | "USAGE_CODE";
 
 export type TtsHistoryItem = {
   jobId: string;
@@ -60,6 +61,7 @@ export type TtsHistoryItem = {
   createdAt: string;
   downloadUrl: string;
   profileKind: VoiceProfileKind;
+  accessKind: TtsAccessKind;
   sceneKey?: string | null;
   instruction?: string | null;
 };
@@ -68,6 +70,15 @@ export type TtsSceneItem = {
   key: string;
   label: string;
   instruction: string;
+};
+
+export type TtsUsageState = {
+  isAuthenticated: boolean;
+  freeTtsUsedAt: string | null;
+  freeUsesRemaining: number;
+  requiresLoginForNextUse: boolean;
+  requiresUsageCode: boolean;
+  usageCodeModule: "VOICE_TO_TEXT" | null;
 };
 
 export type AuthUser = {
@@ -126,15 +137,10 @@ export type RecordingPanelProps = {
   selectedRecordingId: string | null;
   onSelectRecording: (recordingId: string) => void;
   onDeleteRecording: (recordingId: string) => void;
+  onUploadAudioFile: (file: File | null) => void;
   workspaceError: string | null;
   workspaceNotice: StatusState | null;
-  onRecordButtonMouseDown: (event: MouseEvent<HTMLButtonElement>) => void;
-  onRecordButtonMouseUp: () => void;
-  onRecordButtonMouseLeave: () => void;
-  onRecordButtonTouchStart: (event: TouchEvent<HTMLButtonElement>) => void;
-  onRecordButtonTouchEnd: (event: TouchEvent<HTMLButtonElement>) => void;
-  onRecordButtonTouchCancel: (event: TouchEvent<HTMLButtonElement>) => void;
-  onRecordButtonKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
+  onRecordButtonClick: () => void;
   onCreatePureVoice: () => void;
   onCreateSceneVoice: () => void;
   onInvalidateVoice: (enrollmentId: string) => void;
@@ -145,13 +151,19 @@ export type TtsPanelProps = {
   hasPureVoice: boolean;
   hasSceneVoice: boolean;
   canSubmitTts: boolean;
+  useFreeTrial: boolean;
   ttsText: string;
+  usageCode: string;
+  ttsUsage: TtsUsageState | null;
   ttsLoading: boolean;
   ttsResult: TtsResult | null;
+  ttsError: string | null;
   ttsHistory: TtsHistoryItem[];
   scenes: TtsSceneItem[];
   selectedSceneKey: string;
+  onUseFreeTrialChange: (value: boolean) => void;
   onTtsTextChange: (value: string) => void;
+  onUsageCodeChange: (value: string) => void;
   onSceneChange: (value: string) => void;
   onSubmitTts: () => void;
 };

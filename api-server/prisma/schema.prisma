@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.1.x", "rhel-openssl-1.0.x"]
 }
 
 datasource db {
@@ -26,6 +27,16 @@ enum TtsJobStatus {
   PENDING
   READY
   FAILED
+}
+
+enum TtsAccessKind {
+  FREE_TRIAL
+  GENERAL_USAGE_CODE
+  USAGE_CODE
+}
+
+enum UsageCodeModule {
+  VOICE_TO_TEXT
 }
 
 enum VideoPlatform {
@@ -74,11 +85,30 @@ enum SmsVerificationStatus {
   FAILED
 }
 
+enum AnalyticsEventName {
+  PAGE_VIEW
+  REGISTER_SUCCESS
+  VOICEPRINT_CREATED
+  VOICE_GENERATED
+  INVITE_CODE_USED
+}
+
+enum AnalyticsChannel {
+  DIRECT
+  REFERRAL
+  ORGANIC
+  SOCIAL
+  PAID
+  EMAIL
+  UNKNOWN
+}
+
 model User {
   id                           String  @id @default(cuid())
   phoneNumber                  String  @unique
   passwordHash                 String?
   phoneVerifiedAt              DateTime?
+  freeTtsUsedAt                DateTime?
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
   activePureVoiceEnrollmentId  String?  @unique
@@ -90,6 +120,7 @@ model AnonymousUser {
   tokenHash                    String   @unique
   expiresAt                    DateTime
   lastSeenAt                   DateTime @default(now())
+  freeTtsUsedAt                DateTime?
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
   activePureVoiceEnrollmentId  String?  @unique
@@ -173,12 +204,31 @@ model VoiceEnrollment {
   @@index([anonymousUserId, createdAt])
 }
 
+model UsageCode {
+  id               String          @id @default(cuid())
+  module           UsageCodeModule @default(VOICE_TO_TEXT)
+  code             String          @unique
+  consumedAt       DateTime?
+  consumedByUserId String?
+  consumedTtsJobId String?         @unique
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([module, consumedAt])
+  @@index([consumedAt])
+  @@index([consumedByUserId, consumedAt])
+}
+
 model TtsJob {
   id                 String          @id @default(cuid())
   userId             String?
   anonymousUserId    String?
   voiceEnrollmentId  String?
   profileKind        VoiceProfileKind
+  accessKind         TtsAccessKind   @default(FREE_TRIAL)
+  usageCodeId        String?         @unique
+  usageCodeModule    UsageCodeModule?
+  usageCodeValue     String?
   voiceIdSnapshot   String
   text             String
   sceneKey         String?
@@ -195,6 +245,114 @@ model TtsJob {
   @@index([userId, createdAt])
   @@index([anonymousUserId, createdAt])
   @@index([voiceEnrollmentId])
+  @@index([accessKind, createdAt])
+  @@index([usageCodeModule, createdAt])
+}
+
+model AnalyticsVisitor {
+  id               String   @id @default(cuid())
+  anonymousId      String   @unique
+  userId           String?
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+  firstReferrer    String?
+  firstUtmSource   String?
+  firstUtmMedium   String?
+  firstUtmCampaign String?
+  firstLandingPage String?
+
+  @@index([userId])
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+model AnalyticsSession {
+  id              String           @id @default(cuid())
+  anonymousId     String
+  userId          String?
+  clientSessionId String?
+  startedAt       DateTime         @default(now())
+  endedAt         DateTime         @default(now())
+  entryPage       String
+  entryReferrer   String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  channel         AnalyticsChannel @default(UNKNOWN)
+
+  @@index([anonymousId, startedAt])
+  @@index([userId, startedAt])
+  @@index([channel, startedAt])
+  @@index([clientSessionId])
+}
+
+model AnalyticsEvent {
+  id                 String             @id @default(cuid())
+  anonymousId        String
+  userId             String?
+  analyticsSessionId String
+  eventName          AnalyticsEventName
+  url                String
+  referrer           String?
+  utmSource          String?
+  utmMedium          String?
+  utmCampaign        String?
+  channel            AnalyticsChannel   @default(UNKNOWN)
+  occurredAt         DateTime           @default(now())
+
+  @@index([occurredAt])
+  @@index([eventName, occurredAt])
+  @@index([channel, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([anonymousId, occurredAt])
+}
+
+model VideoSource {
+  id                String                @id @default(cuid())
+  platform          VideoPlatform         @default(BILIBILI)
+  inputType         VideoInputType
+  inputValue        String
+  normalizedBvid    String                @unique
+  normalizedUrl     String?
+  title             String?
+  authorName        String?
+  authorMid         String?
+  coverUrl          String?
+  durationSeconds   Float?
+  publishTime       DateTime?
+  subtitleStatus    VideoSubtitleStatus   @default(PENDING)
+  transcriptStatus  VideoTranscriptStatus @default(PENDING)
+  transcriptSource  VideoTranscriptSource?
+  subtitleText      String?
+  transcriptText    String?
+  fetchErrorMessage String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+}
+
+model VideoAnalysisJob {
+  id               String                 @id @default(cuid())
+  userId           String
+  videoSourceId    String
+  status           VideoAnalysisJobStatus @default(PENDING)
+  errorMessage     String?
+  summary          String?
+  structureSections Json?
+  highlights       Json?
+  copySuggestions  Json?
+  modelName        String?
+  promptVersion    String?
+  workerId         String?
+  lockedAt         DateTime?
+  retryCount       Int                    @default(0)
+  nextRetryAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([videoSourceId, createdAt])
+  @@index([status, createdAt])
 }
 
 model VideoSource {

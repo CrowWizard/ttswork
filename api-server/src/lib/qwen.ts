@@ -205,7 +205,7 @@ async function liveEnrollPureVoice(cfg: AppConfig["qwen"], params: { audioBuffer
   const apiKey = assertEnv("QWEN_API_KEY", cfg.apiKey);
 
   if (!isSupportedAudioMimeType(params.mimeType)) {
-    throw new Error("Qwen 建声只支持 WAV、MP3、M4A");
+    throw new Error("Qwen 建声只支持 WAV、MP3、W4V");
   }
 
   const base64Audio = params.audioBuffer.toString("base64");

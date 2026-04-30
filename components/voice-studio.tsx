@@ -105,9 +105,9 @@ export function VoiceStudio() {
           >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h2 id={dialogTitleId} className="text-xl font-semibold">登录后无限使用</h2>
+                <h2 id={dialogTitleId} className="text-xl font-semibold">登录后使用使用码继续生成</h2>
                 <p id={dialogDescriptionId} className="mt-2 text-sm leading-6 text-text-muted">
-                  未登录可先试用 1 次，单次最多 30 字。登录后可继续录音建声并不限次数生成。
+                  匿名用户和注册用户各可免费生成 1 次，免费生成单次最多 30 字。匿名免费次数用完后需先登录；注册用户免费次数用完后需输入 6 位使用码。
                 </p>
               </div>
               <button

@@ -14,6 +14,11 @@ import { createEnrollmentAudioRoutes } from "./routes/enrollment-audio";
 import { createEnrollmentInvalidateRoutes } from "./routes/enrollment-invalidate";
 import { createTtsRoutes } from "./routes/tts";
 import { createTtsDownloadRoutes } from "./routes/tts-download";
+import { createAnalyticsRoutes } from "./routes/analytics";
+import { createAdminAnalyticsRoutes } from "./routes/admin-analytics";
+import { createAdminUsersRoutes } from "./routes/admin-users";
+import { createAdminInviteCodesRoutes } from "./routes/admin-invite-codes";
+import { createAdminVoiceGenerationsRoutes } from "./routes/admin-voice-generations";
 import { createVideoAnalysisRoutes } from "./routes/video-analysis";
 
 function setRequestId(context: Context, requestId: string) {
@@ -64,6 +69,7 @@ async function extractErrorBody(response: Response) {
 app.use("*", cors({
   origin: (origin) => origin || "*",
   credentials: true,
+  allowHeaders: ["Content-Type", "Authorization"],
 }));
 
 app.use("*", async (c, next) => {
@@ -128,6 +134,7 @@ app.onError((error, c) => {
 
 app.route("/api/health", createHealthRoutes(cfg));
 app.route("/api/auth", createAuthRoutes(cfg));
+app.route("/api/analytics", createAnalyticsRoutes(cfg));
 app.route("/api/voice/profile", createVoiceProfileRoutes(cfg));
 app.route("/api/voice/recordings", createVoiceRecordingRoutes(cfg));
 app.route("/api/voice/enrollments", createVoiceEnrollmentRoutes(cfg));
@@ -135,6 +142,10 @@ app.route("/api/voice/enrollments", createEnrollmentAudioRoutes(cfg));
 app.route("/api/voice/enrollments", createEnrollmentInvalidateRoutes(cfg));
 app.route("/api/tts", createTtsRoutes(cfg));
 app.route("/api/tts", createTtsDownloadRoutes(cfg));
+app.route("/api/admin/analytics", createAdminAnalyticsRoutes(cfg));
+app.route("/api/admin/users", createAdminUsersRoutes(cfg));
+app.route("/api/admin/invite-codes", createAdminInviteCodesRoutes(cfg));
+app.route("/api/admin/voice-generations", createAdminVoiceGenerationsRoutes(cfg));
 app.route("/api/video-analysis", createVideoAnalysisRoutes(cfg));
 
 loggerInfo("server.start", {
