@@ -40,10 +40,20 @@ const videoAnalysisJobSelect = {
   videoSourceId: true,
   status: true,
   errorMessage: true,
+  currentStage: true,
+  currentStageStatus: true,
+  currentStageMessage: true,
+  currentStageStartedAt: true,
   summary: true,
   structureSections: true,
   highlights: true,
   copySuggestions: true,
+  healthCard: true,
+  packagingAnalysis: true,
+  scriptAnalysis: true,
+  semanticAnalysis: true,
+  internalizationSummary: true,
+  metadataJson: true,
   modelName: true,
   promptVersion: true,
   workerId: true,
@@ -55,8 +65,23 @@ const videoAnalysisJobSelect = {
   updatedAt: true,
 } satisfies Prisma.VideoAnalysisJobSelect;
 
+const videoAnalysisStageEventSelect = {
+  id: true,
+  jobId: true,
+  stage: true,
+  status: true,
+  message: true,
+  detailsJson: true,
+  startedAt: true,
+  completedAt: true,
+  durationMs: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.VideoAnalysisJobStageEventSelect;
+
 type SelectedVideoSource = Prisma.VideoSourceGetPayload<{ select: typeof videoSourceSelect }>;
 type SelectedVideoAnalysisJob = Prisma.VideoAnalysisJobGetPayload<{ select: typeof videoAnalysisJobSelect }>;
+type SelectedVideoAnalysisStageEvent = Prisma.VideoAnalysisJobStageEventGetPayload<{ select: typeof videoAnalysisStageEventSelect }>;
 
 type ParsedVideoAnalysisInput = {
   inputType: VideoInputType;
@@ -147,6 +172,20 @@ function toJsonArray(value: string | null) {
   }
 }
 
+function toJsonObject(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function toVideoSourceDto(source: SelectedVideoSource) {
   return {
     id: source.id,
@@ -173,8 +212,27 @@ function toVideoAnalysisResultDto(job: SelectedVideoAnalysisJob) {
   const structureSections = toJsonArray(job.structureSections);
   const highlights = toJsonArray(job.highlights);
   const copySuggestions = toJsonArray(job.copySuggestions);
+  const healthCard = toJsonObject(job.healthCard);
+  const packagingAnalysis = toJsonObject(job.packagingAnalysis);
+  const scriptAnalysis = toJsonObject(job.scriptAnalysis);
+  const semanticAnalysis = toJsonObject(job.semanticAnalysis);
+  const internalizationSummary = toJsonObject(job.internalizationSummary);
+  const metadataJson = toJsonObject(job.metadataJson);
 
-  if (!job.summary && !structureSections.length && !highlights.length && !copySuggestions.length && !job.modelName && !job.promptVersion) {
+  if (
+    !job.summary
+    && !structureSections.length
+    && !highlights.length
+    && !copySuggestions.length
+    && !healthCard
+    && !packagingAnalysis
+    && !scriptAnalysis
+    && !semanticAnalysis
+    && !internalizationSummary
+    && !metadataJson
+    && !job.modelName
+    && !job.promptVersion
+  ) {
     return null;
   }
 
@@ -183,6 +241,12 @@ function toVideoAnalysisResultDto(job: SelectedVideoAnalysisJob) {
     structureSections,
     highlights,
     copySuggestions,
+    healthCard,
+    packagingAnalysis,
+    scriptAnalysis,
+    semanticAnalysis,
+    internalizationSummary,
+    metadataJson,
     modelName: job.modelName,
     promptVersion: job.promptVersion,
   };
@@ -193,6 +257,10 @@ function toVideoAnalysisJobDetailDto(job: SelectedVideoAnalysisJob, source: Sele
     jobId: job.id,
     status: job.status,
     errorMessage: job.errorMessage,
+    currentStage: job.currentStage,
+    currentStageStatus: job.currentStageStatus,
+    currentStageMessage: job.currentStageMessage,
+    currentStageStartedAt: job.currentStageStartedAt,
     workerId: job.workerId,
     lockedAt: job.lockedAt,
     retryCount: job.retryCount,
@@ -205,11 +273,30 @@ function toVideoAnalysisJobDetailDto(job: SelectedVideoAnalysisJob, source: Sele
   };
 }
 
+function toVideoAnalysisStageEventDto(event: SelectedVideoAnalysisStageEvent) {
+  return {
+    eventId: event.id,
+    stage: event.stage,
+    status: event.status,
+    message: event.message,
+    details: toJsonObject(event.detailsJson),
+    startedAt: event.startedAt,
+    completedAt: event.completedAt,
+    durationMs: event.durationMs,
+    createdAt: event.createdAt,
+    updatedAt: event.updatedAt,
+  };
+}
+
 function toVideoAnalysisJobListItemDto(job: SelectedVideoAnalysisJob, source: SelectedVideoSource | null) {
   return {
     jobId: job.id,
     status: job.status,
     errorMessage: job.errorMessage,
+    currentStage: job.currentStage,
+    currentStageStatus: job.currentStageStatus,
+    currentStageMessage: job.currentStageMessage,
+    currentStageStartedAt: job.currentStageStartedAt,
     normalizedBvid: source?.normalizedBvid ?? null,
     title: source?.title ?? null,
     coverUrl: source?.coverUrl ?? null,
@@ -230,6 +317,16 @@ async function loadSourcesByIds(sourceIds: string[]) {
   });
 
   return new Map(sources.map((source) => [source.id, source]));
+}
+
+async function loadStageEventsByJobId(jobId: string) {
+  const events = await prisma.videoAnalysisJobStageEvent.findMany({
+    where: { jobId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: videoAnalysisStageEventSelect,
+  });
+
+  return events.map(toVideoAnalysisStageEventDto);
 }
 
 export function createVideoAnalysisRoutes(cfg: AppConfig) {
@@ -431,7 +528,12 @@ export function createVideoAnalysisRoutes(cfg: AppConfig) {
         durationMs: Date.now() - routeStartedAt,
       });
 
-      return c.json(toVideoAnalysisJobDetailDto(job, source));
+      const stageEvents = await loadStageEventsByJobId(job.id);
+
+      return c.json({
+        ...toVideoAnalysisJobDetailDto(job, source),
+        stageEvents,
+      });
     } catch (error) {
       loggerError("video_analysis.job.detail.failed", {
         userId: currentUser.id,

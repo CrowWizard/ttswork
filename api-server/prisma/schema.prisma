@@ -80,6 +80,25 @@ enum VideoAnalysisJobStatus {
   FAILED
 }
 
+enum VideoAnalysisStage {
+  SOURCE_LOAD
+  SNAPSHOT_FETCH
+  METADATA_SYNC
+  TRANSCRIPT_RESOLVE
+  ANALYSIS_PARAGRAPH_SUMMARY
+  ANALYSIS_STRUCTURE
+  ANALYSIS_SEMANTIC_PACKAGING
+  ANALYSIS_FINAL_REPORT
+  RESULT_WRITEBACK
+  FAILED_WRITEBACK
+}
+
+enum VideoAnalysisStageEventStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 enum SmsScene {
   REGISTER
   LOGIN
@@ -363,26 +382,55 @@ model VideoSource {
 }
 
 model VideoAnalysisJob {
-  id               String                 @id @default(cuid())
-  userId           String
-  videoSourceId    String
-  status           VideoAnalysisJobStatus @default(PENDING)
-  errorMessage     String?
-  summary          String?
-  structureSections String?
-  highlights       String?
-  copySuggestions  String?
-  modelName        String?
-  promptVersion    String?
-  workerId         String?
-  lockedAt         DateTime?
-  retryCount       Int                    @default(0)
-  nextRetryAt      DateTime?
-  completedAt      DateTime?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
+  id                 String                        @id @default(cuid())
+  userId             String
+  videoSourceId      String
+  status             VideoAnalysisJobStatus        @default(PENDING)
+  errorMessage       String?
+  currentStage       VideoAnalysisStage?
+  currentStageStatus VideoAnalysisStageEventStatus?
+  currentStageMessage String?
+  currentStageStartedAt DateTime?
+  summary            String?
+  structureSections  String?
+  highlights         String?
+  copySuggestions    String?
+  healthCard         String?
+  packagingAnalysis  String?
+  scriptAnalysis     String?
+  semanticAnalysis   String?
+  internalizationSummary String?
+  metadataJson       String?
+  modelName          String?
+  promptVersion      String?
+  workerId           String?
+  lockedAt           DateTime?
+  retryCount         Int                           @default(0)
+  nextRetryAt        DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
 
   @@index([userId, createdAt])
   @@index([videoSourceId, createdAt])
   @@index([status, createdAt])
+  @@index([currentStage, currentStageStatus])
+}
+
+model VideoAnalysisJobStageEvent {
+  id          String                        @id @default(cuid())
+  jobId       String
+  stage       VideoAnalysisStage
+  status      VideoAnalysisStageEventStatus @default(RUNNING)
+  message     String?
+  detailsJson String?
+  startedAt   DateTime                      @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+
+  @@index([jobId, createdAt])
+  @@index([jobId, status, createdAt])
+  @@index([stage, status, createdAt])
 }

@@ -59,6 +59,8 @@ api-server/package-lock.json
 api-server/config.yaml
 api-server/index.js.map
 
+operations-log.md
+
 # Python
 .venv/
 **/.venv/

@@ -9,6 +9,7 @@ from urllib import request
 import requests as http_requests
 
 from config import WorkerConfig
+from services.transcript import TranscriptPayload
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,24 @@ class AsrService:
         audio_url: str,
         duration_seconds: float | None,
     ) -> str:
+        return self.transcribe_payload(
+            bvid=bvid,
+            title=title,
+            audio_url=audio_url,
+            duration_seconds=duration_seconds,
+        ).text
+
+    def transcribe_payload(
+        self,
+        *,
+        bvid: str,
+        title: str,
+        audio_url: str,
+        duration_seconds: float | None,
+    ) -> TranscriptPayload:
         if self._config.qwen_mock_mode:
-            return self._build_mock_transcript(bvid, title, duration_seconds)
+            text = self._build_mock_transcript(bvid, title, duration_seconds)
+            return TranscriptPayload(text=text, timeline_text=text, duration_seconds=duration_seconds)
 
         if not self._config.dashscope_api_key:
             raise RuntimeError("未配置 DASHSCOPE_API_KEY，无法处理无字幕视频")
@@ -47,10 +64,10 @@ class AsrService:
 
         logger.info("dashscope.asr 转写完成，下载结果: %s", transcription_url[:80])
         transcription_data = self._download_transcription(transcription_url)
-        text = self._extract_text(transcription_data, bvid)
+        payload = self._extract_payload(transcription_data, bvid, duration_seconds)
 
-        logger.info("dashscope.asr 转写文本长度: %d 字符", len(text))
-        return text
+        logger.info("dashscope.asr 转写文本长度: %d 字符", len(payload.text))
+        return payload
 
     def _submit_task(self, api_key: str, model: str, audio_url: str) -> str:
         headers = {
@@ -132,11 +149,16 @@ class AsrService:
             raise RuntimeError(f"DashScope ASR 转写结果下载失败: {exc}") from exc
 
     def _extract_text(self, data: dict[str, Any], bvid: str) -> str:
+        return self._extract_payload(data, bvid, None).text
+
+    def _extract_payload(self, data: dict[str, Any], bvid: str, duration_seconds: float | None) -> TranscriptPayload:
         transcripts = data.get("transcripts") or []
         if not transcripts:
             raise RuntimeError(f"DashScope ASR 转写 JSON 缺少 transcripts: bvid={bvid}")
 
         parts: list[str] = []
+        timeline_parts: list[str] = []
+        max_time: float | None = duration_seconds
         for transcript in transcripts:
             text = str(transcript.get("text") or "").strip()
             if text:
@@ -148,10 +170,17 @@ class AsrService:
                 if sentence_text and sentence_text != text:
                     parts.append(sentence_text)
 
+                if sentence_text:
+                    start_seconds = _extract_sentence_start_seconds(sentence)
+                    if start_seconds is not None:
+                        timeline_parts.append(f"[{_format_seconds_to_time(start_seconds)}] {sentence_text}")
+                        max_time = max(max_time or 0, start_seconds)
+
         if not parts:
             raise RuntimeError(f"DashScope ASR 转写文本为空: bvid={bvid}")
 
-        return "\n".join(parts)
+        text = "\n".join(parts)
+        return TranscriptPayload(text=text, timeline_text="\n".join(timeline_parts) or text, duration_seconds=max_time)
 
     def _build_mock_transcript(self, bvid: str, title: str, duration_seconds: float | None) -> str:
         duration_text = f"约 {int(duration_seconds)} 秒" if duration_seconds else "时长未知"
@@ -160,3 +189,35 @@ class AsrService:
             "讲解通常先抛出主题，再给出关键步骤、案例和注意事项。\n"
             "由于当前处于 mock 模式，这里的转写文本用于验证无字幕走 ASR 的任务链路与结构化分析回写。"
         )
+
+
+def _extract_sentence_start_seconds(sentence: Any) -> float | None:
+    if not isinstance(sentence, dict):
+        return None
+
+    for key in ("begin_time", "start_time", "start", "begin", "from"):
+        seconds = _normalize_time_value(sentence.get(key))
+        if seconds is not None:
+            return seconds
+
+    return None
+
+
+def _normalize_time_value(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if numeric < 0:
+        return None
+
+    return numeric / 1000 if numeric >= 1000 else numeric
+
+
+def _format_seconds_to_time(seconds: float) -> str:
+    minutes, secs = divmod(int(seconds), 60)
+    return f"{minutes:02d}:{secs:02d}"

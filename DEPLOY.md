@@ -222,7 +222,7 @@ make clean             # 删除 out/、.next/、api-server/voice-mvp-api
 
 ### 4.1 服务文件
 
-`api-server/voice-mvp-api.service`：
+`systemd/voice-mvp-api.service`：
 
 ```ini
 [Unit]
@@ -469,7 +469,7 @@ sudo cp api-server/config.yaml /opt/voice-mvp/
 sudo cp -r out/* /var/www/voice-mvp/
 
 # 安装 systemd 服务
-sudo cp api-server/voice-mvp-api.service /etc/systemd/system/
+sudo cp systemd/voice-mvp-api.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable voice-mvp-api
 sudo systemctl start voice-mvp-api

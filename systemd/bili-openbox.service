@@ -1,0 +1,17 @@
+[Unit]
+Description=Bili openbox window manager
+After=bili-xvfb.service
+Requires=bili-xvfb.service
+
+[Service]
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/openbox
+Restart=always
+RestartSec=3
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bili-openbox
+
+[Install]
+WantedBy=multi-user.target

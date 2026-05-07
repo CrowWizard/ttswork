@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from services.analyzer import AnalysisResultFormatError, AnalyzerService
 from services.asr import AsrService
 from services.bilibili import BilibiliService, VideoSnapshot
 from services.subtitle import SubtitleFetchError, SubtitleService, SubtitleUnavailableError
+from services.transcript import TranscriptPayload
 
 
 class PublicWorkerError(RuntimeError):
@@ -18,6 +20,20 @@ class PublicWorkerError(RuntimeError):
         super().__init__(public_message)
         self.public_message = public_message
         self.cause = cause
+
+
+STAGE_DISPLAY_NAMES = {
+    "SOURCE_LOAD": "加载视频源",
+    "SNAPSHOT_FETCH": "抓取视频信息",
+    "METADATA_SYNC": "同步视频元信息",
+    "TRANSCRIPT_RESOLVE": "获取字幕或转写",
+    "ANALYSIS_PARAGRAPH_SUMMARY": "长字幕压缩分段",
+    "ANALYSIS_STRUCTURE": "提取脚本结构",
+    "ANALYSIS_SEMANTIC_PACKAGING": "分析包装与语义",
+    "ANALYSIS_FINAL_REPORT": "生成最终报告",
+    "RESULT_WRITEBACK": "写回分析结果",
+    "FAILED_WRITEBACK": "写回失败状态",
+}
 
 
 def main() -> None:
@@ -72,9 +88,11 @@ def process_job(
     job_started_at = time.monotonic()
     source = _run_stage(
         logger,
-        "source.load",
+        db,
+        "SOURCE_LOAD",
         job_id=job.id,
         source_id=job.video_source_id,
+        message="加载视频源",
         action=lambda: db.get_video_source(job.video_source_id),
     )
     if not source:
@@ -105,9 +123,11 @@ def process_job(
     try:
         snapshot = _run_stage(
             logger,
-            "bilibili.snapshot",
+            db,
+            "SNAPSHOT_FETCH",
             job_id=job.id,
             source_id=source.id,
+            message="抓取视频信息",
             action=lambda: load_snapshot(db, source, bilibili),
             normalizedBvid=source.normalized_bvid,
         )
@@ -125,18 +145,22 @@ def process_job(
         )
         _run_stage(
             logger,
-            "source.metadata_sync",
+            db,
+            "METADATA_SYNC",
             job_id=job.id,
             source_id=source.id,
+            message="同步视频元信息",
             action=lambda: sync_source_metadata(db, source, snapshot),
             title=snapshot.title,
             durationSeconds=snapshot.duration_seconds,
         )
-        transcript_text = _run_stage(
+        transcript_payload = _run_stage(
             logger,
-            "transcript.resolve",
+            db,
+            "TRANSCRIPT_RESOLVE",
             job_id=job.id,
             source_id=source.id,
+            message="获取字幕或转写",
             action=lambda: resolve_transcript(db, source, snapshot, bilibili, subtitle_service, asr_service, logger=logger),
             subtitleTrackCount=len(snapshot.subtitle_tracks),
             hasCachedTranscript=bool((source.transcript_text or "").strip()),
@@ -147,21 +171,29 @@ def process_job(
             "job.transcript.ready",
             jobId=job.id,
             sourceId=source.id,
-            transcriptLength=len(transcript_text),
+            transcriptLength=len(transcript_payload.text),
+            timelineLength=len(transcript_payload.timeline_text),
         )
-        analysis = _run_stage(
-            logger,
-            "llm.analysis",
-            job_id=job.id,
-            source_id=source.id,
-            action=lambda: analyzer.analyze(
-                title=snapshot.title,
-                transcript_text=transcript_text,
-                duration_seconds=snapshot.duration_seconds,
-            ),
-            transcriptLength=len(transcript_text),
+        analysis = analyzer.analyze(
             title=snapshot.title,
+            transcript_text=transcript_payload.text,
+            timeline_text=transcript_payload.timeline_text,
+            duration_seconds=snapshot.duration_seconds,
+            cover_url=snapshot.cover_url,
+            run_step=lambda stage, message, action, **context: _run_stage(
+                logger,
+                db,
+                stage,
+                job_id=job.id,
+                source_id=source.id,
+                message=message,
+                action=action,
+                **context,
+            ),
         )
+        normalization_warnings = analyzer.last_normalization_warnings
+        metadata_json = analysis.metadata_json or {}
+        health_card = analysis.health_card or {}
         log_event(
             logger,
             "debug",
@@ -173,18 +205,33 @@ def process_job(
             structureSectionCount=len(analysis.structure_sections),
             highlightCount=len(analysis.highlights),
             copySuggestionCount=len(analysis.copy_suggestions),
+            keywordCount=len(health_card.get("core_keywords") or []),
+            segmentHookCount=len((analysis.script_analysis or {}).get("segment_hooks") or []),
+            goldenQuoteCount=metadata_json.get("golden_quote_count"),
+            interactionCount=metadata_json.get("interaction_count"),
+            riskPointCount=len(metadata_json.get("retention_risk_points") or []),
+            normalizationWarningCount=len(normalization_warnings),
+            normalizationWarnings=normalization_warnings,
         )
         _run_stage(
             logger,
-            "job.ready_writeback",
+            db,
+            "RESULT_WRITEBACK",
             job_id=job.id,
             source_id=source.id,
+            message="写回分析结果",
             action=lambda: db.mark_job_ready(
                 job.id,
                 summary=analysis.summary,
                 structure_sections=analysis.structure_sections,
                 highlights=analysis.highlights,
                 copy_suggestions=analysis.copy_suggestions,
+                health_card=analysis.health_card,
+                packaging_analysis=analysis.packaging_analysis,
+                script_analysis=analysis.script_analysis,
+                semantic_analysis=analysis.semantic_analysis,
+                internalization_summary=analysis.internalization_summary,
+                metadata_json=analysis.metadata_json,
                 model_name=analysis.model_name,
                 prompt_version=analysis.prompt_version,
             ),
@@ -209,6 +256,11 @@ def process_job(
             jobId=job.id,
             sourceId=source.id,
             errorMessage="分析结果格式不合法",
+            analysisStep=exc.step,
+            schemaName=exc.schema_name,
+            responseLength=exc.response_length,
+            rawPreview=exc.raw_preview,
+            validationErrors=exc.validation_errors,
             durationMs=_elapsed_ms(job_started_at),
             cause=exc,
         )
@@ -238,13 +290,42 @@ def process_job(
         )
 
 
-def _run_stage(logger: Any, stage: str, *, job_id: str, source_id: str, action: Any, **context: Any) -> Any:
+def _run_stage(
+    logger: Any,
+    db: Database,
+    stage: str,
+    *,
+    job_id: str,
+    source_id: str,
+    message: str,
+    action: Any,
+    **context: Any,
+) -> Any:
     started_at = time.monotonic()
-    log_event(logger, "debug", "job.stage.start", jobId=job_id, sourceId=source_id, stage=stage, **context)
+    stage_event = db.start_job_stage(job_id, stage, message=message, details=_sanitize_stage_details(context))
+    log_event(
+        logger,
+        "debug",
+        "job.stage.start",
+        jobId=job_id,
+        sourceId=source_id,
+        stage=stage,
+        stageLabel=STAGE_DISPLAY_NAMES.get(stage, stage),
+        stageEventId=stage_event.id,
+        message=message,
+        **context,
+    )
 
     try:
         result = action()
     except Exception as exc:
+        failure_details = _build_failure_details(exc, context)
+        db.finish_job_stage(
+            stage_event.id,
+            status="FAILED",
+            message=_build_failure_message(message, exc),
+            details=failure_details,
+        )
         log_event(
             logger,
             "error",
@@ -252,12 +333,17 @@ def _run_stage(logger: Any, stage: str, *, job_id: str, source_id: str, action: 
             jobId=job_id,
             sourceId=source_id,
             stage=stage,
+            stageLabel=STAGE_DISPLAY_NAMES.get(stage, stage),
+            stageEventId=stage_event.id,
             durationMs=_elapsed_ms(started_at),
             cause=exc,
+            failureDetails=failure_details,
             **context,
         )
         raise
 
+    success_details = _sanitize_stage_details(context)
+    db.finish_job_stage(stage_event.id, status="SUCCEEDED", message=f"{message}完成", details=success_details)
     log_event(
         logger,
         "debug",
@@ -265,6 +351,8 @@ def _run_stage(logger: Any, stage: str, *, job_id: str, source_id: str, action: 
         jobId=job_id,
         sourceId=source_id,
         stage=stage,
+        stageLabel=STAGE_DISPLAY_NAMES.get(stage, stage),
+        stageEventId=stage_event.id,
         durationMs=_elapsed_ms(started_at),
         **context,
     )
@@ -275,9 +363,11 @@ def _mark_job_failed_safely(logger: Any, db: Database, job_id: str, source_id: s
     try:
         _run_stage(
             logger,
-            "job.failed_writeback",
+            db,
+            "FAILED_WRITEBACK",
             job_id=job_id,
             source_id=source_id,
+            message="写回失败状态",
             action=lambda: db.mark_job_failed(job_id, error_message),
             errorMessage=error_message,
         )
@@ -295,6 +385,49 @@ def _mark_job_failed_safely(logger: Any, db: Database, job_id: str, source_id: s
 
 def _elapsed_ms(started_at: float) -> int:
     return int((time.monotonic() - started_at) * 1000)
+
+
+def _sanitize_stage_details(details: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, value in details.items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            sanitized[key] = value
+            continue
+
+        if isinstance(value, (list, tuple, dict)):
+            try:
+                json.dumps(value, ensure_ascii=False)
+                sanitized[key] = value
+                continue
+            except TypeError:
+                pass
+
+        sanitized[key] = str(value)
+
+    return sanitized
+
+
+def _build_failure_message(message: str, exc: Exception) -> str:
+    if isinstance(exc, AnalysisResultFormatError):
+        return f"{message}失败：{exc.step} 返回格式不合法"
+
+    detail = str(exc).strip()
+    return f"{message}失败：{detail}" if detail else f"{message}失败"
+
+
+def _build_failure_details(exc: Exception, context: dict[str, Any]) -> dict[str, Any]:
+    details = _sanitize_stage_details(context)
+    details["errorName"] = exc.__class__.__name__
+    details["errorMessage"] = str(exc)
+
+    if isinstance(exc, AnalysisResultFormatError):
+        details["analysisStep"] = exc.step
+        details["schemaName"] = exc.schema_name
+        details["responseLength"] = exc.response_length
+        details["rawPreview"] = exc.raw_preview
+        details["validationErrors"] = exc.validation_errors
+
+    return details
 
 
 def load_snapshot(db: Database, source: VideoSourceRecord, bilibili: BilibiliService) -> VideoSnapshot:
@@ -327,7 +460,7 @@ def resolve_transcript(
     subtitle_service: SubtitleService,
     asr_service: AsrService,
     logger: Any | None = None,
-) -> str:
+) -> TranscriptPayload:
     cached_transcript = (source.transcript_text or "").strip()
     if cached_transcript:
         # 复用弱缓存，避免同一视频重复抓字幕或跑 ASR。
@@ -340,7 +473,7 @@ def resolve_transcript(
                 bvid=snapshot.bvid,
                 transcriptLength=len(cached_transcript),
             )
-        return cached_transcript
+        return TranscriptPayload(text=cached_transcript, timeline_text=cached_transcript, duration_seconds=source.duration_seconds)
 
     try:
         if logger:
@@ -352,7 +485,8 @@ def resolve_transcript(
                 bvid=snapshot.bvid,
                 subtitleTrackCount=len(snapshot.subtitle_tracks),
             )
-        subtitle_text = subtitle_service.fetch_text(snapshot.subtitle_tracks)
+        subtitle_payload = subtitle_service.fetch_payload(snapshot.subtitle_tracks)
+        subtitle_text = subtitle_payload.text
         db.update_video_source(
             source.id,
             subtitleStatus="READY",
@@ -371,7 +505,11 @@ def resolve_transcript(
                 bvid=snapshot.bvid,
                 subtitleLength=len(subtitle_text),
             )
-        return subtitle_text
+        return TranscriptPayload(
+            text=subtitle_text,
+            timeline_text=subtitle_payload.timeline_text,
+            duration_seconds=subtitle_payload.duration_seconds or snapshot.duration_seconds,
+        )
     except SubtitleUnavailableError:
         db.update_video_source(source.id, subtitleStatus="UNAVAILABLE", subtitleText=None)
         if logger:
@@ -407,12 +545,13 @@ def resolve_transcript(
         audio_url = bilibili.fetch_audio_url(snapshot.bvid, snapshot.cid)
         if logger:
             log_event(logger, "debug", "asr.transcribe.start", sourceId=source.id, bvid=snapshot.bvid, audioUrlAvailable=bool(audio_url))
-        transcript_text = asr_service.transcribe(
+        asr_payload = asr_service.transcribe_payload(
             bvid=snapshot.bvid,
             title=snapshot.title,
             audio_url=audio_url,
             duration_seconds=snapshot.duration_seconds,
         )
+        transcript_text = asr_payload.text
         db.update_video_source(
             source.id,
             transcriptStatus="READY",
@@ -429,7 +568,11 @@ def resolve_transcript(
                 bvid=snapshot.bvid,
                 transcriptLength=len(transcript_text),
             )
-        return transcript_text
+        return TranscriptPayload(
+            text=transcript_text,
+            timeline_text=asr_payload.timeline_text,
+            duration_seconds=asr_payload.duration_seconds or snapshot.duration_seconds,
+        )
     except Exception as exc:
         db.update_video_source(
             source.id,

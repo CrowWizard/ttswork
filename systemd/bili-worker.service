@@ -1,0 +1,18 @@
+[Unit]
+Description=Bili video analysis worker
+After=network.target bili-xvfb.service
+Wants=bili-xvfb.service
+
+[Service]
+WorkingDirectory=/home/ttswork/ttswork/video-analysis-worker
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/python3 worker.py
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bili-worker
+
+[Install]
+WantedBy=multi-user.target
