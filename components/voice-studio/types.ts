@@ -117,18 +117,6 @@ export type AuthPanelProps = {
   onSubmitPasswordLogin?: () => void;
 };
 
-export type UserHeaderProps = {
-  authResolving: boolean;
-  authUser: AuthUser | null;
-  pointsBalance: number;
-  redeemUsageCode: string;
-  redeemingUsageCode: boolean;
-  redeemMessage: StatusState | null;
-  onRedeemUsageCodeChange: (value: string) => void;
-  onRedeemUsageCode: () => void;
-  onLogout: () => void;
-};
-
 export type WorkspaceHeaderProps = object;
 
 export type RecordingPanelProps = {

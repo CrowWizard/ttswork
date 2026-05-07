@@ -183,10 +183,9 @@ export function BilibiliAnalysisWorkspace() {
   const isBusy = creating || polling;
 
   return (
-    <>
+    <main className="flex min-h-screen w-full min-w-0 flex-col overflow-x-hidden">
       <AppHeader />
-      <main className="flex min-h-screen w-full min-w-0 flex-col items-center px-4 py-8 sm:px-6 sm:py-10">
-        <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-6">
+      <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
           <section className="app-card p-6 sm:p-8">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">B站视频分析</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-text-muted sm:text-base">
@@ -245,8 +244,7 @@ export function BilibiliAnalysisWorkspace() {
             </div>
           </section>
         </div>
-      </main>
-    </>
+    </main>
   );
 }
 
