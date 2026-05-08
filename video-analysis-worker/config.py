@@ -122,7 +122,7 @@ def load_config() -> WorkerConfig:
             env_values,
             "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         ),
-        video_analysis_llm_model=_env_string("VIDEO_ANALYSIS_LLM_MODEL", env_values, "qwen-plus"),
+        video_analysis_llm_model=_env_string("VIDEO_ANALYSIS_LLM_MODEL", env_values, "deepseek-v4-flash"),
         loaded_env_paths=loaded_env_paths,
         config_file_path=config_file_path,
     )

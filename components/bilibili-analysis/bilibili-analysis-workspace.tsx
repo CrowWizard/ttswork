@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AppHeader } from "@/components/app-header";
 import { StatusMessage } from "@/components/ui/status-message";
 import { readJsonSafely, toUserFacingErrorMessage } from "@/components/voice-studio/utils";
@@ -113,6 +113,23 @@ type InternalizationSummary = {
   optimization?: string;
 };
 
+type CreatorFix = {
+  priority?: string | number;
+  problem?: string;
+  reason?: string;
+  rewrite?: string;
+};
+
+type CreatorActionPlan = {
+  keep_points?: string[];
+  priority_fixes?: CreatorFix[];
+  title_rewrites?: string[];
+  opening_rewrites?: string[];
+  cta_rewrites?: string[];
+  overload_rewrites?: string[];
+  reuse_template?: string[];
+};
+
 type MetadataJson = {
   video_duration?: string | null;
   hook_score?: number | null;
@@ -122,6 +139,7 @@ type MetadataJson = {
   cognitive_load_distribution?: Record<string, number>;
   narrative_curve_text?: string | null;
   structural_blocks?: { hook?: string | null; promise?: string | null; meat?: string[]; re_hook?: string | null; cta?: string | null };
+  creator_action_plan?: CreatorActionPlan;
 };
 
 type VideoAnalysisResult = {
@@ -153,6 +171,29 @@ type VideoAnalysisJobDetail = {
   source: VideoAnalysisSource;
   result: VideoAnalysisResult | null;
   stageEvents: VideoAnalysisStageEvent[];
+};
+
+type TableRow = {
+  label: string;
+  value: string | null | undefined;
+};
+
+type MobileTableRow = {
+  title: string;
+  fields: TableRow[];
+};
+
+type AuditRow = {
+  layer: string;
+  subject: string;
+  result: string | null | undefined;
+  benefit: string;
+};
+
+type DerivedCreatorAction = {
+  issue: string;
+  rewrite: string;
+  example: string;
 };
 
 type VideoAnalysisStageEvent = {
@@ -444,178 +485,117 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
   const semantic = result.semanticAnalysis;
   const internalization = result.internalizationSummary;
   const metadata = result.metadataJson;
-  const copyAdvantages = buildCopyAdvantages(result);
+  const creatorPlan = metadata?.creator_action_plan ?? buildCreatorActionPlan(result);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <article className="app-panel p-5 lg:col-span-2">
-        <h3 className="text-sm font-semibold text-text-primary">视频基础信息</h3>
-        <div className="mt-3 grid gap-2 text-sm leading-6 text-text-muted sm:grid-cols-2 lg:grid-cols-3">
-          <div>标题：{detail.source.title ?? detail.source.normalizedBvid}</div>
-          <div>UP 主：{detail.source.authorName ?? "未获取"}</div>
-          <div>时长：{formatSeconds(detail.source.durationSeconds)}</div>
-          <div>文本来源：{detail.source.transcriptSource ?? "未确认"}</div>
-          <div>BV 号：{detail.source.normalizedBvid}</div>
-          <div>发布时间：{formatDate(detail.source.publishTime)}</div>
-        </div>
-      </article>
+    <div className="space-y-8">
+      <CreatorActionPlanPanel plan={creatorPlan} />
 
-      <article className="app-panel p-5 lg:col-span-2">
-        <h3 className="text-sm font-semibold text-text-primary">内容摘要</h3>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-text-muted">{result.summary ?? "暂无摘要"}</p>
-        <ChipList items={healthCard?.core_keywords} className="mt-4" />
-      </article>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <ResultSection title="内容摘要">
+          <p className="max-w-3xl text-sm leading-6 text-text-muted">{result.summary ?? "暂无摘要"}</p>
+          <ChipList items={healthCard?.core_keywords} className="mt-4" />
+        </ResultSection>
 
-      <article className="app-panel p-5 lg:col-span-2">
-        <h3 className="text-sm font-semibold text-text-primary">语义分段</h3>
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
-          {result.structureSections.length ? result.structureSections.map((section) => (
-            <div key={`${section.startSeconds}-${section.title}`} className="text-sm leading-6 text-text-muted">
-              <div className="font-semibold text-text-primary">{section.title}</div>
-              <div>{formatSeconds(section.startSeconds)} 至 {formatSeconds(section.endSeconds)}</div>
-              <div>{section.summary}</div>
-            </div>
-          )) : <EmptyLine text="暂无语义分段" />}
-        </div>
-      </article>
+        <ResultSection title="视频基础信息">
+          <DataTable rows={[
+            { label: "标题", value: detail.source.title ?? detail.source.normalizedBvid },
+            { label: "UP 主", value: detail.source.authorName ?? "未获取" },
+            { label: "时长", value: formatSeconds(detail.source.durationSeconds) },
+            { label: "BV 号", value: detail.source.normalizedBvid },
+            { label: "发布时间", value: formatDate(detail.source.publishTime) },
+          ]} />
+        </ResultSection>
+      </div>
 
-      <article className="app-panel p-5 lg:col-span-2">
-        <h3 className="text-sm font-semibold text-text-primary">视频审计点</h3>
-        <div className="mt-3 grid gap-4 lg:grid-cols-2">
-          {buildAuditSections(result).map((section) => (
-            <div key={section.title} className="text-sm leading-6 text-text-muted">
-              <div className="font-semibold text-text-primary">{section.title}</div>
-              <TextList items={section.items} empty="暂无审计点" />
-            </div>
-          ))}
-        </div>
-      </article>
+      <ResultSection title="语义分段">
+        <SemanticFlow sections={result.structureSections} />
+      </ResultSection>
 
-      <article className="app-panel p-5">
-        <h3 className="text-sm font-semibold text-text-primary">视频体检结果</h3>
-        <div className="mt-3 space-y-4">
-          <p className="text-sm leading-6 text-text-muted">{healthCard?.one_line_summary ?? "暂无视频体检结果"}</p>
-          <div className="grid gap-2 text-sm text-text-muted sm:grid-cols-2">
-            <div>开头吸引点：{formatBoolean(healthCard?.has_hook)}</div>
-            <div>引导行动：{formatBoolean(healthCard?.has_cta)}</div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ResultSection title="视频体检结果">
+          <HealthCheckTable healthCard={healthCard} />
+        </ResultSection>
+
+        <ResultSection title="标题封面分析">
+          <div className="space-y-3">
+            <DataTable rows={[
+              { label: "标题公式", value: joinList(packaging?.title_formulas) },
+              { label: "心理触发", value: [packaging?.primary_psychology, packaging?.secondary_psychology].filter(Boolean).join(" / ") },
+              { label: "关键词密度", value: formatKeywordDensity(packaging?.keyword_density) },
+            ]} />
+            <ChipList items={getUniqueStrings([...(packaging?.title_hook_words ?? []), ...(packaging?.keywords ?? [])])} />
           </div>
-          <TextList items={healthCard?.hook_and_cta_quotes} empty="暂无开头吸引点或引导行动原句" />
-        </div>
-      </article>
+        </ResultSection>
+      </div>
 
-      <article className="app-panel p-5">
-        <h3 className="text-sm font-semibold text-text-primary">标题封面分析</h3>
-        <div className="mt-3 space-y-3 text-sm leading-6 text-text-muted">
-          <FieldLine label="标题公式" value={joinList(packaging?.title_formulas)} />
-          <FieldLine label="心理触发" value={[packaging?.primary_psychology, packaging?.secondary_psychology].filter(Boolean).join(" / ")} />
-          <FieldLine label="关键词密度" value={formatKeywordDensity(packaging?.keyword_density)} />
-          <FieldLine label="封面关系" value={packaging?.cover_relation} />
-          <FieldLine label="视觉情绪" value={packaging?.visual_emotion} />
-          <ChipList items={getUniqueStrings([...(packaging?.title_hook_words ?? []), ...(packaging?.keywords ?? [])])} />
-        </div>
-      </article>
+      <ResultSection title="脚本结构分析">
+        <ScriptStructurePanel script={script} highlights={result.highlights} />
+      </ResultSection>
 
-      <article className="app-panel p-5 lg:col-span-2">
-        <h3 className="text-sm font-semibold text-text-primary">脚本结构分析</h3>
-        <div className="mt-3 grid gap-4 lg:grid-cols-2">
+      <ResultSection title="语义与传播机制">
+        <SemanticMechanismPanel semantic={semantic} />
+      </ResultSection>
+
+      <div className="space-y-6">
+        <ResultSection title="内化总结与指标风险">
           <div className="space-y-3 text-sm leading-6 text-text-muted">
-            <FieldLine label="逻辑流" value={script?.logic_flow} />
-            <HookBlock title="开头吸引点" hook={script?.visual_hook} />
-            <HookBlock title="内容承诺" hook={script?.promise_hook} />
-            <StructuralBlocksBlock blocks={script?.structural_blocks} />
-            <FieldLine label="引导行动" value={script?.cta ? `${script.cta.time ?? "未知时间"} ${script.cta.text ?? ""}` : null} />
+            <DataTable rows={[
+              { label: "核心信息", value: internalization?.core_message },
+              { label: "巧妙设计", value: internalization?.clever_design },
+              { label: "优化建议", value: internalization?.optimization },
+              { label: "整体吸引力评分", value: formatScore(metadata?.hook_score) },
+              { label: "金句数", value: metadata?.golden_quote_count?.toString() },
+              { label: "互动数", value: metadata?.interaction_count?.toString() },
+            ]} />
+            <MetricRiskList items={metadata?.retention_risk_points} />
           </div>
-          <div className="space-y-4">
-            <div>
-              <div className="text-xs font-semibold tracking-wide text-text-muted">段落转折吸引点</div>
-              <TextList items={script?.segment_hooks?.map((item) => `${item.time ?? "未知时间"} ${item.text ?? ""} ${item.function ? `(${item.function})` : ""}`)} empty="暂无段落转折吸引点" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">金句 / 爆点</div>
-              <div className="mt-2 space-y-3">
-                {result.highlights.length ? result.highlights.map((highlight) => (
-                  <div key={`${highlight.timestampSeconds}-${highlight.quote}`} className="text-sm leading-6 text-text-muted">
-                    <div className="font-semibold text-text-primary">{formatSeconds(highlight.timestampSeconds)}</div>
-                    <div>{highlight.quote}</div>
-                    <div>{highlight.reason}</div>
-                  </div>
-                )) : <EmptyLine text="暂无金句" />}
-              </div>
-            </div>
-          </div>
-        </div>
-      </article>
+        </ResultSection>
 
-      <article className="app-panel p-5 lg:col-span-2">
-        <h3 className="text-sm font-semibold text-text-primary">语义与传播机制</h3>
-        <div className="mt-3 grid gap-4 lg:grid-cols-2">
-          <div className="space-y-3 text-sm leading-6 text-text-muted">
-          <FieldLine label="认知负荷" value={formatCognitiveLoad(semantic?.cognitive_load)} />
-            <FieldLine label="心理触发器" value={joinList(semantic?.psychological_triggers)} />
-            <FieldLine label="语气标签" value={joinList(semantic?.tone_tags)} />
-            <FieldLine label="网感词" value={joinList(semantic?.net_slang)} />
-            <TextList items={semantic?.overload_warnings} empty="暂无过载提醒" />
-          </div>
-          <div className="space-y-4">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">互动设计</div>
-              <TextList items={semantic?.interaction_designs?.map((item) => `${item.time ?? "未知时间"} ${item.trigger_text ?? ""} ${item.placement_strategy ? `(${item.placement_strategy})` : ""}`)} empty="暂无互动设计" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-text-muted">修辞装置</div>
-              <TextList items={semantic?.rhetorical_devices?.map((item) => `${item.type ?? "修辞"}: ${item.text_snippet ?? ""}`)} empty="暂无修辞装置" />
-            </div>
-          </div>
-        </div>
-      </article>
-
-      <article className="app-panel p-5">
-        <h3 className="text-sm font-semibold text-text-primary">内化总结与指标风险</h3>
-        <div className="mt-3 space-y-3 text-sm leading-6 text-text-muted">
-          <FieldLine label="核心信息" value={internalization?.core_message} />
-          <FieldLine label="巧妙设计" value={internalization?.clever_design} />
-          <FieldLine label="优化建议" value={internalization?.optimization} />
-          <FieldLine label="整体吸引力评分" value={formatScore(metadata?.hook_score)} />
-          <FieldLine label="金句数" value={metadata?.golden_quote_count?.toString()} />
-          <FieldLine label="互动数" value={metadata?.interaction_count?.toString()} />
-          <FieldLine label="信息理解难度分布" value={formatLoadDistribution(metadata?.cognitive_load_distribution)} />
-          <TextList items={metadata?.retention_risk_points} empty="暂无留存风险点" />
-        </div>
-      </article>
-
-      <article className="app-panel p-5">
-        <h3 className="text-sm font-semibold text-text-primary">文案优点</h3>
-        <div className="mt-3 space-y-3">
-          {copyAdvantages.length ? copyAdvantages.map((advantage) => (
-            <div key={`${advantage.title}-${advantage.content}`} className="text-sm leading-6 text-text-muted">
-              <div className="font-semibold text-text-primary">{advantage.title}</div>
-              <div>{advantage.content}</div>
-            </div>
-          )) : <EmptyLine text="暂无文案优点" />}
-        </div>
-      </article>
+        <ResultSection title="分析结果">
+          <AuditResultsTables rows={buildAuditRows(result)} />
+        </ResultSection>
+      </div>
     </div>
+  );
+}
+
+function ResultSection({ title, children, priority = false }: { title: string; children: ReactNode; priority?: boolean }) {
+  return (
+    <section className={priority ? "rounded-2xl border border-warning-border bg-warning-surface p-5" : "min-w-0 border-t border-border-subtle pt-5"}>
+      <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+      <div className="mt-3">{children}</div>
+    </section>
   );
 }
 
 function StageProgressPanel({ detail }: { detail: VideoAnalysisJobDetail }) {
   const currentStageLabel = detail.currentStage ? getStageLabel(detail.currentStage) : null;
+  const currentStageText = currentStageLabel ?? "等待 worker 领取";
+  const currentStatusText = formatStageStatus(detail.currentStageStatus);
 
   return (
-    <article className="app-panel p-5 lg:col-span-2">
-      <h3 className="text-sm font-semibold text-text-primary">处理进度</h3>
+    <article className="app-panel p-5 lg:col-span-2" aria-labelledby="video-analysis-progress-title">
+      <h3 id="video-analysis-progress-title" className="text-sm font-semibold text-text-primary">处理进度</h3>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        当前阶段：{currentStageText}，阶段结果：{currentStatusText}。
+      </div>
       <div className="mt-3 grid gap-3 text-sm leading-6 text-text-muted lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="space-y-1">
           <div>任务状态：{STATUS_TEXT[detail.status]}</div>
-          <div>当前阶段：{currentStageLabel ?? "等待 worker 领取"}</div>
-          <div>阶段结果：{formatStageStatus(detail.currentStageStatus)}</div>
+          <div>当前阶段：{currentStageText}</div>
+          <div>阶段结果：{currentStatusText}</div>
           <div>阶段开始：{formatDateTime(detail.currentStageStartedAt)}</div>
         </div>
         <div className="space-y-2">
           <div>{detail.currentStageMessage ?? "暂无阶段说明"}</div>
-          <div className="space-y-2">
+          <ol className="space-y-2" aria-label="视频分析处理阶段">
             {detail.stageEvents.length ? detail.stageEvents.map((event) => (
-              <div key={event.eventId} className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3">
+              <li
+                key={event.eventId}
+                className="rounded-2xl border border-border-subtle bg-surface-muted px-4 py-3"
+                aria-current={event.stage === detail.currentStage && event.status === "RUNNING" ? "step" : undefined}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
                   <span className="font-semibold text-text-primary">{getStageLabel(event.stage)}</span>
                   <span>{formatStageStatus(event.status)}</span>
@@ -626,9 +606,9 @@ function StageProgressPanel({ detail }: { detail: VideoAnalysisJobDetail }) {
                   <span>结束：{formatDateTime(event.completedAt)}</span>
                   <span>耗时：{formatDurationMs(event.durationMs)}</span>
                 </div>
-              </div>
-            )) : <EmptyLine text="worker 尚未写入阶段事件" />}
-          </div>
+              </li>
+            )) : <li><EmptyLine text="worker 尚未写入阶段事件" /></li>}
+          </ol>
         </div>
       </div>
     </article>
@@ -640,19 +620,64 @@ function ResultPlaceholder({ detail }: { detail?: VideoAnalysisJobDetail }) {
     return <StatusMessage type="error" title="分析失败" message={detail.errorMessage ?? "视频分析任务失败"} />;
   }
 
-  const description = detail
-    ? "任务已提交，worker 处理完成后会显示摘要、语义分段、标题封面分析、脚本结构和语义机制。"
-    : "先输入视频链接或 BV 号。分析完成后，这里会输出摘要、语义分段、标题封面分析、脚本结构和语义机制。";
+  if (detail) {
+    return <AnalysisPendingState detail={detail} />;
+  }
 
+  return <FirstAnalysisEmptyState />;
+}
+
+function FirstAnalysisEmptyState() {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      {RESULT_SECTIONS.map((section) => (
-        <article key={section.title} className="app-panel p-5">
-          <h3 className="text-sm font-semibold text-text-primary">{section.title}</h3>
-          <p className="mt-3 text-sm leading-6 text-text-muted">{detail ? description : section.description}</p>
-        </article>
-      ))}
-    </div>
+    <article className="rounded-2xl border border-border-subtle bg-surface-selected p-5">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.65fr)] lg:items-start">
+        <div>
+          <div className="text-xs font-semibold tracking-wide text-text-muted">首次分析</div>
+          <h3 className="mt-2 text-lg font-semibold text-text-primary">先提交一个视频，结果会直接变成改稿清单</h3>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted">
+            支持 B 站视频链接或 BV 号。完成后会优先展示需要修改的建议，再展开摘要、脚本结构、语义机制和分析结果。
+          </p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {FIRST_ANALYSIS_STEPS.map((step) => (
+              <div key={step.title} className="rounded-2xl border border-border-subtle bg-surface-elevated p-4">
+                <div className="text-sm font-semibold text-text-primary">{step.title}</div>
+                <div className="mt-2 text-sm leading-6 text-text-muted">{step.description}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <aside className="rounded-2xl border border-info-border bg-info-surface p-4">
+          <div className="text-sm font-semibold text-info">开始前确认</div>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-info">
+            <li>输入框在上方，粘贴链接后点击“开始分析”。</li>
+            <li>长视频会先获取字幕并分段，页面会自动刷新进度。</li>
+            <li>结果完成后，先看“需要修改”即可开始改稿。</li>
+          </ul>
+        </aside>
+      </div>
+    </article>
+  );
+}
+
+function AnalysisPendingState({ detail }: { detail: VideoAnalysisJobDetail }) {
+  return (
+    <article className="rounded-2xl border border-border-subtle bg-surface-selected p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="text-xs font-semibold tracking-wide text-text-muted">结果生成中</div>
+          <h3 className="mt-2 text-lg font-semibold text-text-primary">正在把视频拆成可执行的改稿建议</h3>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted">
+            worker 完成后会显示摘要、脚本结构、语义机制和分析结果。当前任务会保留在本机，刷新页面后也会继续读取。
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border-subtle bg-surface-elevated px-4 py-3 text-sm leading-6 text-text-muted">
+          <div className="font-semibold text-text-primary">当前阶段</div>
+          <div className="mt-1">{detail.currentStage ? getStageLabel(detail.currentStage) : STATUS_TEXT[detail.status]}</div>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -722,6 +747,598 @@ function formatBoolean(value: boolean | undefined) {
   return value ? "有" : "无";
 }
 
+function getHealthQuote(healthCard: HealthCard | null, type: "hook" | "cta") {
+  const quotes = (healthCard?.hook_and_cta_quotes ?? []).filter((quote) => quote.trim());
+  if (!quotes.length) {
+    return null;
+  }
+
+  if (type === "hook") {
+    return healthCard?.has_hook ? quotes[0] : null;
+  }
+
+  if (healthCard?.has_hook && quotes.length > 1) {
+    return healthCard?.has_cta ? quotes[1] : null;
+  }
+
+  return healthCard?.has_cta ? quotes[0] : null;
+}
+
+function HealthCheckTable({ healthCard }: { healthCard: HealthCard | null }) {
+  const rows = [
+    { label: "开头吸引点", status: formatBoolean(healthCard?.has_hook), quote: getHealthQuote(healthCard, "hook") },
+    { label: "引导行动", status: formatBoolean(healthCard?.has_cta), quote: getHealthQuote(healthCard, "cta") },
+  ];
+  const mobileRows = rows.map((row) => ({
+    title: row.label,
+    fields: [
+      { label: "结果", value: row.status },
+      { label: "对应原句", value: row.quote ?? "暂无" },
+    ],
+  }));
+
+  return (
+    <div className="mt-3 rounded-2xl border border-border-subtle bg-surface-selected md:overflow-hidden">
+      <MobileStackedRows rows={mobileRows} />
+      <div className="hidden md:block">
+        <table className="w-full border-collapse text-left text-sm leading-6">
+          <caption className="sr-only">视频体检结果，包含判断项、结果和对应原句</caption>
+          <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+            <tr>
+              <th scope="col" className="w-28 px-3 py-2 sm:w-32">判断项</th>
+              <th scope="col" className="w-20 px-3 py-2">结果</th>
+              <th scope="col" className="px-3 py-2">对应原句</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {rows.map((row) => (
+              <tr key={row.label} className="align-top">
+                <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.label}</th>
+                <td className="px-3 py-3 text-text-muted">{row.status}</td>
+                <td className="px-3 py-3 text-text-muted">{row.quote ?? "暂无"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ScriptStructurePanel({ script, highlights }: { script: ScriptAnalysis | null; highlights: Highlight[] }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-sm font-semibold text-text-primary">脚本主线</div>
+        <DataTable rows={[
+          { label: "逻辑流", value: script?.logic_flow },
+          { label: "开头吸引点", value: formatHookDetail(script?.visual_hook) },
+          { label: "内容承诺", value: formatHookDetail(script?.promise_hook) },
+          { label: "引导行动", value: formatCtaDetail(script?.cta) },
+        ]} />
+      </div>
+
+      <div className="space-y-6 border-t border-border-subtle pt-5">
+        <ScriptBlocksTable blocks={script?.structural_blocks} />
+        <SegmentHooksTable hooks={script?.segment_hooks} />
+      </div>
+
+      <div className="border-t border-border-subtle pt-5">
+        <HighlightsTable highlights={highlights} />
+      </div>
+    </div>
+  );
+}
+
+function formatCtaDetail(cta: ScriptAnalysis["cta"] | undefined) {
+  if (!cta) {
+    return null;
+  }
+
+  const type = cta.cta_type ? `，类型：${cta.cta_type}` : "";
+  const hint = cta.optimization_hint ? `，优化提示：${cta.optimization_hint}` : "";
+
+  return `${cta.time ?? "未知时间"} ${cta.text ?? ""}${type}${hint}`;
+}
+
+function ScriptBlocksTable({ blocks }: { blocks: ScriptAnalysis["structural_blocks"] | undefined }) {
+  const rows = buildStructureBlockRows(blocks);
+
+  return (
+    <div>
+      <div className="text-sm font-semibold text-text-primary">结构块</div>
+      <MobileStackedRows
+        className="mt-3"
+        empty="LLM 暂未返回结构块。"
+        rows={rows.map((row) => ({
+          title: row.label,
+          fields: [
+            { label: "LLM 返回位置", value: row.value },
+          ],
+        }))}
+      />
+      <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+        <table className="w-full border-collapse text-left text-sm leading-6">
+          <caption className="sr-only">脚本结构块，包含结构块名称和 LLM 返回位置</caption>
+          <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+            <tr>
+              <th scope="col" className="w-32 px-3 py-2">结构块</th>
+              <th scope="col" className="px-3 py-2">LLM 返回位置</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {rows.length ? rows.map((row) => (
+              <tr key={row.label} className="align-top">
+                <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.label}</th>
+                <td className="px-3 py-3 text-text-muted">{row.value}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={2} className="px-3 py-3 text-text-muted">LLM 暂未返回结构块。</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function buildStructureBlockRows(blocks: ScriptAnalysis["structural_blocks"] | undefined): TableRow[] {
+  if (!blocks) {
+    return [];
+  }
+
+  return [
+    { label: "开头抓注意力", value: blocks.hook },
+    { label: "内容承诺", value: blocks.promise },
+    { label: "主体内容", value: blocks.meat?.filter((item) => item.trim()).join("；") },
+    { label: "二次留存", value: blocks.re_hook },
+    { label: "引导行动", value: blocks.cta },
+  ].filter((row) => row.value?.trim());
+}
+
+function SegmentHooksTable({ hooks }: { hooks: ScriptAnalysis["segment_hooks"] | undefined }) {
+  const rows = (hooks ?? []).map((hook, index) => ({
+    position: hook.time ?? `第 ${index + 1} 个转折点`,
+    text: hook.text,
+    purpose: hook.function ?? "承接上一段并推动继续观看。",
+    usage: getSegmentHookUsage(index),
+  }));
+  const values = rows.filter((row) => row.text?.trim());
+
+  return (
+    <div>
+      <div className="text-sm font-semibold text-text-primary">段落转折吸引点</div>
+      {values.length ? (
+        <>
+          <MobileStackedRows
+            className="mt-3"
+            rows={values.map((row) => ({
+              title: row.position,
+              fields: [
+                { label: "当前转折句", value: row.text },
+                { label: "当前作用", value: row.purpose },
+                { label: "适合用法", value: row.usage },
+              ],
+            }))}
+          />
+          <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+            <table className="min-w-[820px] w-full border-collapse text-left text-sm leading-6">
+              <caption className="sr-only">段落转折吸引点，包含位置、转折句、当前作用和适合用法</caption>
+              <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+                <tr>
+                  <th scope="col" className="w-28 px-3 py-2">位置</th>
+                  <th scope="col" className="px-3 py-2">当前转折句</th>
+                  <th scope="col" className="px-3 py-2">当前作用</th>
+                  <th scope="col" className="px-3 py-2">适合用法</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {values.map((row) => (
+                  <tr key={`${row.position}-${row.text}`} className="align-top">
+                    <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.position}</th>
+                    <td className="px-3 py-3 text-text-muted">{row.text}</td>
+                    <td className="px-3 py-3 text-text-muted">{row.purpose}</td>
+                    <td className="px-3 py-3 text-text-muted">{row.usage}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="mt-2">
+          <EmptyLine text="暂未识别到段落转折吸引点。改稿时可在每段结尾补一句承上启下的话：先总结上一段，再抛出下一段的新问题、反差或收益。" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getSegmentHookUsage(index: number) {
+  const usages = [
+    "放在开头承诺之后，用来把观众从好奇心带入正文第一段。",
+    "放在一个观点讲完后，用反差或新问题打开下一段，避免平铺直叙。",
+    "放在信息变密前，提前告诉观众接下来更关键，降低中段流失。",
+    "放在结论或 CTA 前，把前面的内容收束成行动理由。",
+  ];
+
+  return usages[index % usages.length] ?? usages[0];
+}
+
+function HighlightsTable({ highlights }: { highlights: Highlight[] }) {
+  const rows = highlights.map((highlight) => ({
+    label: formatSeconds(highlight.timestampSeconds),
+    value: highlight.quote,
+    purpose: highlight.reason,
+  }));
+
+  return <ScriptMiniTable title="金句 / 爆点" rows={rows} empty="暂无金句" />;
+}
+
+function ScriptMiniTable({ title, rows, empty }: { title: string; rows: Array<{ label: string; value: string | null | undefined; purpose: string }>; empty: string }) {
+  const values = rows.filter((row) => row.value?.trim());
+
+  return (
+    <div>
+      <div className="text-sm font-semibold text-text-primary">{title}</div>
+      {values.length ? (
+        <>
+          <MobileStackedRows
+            className="mt-3"
+            rows={values.map((row) => ({
+              title: row.label,
+              fields: [
+                { label: "内容", value: row.value },
+                { label: "作用", value: row.purpose },
+              ],
+            }))}
+          />
+          <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+            <table className="min-w-[520px] w-full border-collapse text-left text-sm leading-6">
+              <caption className="sr-only">{title}，包含节点时间、内容和作用</caption>
+              <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+                <tr>
+                  <th scope="col" className="w-32 px-3 py-2">节点 / 时间</th>
+                  <th scope="col" className="px-3 py-2">内容</th>
+                  <th scope="col" className="px-3 py-2">作用</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {values.map((row) => (
+                  <tr key={`${title}-${row.label}-${row.value}`} className="align-top">
+                    <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.label}</th>
+                    <td className="px-3 py-3 text-text-muted">{row.value}</td>
+                    <td className="px-3 py-3 text-text-muted">{row.purpose}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : <div className="mt-2"><EmptyLine text={empty} /></div>}
+    </div>
+  );
+}
+
+function SemanticMechanismPanel({ semantic }: { semantic: SemanticAnalysis | null }) {
+  const overloadWarnings = semantic?.overload_warnings?.filter((item) => item.trim()) ?? [];
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <div className="rounded-2xl border border-warning-border bg-warning-surface p-4">
+        <div className="text-sm font-semibold text-text-primary">信息过载风险</div>
+        <p className="mt-2 text-sm leading-6 text-warning">
+          这些片段信息密度较高，观众可能跟不上节奏，适合优先检查是否需要拆句、补解释或放慢节奏。
+        </p>
+        <TextList items={overloadWarnings} empty="暂无信息过载片段" className="text-warning" />
+      </div>
+
+      <div>
+        <div className="text-sm font-semibold text-text-primary">理解难度</div>
+        <DataTable rows={[{ label: "认知负荷", value: formatCognitiveLoad(semantic?.cognitive_load) }]} />
+      </div>
+
+      <div className="space-y-6 lg:col-span-2">
+        <div>
+          <div className="text-sm font-semibold text-text-primary">语言风格</div>
+          <DataTable rows={[
+            { label: "语气标签", value: joinList(semantic?.tone_tags) },
+            { label: "网感词", value: joinList(semantic?.net_slang) },
+          ]} />
+        </div>
+
+        <PsychologicalTriggersPanel semantic={semantic} />
+      </div>
+
+      <div className="border-t border-border-subtle pt-5 lg:col-span-2">
+        <InteractionDesignPanel items={semantic?.interaction_designs} />
+      </div>
+
+      <SemanticMechanismUsageTable semantic={semantic} />
+    </div>
+  );
+}
+
+function PsychologicalTriggersPanel({ semantic }: { semantic: SemanticAnalysis | null }) {
+  const triggers = getUniqueStrings(semantic?.psychological_triggers ?? []);
+  const rhetoricalRows = (semantic?.rhetorical_devices ?? []).filter((item) => (
+    item.type?.trim() || item.text_snippet?.trim() || item.mechanism?.trim()
+  ));
+
+  return (
+    <div>
+      <div className="text-sm font-semibold text-text-primary">传播心理</div>
+      <p className="mt-2 text-sm leading-6 text-text-muted">
+        先看这条视频主要调动了哪些心理，再对照具体修辞证据，判断点击、停留和转发靠什么成立。
+      </p>
+      <div className="mt-3">
+        {triggers.length ? <ChipList items={triggers} /> : <EmptyLine text="暂无心理触发器" />}
+      </div>
+
+      <div className="mt-4 text-xs font-semibold tracking-wide text-text-muted">修辞证据</div>
+      <MobileStackedRows
+        className="mt-2"
+        empty="暂无修辞证据"
+        rows={rhetoricalRows.map((row, index) => ({
+          title: row.type ?? `修辞 ${index + 1}`,
+          fields: [
+            { label: "原句", value: row.text_snippet },
+            { label: "出现位置", value: formatTimeRange(row.time_range) },
+            { label: "传播作用", value: row.mechanism },
+          ],
+        }))}
+      />
+      <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+        <table className="min-w-[720px] w-full border-collapse text-left text-sm leading-6">
+          <caption className="sr-only">传播心理修辞证据，包含修辞类型、出现位置、原句和传播作用</caption>
+          <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+            <tr>
+              <th scope="col" className="w-28 px-3 py-2">修辞类型</th>
+              <th scope="col" className="w-36 px-3 py-2">出现位置</th>
+              <th scope="col" className="px-3 py-2">原句</th>
+              <th scope="col" className="px-3 py-2">传播作用</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {rhetoricalRows.length ? rhetoricalRows.map((row, index) => (
+              <tr key={`${row.type}-${row.text_snippet}-${index}`} className="align-top">
+                <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.type ?? "修辞"}</th>
+                <td className="px-3 py-3 text-text-muted">{formatTimeRange(row.time_range) ?? "暂无"}</td>
+                <td className="px-3 py-3 text-text-muted">{row.text_snippet ?? "暂无"}</td>
+                <td className="px-3 py-3 text-text-muted">{row.mechanism ?? "暂无"}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={4} className="px-3 py-3 text-text-muted">暂无修辞证据</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function InteractionDesignPanel({ items }: { items: SemanticAnalysis["interaction_designs"] | undefined }) {
+  const rows = (items ?? []).filter((item) => (
+    item.type?.trim() || item.trigger_text?.trim() || item.expected_response?.trim() || item.placement_strategy?.trim()
+  ));
+
+  return (
+    <div>
+      <div className="text-sm font-semibold text-text-primary">互动设计</div>
+      <p className="mt-2 text-sm leading-6 text-text-muted">
+        把互动拆成类型、触发文案、预期反应和放置策略，方便直接判断这条视频在哪些位置引导评论、弹幕或转发。
+      </p>
+      <MobileStackedRows
+        className="mt-3"
+        empty="暂无互动设计"
+        rows={rows.map((row, index) => ({
+          title: row.type ?? `互动 ${index + 1}`,
+          fields: [
+            { label: "触发文案", value: row.trigger_text },
+            { label: "出现时间", value: row.time },
+            { label: "预期反应", value: row.expected_response },
+            { label: "放置策略", value: row.placement_strategy },
+          ],
+        }))}
+      />
+      <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+        <table className="min-w-[880px] w-full border-collapse text-left text-sm leading-6">
+          <caption className="sr-only">互动设计，包含互动类型、出现时间、触发文案、预期反应和放置策略</caption>
+          <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+            <tr>
+              <th scope="col" className="w-28 px-3 py-2">互动类型</th>
+              <th scope="col" className="w-28 px-3 py-2">出现时间</th>
+              <th scope="col" className="px-3 py-2">触发文案</th>
+              <th scope="col" className="px-3 py-2">预期反应</th>
+              <th scope="col" className="px-3 py-2">放置策略</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {rows.length ? rows.map((row, index) => (
+              <tr key={`${row.type}-${row.trigger_text}-${index}`} className="align-top">
+                <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.type ?? "互动"}</th>
+                <td className="px-3 py-3 text-text-muted">{row.time ?? "暂无"}</td>
+                <td className="px-3 py-3 text-text-muted">{row.trigger_text ?? "暂无"}</td>
+                <td className="px-3 py-3 text-text-muted">{row.expected_response ?? "暂无"}</td>
+                <td className="px-3 py-3 text-text-muted">{row.placement_strategy ?? "暂无"}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={5} className="px-3 py-3 text-text-muted">暂无互动设计</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SemanticMechanismUsageTable({ semantic }: { semantic: SemanticAnalysis | null }) {
+  const rows = [
+    {
+      mechanism: "心理触发器",
+      result: joinList(semantic?.psychological_triggers),
+      placement: "标题、封面、开头 3 秒",
+      enhancement: "把触发点写成具体人群、痛点、收益或反差，不只停留在情绪词。",
+      lift: "提升点击率",
+    },
+    {
+      mechanism: "修辞装置",
+      result: formatRhetoricalSummary(semantic?.rhetorical_devices),
+      placement: "金句、转折、结论",
+      enhancement: "保留最容易被复述的对比、排比、比喻或反问，并压成短句。",
+      lift: "提升记忆点和传播",
+    },
+    {
+      mechanism: "语气标签",
+      result: joinList(semantic?.tone_tags),
+      placement: "整条视频表达风格",
+      enhancement: "统一标题、口播和结尾语气，避免一会儿权威、一会儿玩梗导致信任感断裂。",
+      lift: "提升信任感和稳定观看",
+    },
+    {
+      mechanism: "网感词",
+      result: joinList(semantic?.net_slang),
+      placement: "标题、弹幕互动、评论引导",
+      enhancement: "只保留目标观众熟悉的表达，放在互动句里，不要堆满正文。",
+      lift: "提升亲近感和互动",
+    },
+    {
+      mechanism: "互动设计",
+      result: formatInteractionSummary(semantic?.interaction_designs),
+      placement: "中段、结尾或争议观点后",
+      enhancement: "把互动问题改成容易回答的二选一、经历分享或立场表达。",
+      lift: "提升评论、弹幕和转发",
+    },
+  ];
+
+  return (
+    <div className="border-t border-border-subtle pt-5 lg:col-span-2">
+      <div className="text-sm font-semibold text-text-primary">怎么使用这些机制</div>
+      <MobileStackedRows
+        className="mt-3"
+        rows={rows.map((row) => ({
+          title: row.mechanism,
+          fields: [
+            { label: "当前结果", value: row.result ?? "暂无" },
+            { label: "适合放在哪里", value: row.placement },
+            { label: "加强方式", value: row.enhancement },
+            { label: "主要提升", value: row.lift },
+          ],
+        }))}
+      />
+      <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+        <table className="min-w-[860px] w-full border-collapse text-left text-sm leading-6">
+          <caption className="sr-only">语义与传播机制使用建议，包含当前结果、适合位置、加强方式和主要提升</caption>
+          <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+            <tr>
+              <th scope="col" className="w-28 px-3 py-2">机制</th>
+              <th scope="col" className="px-3 py-2">当前结果</th>
+              <th scope="col" className="px-3 py-2">适合放在哪里</th>
+              <th scope="col" className="px-3 py-2">加强方式</th>
+              <th scope="col" className="px-3 py-2">主要提升</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-subtle">
+            {rows.map((row) => (
+              <tr key={row.mechanism} className="align-top">
+                <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.mechanism}</th>
+                <td className="px-3 py-3 text-text-muted">{row.result ?? "暂无"}</td>
+                <td className="px-3 py-3 text-text-muted">{row.placement}</td>
+                <td className="px-3 py-3 text-text-muted">{row.enhancement}</td>
+                <td className="px-3 py-3 text-text-muted">{row.lift}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function formatRhetoricalSummary(items: SemanticAnalysis["rhetorical_devices"] | undefined) {
+  const values = getUniqueStrings((items ?? []).map((item) => item.type));
+
+  return values.length ? values.join("、") : null;
+}
+
+function formatTimeRange(range: { start?: string; end?: string } | undefined) {
+  if (!range?.start && !range?.end) {
+    return null;
+  }
+
+  if (range.start && range.end) {
+    return `${range.start} 至 ${range.end}`;
+  }
+
+  return range.start ?? range.end ?? null;
+}
+
+function formatInteractionSummary(items: SemanticAnalysis["interaction_designs"] | undefined) {
+  const values = (items ?? []).map((item) => item.type || item.trigger_text).filter((item): item is string => Boolean(item));
+
+  return values.length ? values.join("、") : null;
+}
+
+function CreatorActionPlanPanel({ plan }: { plan: CreatorActionPlan }) {
+  const priorityFixes = (plan.priority_fixes ?? []).filter((fix) => fix.problem?.trim() || fix.reason?.trim() || fix.rewrite?.trim());
+
+  return (
+    <div className="space-y-6 rounded-2xl border border-warning-border bg-warning-surface p-5">
+      <div>
+        <div className="text-sm font-semibold text-text-primary">需要修改</div>
+        <p className="mt-2 text-sm leading-6 text-warning">
+          先处理会影响点击、停留和互动的关键问题。每条建议都包含问题、原因和直接改法。
+        </p>
+        {priorityFixes.length ? (
+          <ol className="mt-4 divide-y divide-warning-border rounded-2xl border border-warning-border bg-surface-elevated px-4">
+            {priorityFixes.map((fix, index) => (
+              <li
+                key={`${fix.problem}-${index}`}
+                className="py-4"
+              >
+                <div className="text-xs font-semibold tracking-wide text-text-muted">优先级 {fix.priority ?? index + 1}</div>
+                <div className="mt-2 space-y-2 text-sm leading-6">
+                  <div>
+                    <span className="font-semibold text-text-primary">问题：</span>
+                    <span className="text-text-muted">{fix.problem ?? "暂无"}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-text-primary">原因：</span>
+                    <span className="text-text-muted">{fix.reason ?? "暂无"}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-text-primary">直接改法：</span>
+                    <span className="text-text-muted">{fix.rewrite ?? "暂无"}</span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : <div className="mt-2"><EmptyLine text="暂无优先修改建议" /></div>}
+      </div>
+
+      <div className="border-t border-warning-border pt-5">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div>
+            <div className="text-sm font-semibold text-text-primary">下次继续保留</div>
+            <TextList items={plan.keep_points} empty="暂无可复用优点" />
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold text-text-primary">下一条视频复用模板</div>
+            <TextList items={plan.reuse_template} empty="暂无可复用结构" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function joinList(items: Array<string | null | undefined> | undefined | null) {
   const values = (items ?? []).filter((item): item is string => Boolean(item));
   return values.length ? values.join("、") : null;
@@ -773,36 +1390,197 @@ function formatScore(value: number | null | undefined) {
   return `${value} 分，满分 10 分；分数越高，表示越能抓住注意力并推动观众继续看。`;
 }
 
-function formatLoadDistribution(value: Record<string, number> | undefined) {
-  if (!value) {
+function formatHookDetail(hook: HookDetail | null | undefined) {
+  if (!hook) {
     return null;
   }
 
-  const parts = [
-    value.low === undefined ? null : `容易看懂 ${value.low}%`,
-    value.medium === undefined ? null : `需要集中注意力 ${value.medium}%`,
-    value.high === undefined ? null : `信息很密 ${value.high}%`,
-  ].filter(Boolean);
+  const score = hook.hook_score === undefined ? "" : `，吸引力评分 ${hook.hook_score} 分，满分 10 分`;
 
-  return parts.length ? `${parts.join("；")}。这表示不同难度段落在全片中的占比，不是质量分。` : null;
+  return `${hook.time ?? "未知时间"} ${hook.text ?? ""}${score}`;
 }
 
-function FieldLine({ label, value }: { label: string; value: string | null | undefined }) {
+function MobileStackedRows({ rows, empty = "暂无", className = "" }: { rows: MobileTableRow[]; empty?: string; className?: string }) {
+  const values = rows.filter((row) => row.title.trim() || row.fields.some((field) => field.value?.trim()));
+
+  if (!values.length) {
+    return <div className={`md:hidden ${className}`.trim()}><EmptyLine text={empty} /></div>;
+  }
+
   return (
-    <div>
-      <span className="font-semibold text-text-primary">{label}：</span>
-      <span>{value && value.trim() ? value : "暂无"}</span>
+    <div className={`space-y-3 md:hidden ${className}`.trim()}>
+      {values.map((row, index) => (
+        <section key={`${row.title}-${index}`} className="min-w-0 rounded-2xl border border-border-subtle bg-surface-elevated p-4">
+          <div className="break-words text-sm font-semibold text-text-primary">{row.title || `第 ${index + 1} 项`}</div>
+          <dl className="mt-3 space-y-3 text-sm leading-6">
+            {row.fields.map((field) => (
+              <div key={field.label}>
+                <dt className="text-xs font-semibold tracking-wide text-text-muted">{field.label}</dt>
+                <dd className="mt-1 break-words text-text-primary">{field.value && field.value.trim() ? field.value : "暂无"}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
     </div>
   );
 }
 
-function HookBlock({ title, hook }: { title: string; hook: HookDetail | null | undefined }) {
-  if (!hook) {
-    return <FieldLine label={title} value={null} />;
+function DataTable({ rows }: { rows: TableRow[] }) {
+  const values = rows.map((row) => ({
+    ...row,
+    value: row.value && row.value.trim() ? row.value : "暂无",
+  }));
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-border-subtle bg-surface-selected">
+      <table className="w-full border-collapse text-left text-sm leading-6">
+        <caption className="sr-only">结构化信息表，包含字段名称和字段内容</caption>
+        <tbody className="divide-y divide-border-subtle">
+          {values.map((row) => (
+            <tr key={row.label} className="align-top">
+              <th scope="row" className="w-28 bg-surface-muted px-3 py-2 text-left font-semibold text-text-primary sm:w-36">
+                {row.label}
+              </th>
+              <td className="px-3 py-2 text-text-muted">{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SemanticFlow({ sections }: { sections: StructureSection[] }) {
+  if (!sections.length) {
+    return <div className="mt-3"><EmptyLine text="暂无语义分段" /></div>;
   }
 
-  const score = hook.hook_score === undefined ? "" : `，吸引力评分 ${hook.hook_score} 分，满分 10 分`;
-  return <FieldLine label={title} value={`${hook.time ?? "未知时间"} ${hook.text ?? ""}${score}`} />;
+  const rows = chunkSections(sections, 3);
+
+  return (
+    <div className="mt-4 space-y-2">
+      {rows.map((row, rowIndex) => (
+        <div key={`semantic-row-${rowIndex}`}>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)_2rem_minmax(0,1fr)] md:items-stretch">
+            {getSemanticRowItems(row, rowIndex).map((section, itemIndex) => (
+              <SemanticFlowCard key={`${section.startSeconds}-${section.title}`} section={section} arrow={getSemanticArrow(row, rowIndex, itemIndex)} />
+            ))}
+          </div>
+          {rowIndex < rows.length - 1 ? <SemanticFlowConnector align={rowIndex % 2 === 0 ? "end" : "start"} /> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function chunkSections(sections: StructureSection[], size: number) {
+  const rows: StructureSection[][] = [];
+
+  for (let index = 0; index < sections.length; index += size) {
+    rows.push(sections.slice(index, index + size));
+  }
+
+  return rows;
+}
+
+function getSemanticRowItems(row: StructureSection[], rowIndex: number) {
+  return rowIndex % 2 === 0 ? row : [...row].reverse();
+}
+
+function getSemanticArrow(row: StructureSection[], rowIndex: number, itemIndex: number) {
+  if (itemIndex >= row.length - 1) {
+    return null;
+  }
+
+  return rowIndex % 2 === 0 ? "→" : "←";
+}
+
+function SemanticFlowCard({ section, arrow }: { section: StructureSection; arrow: string | null }) {
+  const title = formatSemanticSectionTitle(section.title);
+
+  return (
+    <>
+      <div className="rounded-2xl border border-border-subtle bg-surface-selected p-4 shadow-panel">
+        {title ? <div className="font-semibold text-text-primary">{title}</div> : null}
+        <div className="mt-2 text-xs font-semibold text-text-muted">
+          {formatSeconds(section.startSeconds)} 至 {formatSeconds(section.endSeconds)}
+        </div>
+        <div className="mt-2 text-sm leading-6 text-text-muted">{section.summary}</div>
+      </div>
+      {arrow ? (
+        <div className="flex items-center justify-center text-lg font-semibold text-text-muted" aria-hidden="true">
+          {arrow}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function formatSemanticSectionTitle(title: string) {
+  return /^语义段\s*\d+$/.test(title.trim()) ? null : title;
+}
+
+function SemanticFlowConnector({ align }: { align: "start" | "end" }) {
+  return (
+    <div className="hidden h-8 grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)_2rem_minmax(0,1fr)] md:grid" aria-hidden="true">
+      <div className={`${align === "end" ? "col-start-5" : "col-start-1"} flex justify-center`}>
+        <div className="flex h-full items-center text-lg font-semibold text-text-muted">↓</div>
+      </div>
+    </div>
+  );
+}
+
+function AuditResultsTables({ rows }: { rows: AuditRow[] }) {
+  const layerNames = ["包装层", "脚本层", "互动层", "总结层"];
+
+  return (
+    <div className="mt-3 grid gap-4">
+      {layerNames.map((layerName) => (
+        <AuditLayerTable key={layerName} title={layerName} rows={rows.filter((row) => row.layer === layerName)} />
+      ))}
+    </div>
+  );
+}
+
+function AuditLayerTable({ title, rows }: { title: string; rows: AuditRow[] }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold tracking-wide text-text-muted">{title}</div>
+      <MobileStackedRows
+        className="mt-2"
+        rows={rows.map((row) => ({
+          title: row.subject,
+          fields: [
+            { label: "当前结果", value: row.result && row.result.trim() ? row.result : "暂无" },
+            { label: "分析原因", value: row.benefit },
+          ],
+        }))}
+        empty="暂无分析结果"
+      />
+      <div className="mt-2 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-selected md:block">
+      <table className="min-w-[640px] w-full border-collapse text-left text-sm leading-6">
+        <caption className="sr-only">{title}分析结果，包含结果项、当前结果和分析原因</caption>
+        <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+          <tr>
+            <th scope="col" className="w-32 px-3 py-2">结果项</th>
+            <th scope="col" className="px-3 py-2">当前结果</th>
+            <th scope="col" className="px-3 py-2">分析原因</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border-subtle">
+          {rows.map((row) => (
+            <tr key={`${row.layer}-${row.subject}`} className="align-top">
+              <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.subject}</th>
+              <td className="px-3 py-3 text-text-muted">{row.result && row.result.trim() ? row.result : "暂无"}</td>
+              <td className="px-3 py-3 text-text-muted">{row.benefit}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  );
 }
 
 function buildCopyAdvantages(result: VideoAnalysisResult) {
@@ -812,105 +1590,284 @@ function buildCopyAdvantages(result: VideoAnalysisResult) {
   const internalization = result.internalizationSummary;
   const advantages: Array<{ title: string; content: string }> = [];
 
+  result.copySuggestions.forEach((suggestion) => {
+    if (!suggestion.content.trim()) {
+      return;
+    }
+
+    advantages.push({
+      title: suggestion.type || "文案复用建议",
+      content: formatCopySuggestionAsKeepPoint(suggestion),
+    });
+  });
+
   if (packaging?.title_formulas?.length || packaging?.primary_psychology) {
     advantages.push({
-      title: "标题封面优点",
-      content: `用了${joinList(packaging?.title_formulas) ?? "明确"}写法，主要调动${packaging?.primary_psychology ?? "观众兴趣"}心理，能降低用户判断成本。`,
+      title: "标题封面复用建议",
+      content: `下次同类选题可以继续使用“${joinList(packaging?.title_formulas) ?? "明确看点"}”的标题方式，围绕${packaging?.primary_psychology ?? "观众兴趣"}把点击理由讲清楚。`,
     });
   }
 
   if (script?.visual_hook?.text || script?.promise_hook?.text) {
     advantages.push({
-      title: "开头优点",
-      content: `开头先抛出“${script?.visual_hook?.text ?? script?.promise_hook?.text}”，随后交代观众继续看的理由，利于前 15 秒留存。`,
+      title: "开头复用建议",
+      content: `下次开头继续把“${script?.visual_hook?.text ?? script?.promise_hook?.text}”这类强钩子前置，再补一句观看收益，帮助观众在前 15 秒判断要不要留下。`,
     });
   }
 
   if (script?.logic_flow || script?.structural_blocks?.meat?.length) {
     advantages.push({
-      title: "结构优点",
-      content: `脚本采用${script?.logic_flow ?? "清晰"}结构，主体内容分段展开，观众更容易跟住论点推进。`,
+      title: "结构复用建议",
+      content: `下次继续沿用${script?.logic_flow ?? "分段推进"}结构，把主体内容拆成几个明确问题逐段解决，让观众更容易跟住论点推进。`,
     });
   }
 
   if (semantic?.interaction_designs?.length || result.highlights.length) {
     advantages.push({
-      title: "传播优点",
-      content: `包含${result.highlights.length}个适合引用的金句，并设置互动点，便于评论、弹幕或二次传播。`,
+      title: "传播复用建议",
+      content: `下次继续预留金句和互动点，当前这类“可引用 + 可回应”的设计适合引导评论、弹幕或二次传播。`,
     });
   }
 
   if (internalization?.clever_design) {
-    advantages.push({ title: "最巧妙设计", content: internalization.clever_design });
+    advantages.push({
+      title: "巧妙设计复用建议",
+      content: `下次同类内容可以继续复用这个设计思路：${internalization.clever_design}`,
+    });
   }
 
-  return advantages;
+  return dedupeByContent(advantages);
 }
 
-function buildAuditSections(result: VideoAnalysisResult) {
+function formatCopySuggestionAsKeepPoint(suggestion: CopySuggestion) {
+  const type = suggestion.type.trim();
+  const content = suggestion.content.trim();
+
+  if (type.includes("标题")) {
+    return `下次同类选题继续沿用这类标题表达：${trimTrailingPunctuation(content)}，并明确写出人群、冲突或收益。`;
+  }
+
+  if (type.includes("结构")) {
+    return `下次继续复用这个结构设计：${trimTrailingPunctuation(content)}，把亮点放在观众最容易感知的位置。`;
+  }
+
+  if (type.includes("复用")) {
+    return `下次同类视频继续复用：${trimTrailingPunctuation(content)}。`;
+  }
+
+  return `下次继续复用这条文案经验：${trimTrailingPunctuation(content)}。`;
+}
+
+function trimTrailingPunctuation(text: string) {
+  return text.replace(/[。.!！?？]+$/u, "");
+}
+
+function dedupeByContent<T extends { content: string }>(items: T[]) {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const key = item.content.trim();
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildCreatorActionPlan(result: VideoAnalysisResult): CreatorActionPlan {
+  const script = result.scriptAnalysis;
+  const semantic = result.semanticAnalysis;
+  const metadata = result.metadataJson;
+  const actions: DerivedCreatorAction[] = [];
+
+  if (!script?.visual_hook?.text) {
+    actions.push({
+      issue: "开头缺少足够明确的抓注意力句子，观众可能还没理解看点就离开。",
+      rewrite: "把最强冲突、结果或反常识结论提前到前 3 秒，先给观众一个必须继续看的理由。",
+      example: "开头改成：先别急着照做，这个步骤错了会直接让结果反过来。",
+    });
+  }
+
+  if (!script?.promise_hook?.text) {
+    actions.push({
+      issue: "内容承诺不明显，观众不容易判断看完能获得什么。",
+      rewrite: "在开头 15 秒内补一句观看收益，把主题从“我要讲什么”改成“你能拿走什么”。",
+      example: "补一句：看完你可以直接套用这 3 步，把同类问题先排查一遍。",
+    });
+  }
+
+  if (semantic?.overload_warnings?.length || formatCognitiveLoad(semantic?.cognitive_load)?.includes("高")) {
+    actions.push({
+      issue: "部分段落信息密度偏高，普通观众可能需要暂停或回看。",
+      rewrite: "把高密度段落拆成短句，每讲完一个概念就补一个例子或使用场景。",
+      example: "改成：先记一个判断标准。只要出现 A，就先检查 B；如果没有 B，再看 C。",
+    });
+  }
+
+  if (!script?.structural_blocks?.re_hook) {
+    actions.push({
+      issue: "中后段二次留存设计不明显，信息变密后容易掉观看。",
+      rewrite: "在正文中段加入反转、阶段性结论或下一段预告，把观众重新拉回主线。",
+      example: "补一句：但真正容易踩坑的不是这里，而是接下来这个细节。",
+    });
+  }
+
+  if (!script?.cta?.text) {
+    actions.push({
+      issue: "结尾缺少明确行动引导，观看后的互动和转化会变弱。",
+      rewrite: "用一个低门槛动作收尾，让观众知道评论、收藏或下一步该做什么。",
+      example: "结尾加：如果你也遇到过这个问题，把你的场景发在评论区，我按类型继续拆。",
+    });
+  }
+
+  if (!actions.length && metadata?.retention_risk_points?.length) {
+    actions.push({
+      issue: metadata.retention_risk_points[0],
+      rewrite: "优先检查这个风险点前后的 10 到 20 秒，把长解释拆短，并补一句承接。",
+      example: "承接句可用：这里先不用记全部，你只要先抓住一个判断标准。",
+    });
+  }
+
+  const titleSubject = result.packagingAnalysis?.primary_psychology ?? result.healthCard?.core_keywords?.[0] ?? "核心看点";
+
+  return {
+    priority_fixes: actions.slice(0, 3).map((action, index) => ({
+      priority: `P${index + 1}`,
+      problem: action.issue,
+      reason: action.rewrite,
+      rewrite: action.example,
+    })),
+    keep_points: buildCreatorKeepPoints(result),
+    title_rewrites: [
+      `别再忽略${titleSubject}：这 3 个细节最容易被低估`,
+      `真正影响结果的不是努力，而是这 3 个判断标准`,
+    ],
+    opening_rewrites: ["前 15 秒：先给一个反常识结论，再告诉观众看完能拿走 3 个判断标准或操作步骤。"],
+    cta_rewrites: ["结尾改成：如果你也遇到类似情况，把你的具体场景发在评论区，我按类型继续拆。"],
+    overload_rewrites: ["把信息最密的段落拆成三句：先给判断标准，再举一个例子，最后告诉观众下一步怎么做。"],
+    reuse_template: buildReuseTemplate(result),
+  };
+}
+
+function buildCreatorKeepPoints(result: VideoAnalysisResult) {
+  return buildCopyAdvantages(result).map((advantage) => `${advantage.title}：${advantage.content}`);
+}
+
+function buildReuseTemplate(result: VideoAnalysisResult) {
+  const script = result.scriptAnalysis;
+  const packaging = result.packagingAnalysis;
+  const semantic = result.semanticAnalysis;
+
+  return [
+    `标题：套用${joinList(packaging?.title_formulas) ?? "明确人群 + 明确收益 + 情绪触发"}，优先突出${packaging?.primary_psychology ?? "观众最关心的结果"}。`,
+    `开头：前 3 秒先给${script?.visual_hook?.type ?? "冲突或结果"}，再用一句话说明看完能得到什么。`,
+    `正文：按${script?.logic_flow ?? "问题提出 -> 原因解释 -> 方法拆解 -> 总结行动"}推进，每段结尾加一句过渡钩子。`,
+    `传播：保留${joinList(semantic?.tone_tags) ?? "清晰直接"}语气，至少设计 1 个评论触发点和 1 句可摘出来的金句。`,
+    `结尾：用具体行动收口，引导观众评论场景、收藏步骤或关注下一条延展内容。`,
+  ];
+}
+
+function buildAuditRows(result: VideoAnalysisResult): AuditRow[] {
   const packaging = result.packagingAnalysis;
   const script = result.scriptAnalysis;
   const semantic = result.semanticAnalysis;
   const internalization = result.internalizationSummary;
-  const metadata = result.metadataJson;
 
   return [
     {
-      title: "包装层，决定点不点",
-      items: [
-        `标题公式：${joinList(packaging?.title_formulas) ?? "暂无"}，审计它是否用悬念、数字、对比或情绪触发点击。`,
-        `心理触发：${formatPsychology(packaging)}，审计它主要调动好奇、焦虑、认同还是愤怒。`,
-        `关键词密度：${formatKeywordDensity(packaging?.keyword_density) ?? "暂无"}`,
-        `封面关系：${packaging?.cover_relation ?? "暂无"}，审计封面文字和标题是互补还是重复。`,
-        `视觉情绪：${packaging?.visual_emotion ?? "暂无"}，审计字体、颜色和大小带来的第一感受。`,
-      ],
+      layer: "包装层",
+      subject: "标题公式",
+      result: joinList(packaging?.title_formulas),
+      benefit: "这些元素能让观众更快判断看点，有利于增加点击率。",
     },
     {
-      title: "脚本层，决定看不看得完",
-      items: [
-        `前 3 秒：${script?.visual_hook?.text ?? "暂无"}，审计它是否快速建立冲突、痛点或高光预期。`,
-        `3 到 15 秒：${script?.promise_hook?.text ?? "暂无"}，审计它是否告诉观众继续看能得到什么。`,
-        `正文骨架：${script?.logic_flow ?? "暂无"}，审计它是并列、递进、流程、故事还是问题解决。`,
-        `二次留存：${script?.structural_blocks?.re_hook ?? "暂无"}，审计中后段有没有重新拉回注意力。`,
-        `段落转折：${script?.segment_hooks?.length ?? 0} 个，审计每段结尾是否留下继续看的理由。`,
-      ],
+      layer: "包装层",
+      subject: "心理触发",
+      result: formatPsychology(packaging),
+      benefit: "明确心理触发后，更容易判断内容靠什么驱动用户点开。",
     },
     {
-      title: "互动层，决定会不会行动",
-      items: [
-        `互动设计：${semantic?.interaction_designs?.length ?? 0} 个，审计是否引导弹幕、评论、站队或转发。`,
-        `引导行动：${script?.cta?.text ?? "暂无"}，审计结尾是否明确让观众评论、点赞、收藏或关注。`,
-        `金句数量：${result.highlights.length} 个，审计是否有适合截图、引用和传播的短句。`,
-        `网感词：${joinList(semantic?.net_slang) ?? "暂无"}，审计它是否贴近 B 站语境和圈层表达。`,
-      ],
+      layer: "包装层",
+      subject: "关键词密度",
+      result: formatKeywordDensity(packaging?.keyword_density),
+      benefit: "关键词清楚能降低理解成本，也更利于搜索、推荐和记忆。",
     },
     {
-      title: "总结层，决定能不能复用",
-      items: [
-        `唯一核心信息：${internalization?.core_message ?? "暂无"}，审计视频是否能被一句话讲清楚。`,
-        `最巧妙设计：${internalization?.clever_design ?? "暂无"}，审计它最值得借鉴的是开场、转场、类比还是节奏。`,
-        `信息理解难度：${formatLoadDistribution(metadata?.cognitive_load_distribution) ?? "暂无"}`,
-        `优化方向：${internalization?.optimization ?? "暂无"}`,
-      ],
+      layer: "脚本层",
+      subject: "前 3 秒",
+      result: script?.visual_hook?.text,
+      benefit: "前 3 秒抓住注意力，能减少刚点进来就划走的流失。",
+    },
+    {
+      layer: "脚本层",
+      subject: "3 到 15 秒",
+      result: script?.promise_hook?.text,
+      benefit: "明确收益能把好奇心转成继续观看的理由。",
+    },
+    {
+      layer: "脚本层",
+      subject: "正文骨架",
+      result: script?.logic_flow,
+      benefit: "结构清楚能让观众跟住信息推进，降低中途退出概率。",
+    },
+    {
+      layer: "脚本层",
+      subject: "二次留存",
+      result: script?.structural_blocks?.re_hook,
+      benefit: "二次拉回能对抗信息疲劳，提升完播和有效观看时长。",
+    },
+    {
+      layer: "脚本层",
+      subject: "段落转折",
+      result: `${script?.segment_hooks?.length ?? 0} 个`,
+      benefit: "段落间有牵引力，观众更容易从一个观点进入下一个观点。",
+    },
+    {
+      layer: "互动层",
+      subject: "互动设计",
+      result: `${semantic?.interaction_designs?.length ?? 0} 个`,
+      benefit: "互动点能把观看行为转成反馈信号，帮助内容继续分发。",
+    },
+    {
+      layer: "互动层",
+      subject: "引导行动",
+      result: script?.cta?.text,
+      benefit: "明确行动能减少观众犹豫，让内容获得更多后续动作。",
+    },
+    {
+      layer: "互动层",
+      subject: "金句数量",
+      result: `${result.highlights.length} 个`,
+      benefit: "金句越容易被摘出，越利于评论区复述和二次传播。",
+    },
+    {
+      layer: "互动层",
+      subject: "网感词",
+      result: joinList(semantic?.net_slang),
+      benefit: "语境贴近能降低距离感，让目标观众更愿意互动。",
+    },
+    {
+      layer: "总结层",
+      subject: "唯一核心信息",
+      result: internalization?.core_message,
+      benefit: "核心信息越清楚，越容易被观众记住、转述和复用。",
+    },
+    {
+      layer: "总结层",
+      subject: "最巧妙设计",
+      result: internalization?.clever_design,
+      benefit: "明确可借鉴点，能把一次分析转成后续创作方法。",
+    },
+    {
+      layer: "总结层",
+      subject: "优化方向",
+      result: internalization?.optimization,
+      benefit: "聚焦单个优化方向，能避免改稿时平均用力。",
     },
   ];
-}
-
-function StructuralBlocksBlock({ blocks }: { blocks: ScriptAnalysis["structural_blocks"] | undefined }) {
-  const items = [
-    blocks?.hook ? `开头抓注意力：${blocks.hook}，用问题、冲突或高光先把人留下。` : null,
-    blocks?.promise ? `告诉观众能得到什么：${blocks.promise}，明确看下去的收益。` : null,
-    blocks?.meat?.length ? `主体内容：${blocks.meat.join("、")}，展开论点、案例、步骤或证据。` : null,
-    blocks?.re_hook ? `中后段重新拉回注意力：${blocks.re_hook}，防止观众在信息变密时流失。` : null,
-    blocks?.cta ? `引导行动：${blocks.cta}，提醒点赞、收藏、评论、关注或执行下一步。` : null,
-  ].filter((item): item is string => Boolean(item));
-
-  return (
-    <div>
-      <div className="font-semibold text-text-primary">结构块：</div>
-      <TextList items={items} empty="暂无结构块" />
-    </div>
-  );
 }
 
 function ChipList({ items, className = "" }: { items: string[] | null | undefined; className?: string }) {
@@ -930,16 +1887,16 @@ function ChipList({ items, className = "" }: { items: string[] | null | undefine
   );
 }
 
-function TextList({ items, empty }: { items: string[] | null | undefined; empty: string }) {
+function TextList({ items, empty, className = "text-text-muted" }: { items: string[] | null | undefined; empty: string; className?: string }) {
   const values = (items ?? []).filter((item) => item.trim());
   if (!values.length) {
-    return <EmptyLine text={empty} />;
+    return <EmptyLine text={empty} className={className} />;
   }
 
   return (
     <div className="mt-2 space-y-2">
       {values.map((item) => (
-        <div key={item} className="text-sm leading-6 text-text-muted">
+        <div key={item} className={`text-sm leading-6 ${className}`}>
           {item}
         </div>
       ))}
@@ -947,8 +1904,32 @@ function TextList({ items, empty }: { items: string[] | null | undefined; empty:
   );
 }
 
-function EmptyLine({ text }: { text: string }) {
-  return <div className="text-sm leading-6 text-text-muted">{text}</div>;
+function MetricRiskList({ items }: { items: string[] | null | undefined }) {
+  const values = (items ?? []).filter((item) => item.trim());
+
+  return (
+    <div className="mt-3 rounded-2xl border border-warning-border bg-warning-surface p-4">
+      <div className="text-xs font-semibold tracking-wide text-warning">指标风险</div>
+      {values.length ? (
+        <ul className="mt-3 space-y-2">
+          {values.map((item) => (
+            <li key={item} className="flex gap-2 text-sm leading-6 text-warning">
+              <span className="mt-0.5 shrink-0 rounded-full border border-warning-border bg-surface-elevated px-2 py-0.5 text-[11px] font-semibold leading-5 text-warning">
+                指标风险
+              </span>
+              <span className="min-w-0 break-words">{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="mt-2 text-sm leading-6 text-warning">暂无指标风险。</div>
+      )}
+    </div>
+  );
+}
+
+function EmptyLine({ text, className = "text-text-muted" }: { text: string; className?: string }) {
+  return <div className={`text-sm leading-6 ${className}`}>{text}</div>;
 }
 
 function _extractErrorMessage(data: unknown, fallback: string) {
@@ -963,37 +1944,17 @@ function _extractErrorMessage(data: unknown, fallback: string) {
   return fallback;
 }
 
-const RESULT_SECTIONS = [
+const FIRST_ANALYSIS_STEPS = [
   {
-    title: "视频基础信息",
-    description: "分析后展示标题、UP 主、时长、发布时间等关键信息，便于快速确认素材背景。",
+    title: "1. 粘贴视频",
+    description: "输入完整链接或 BV 号，不需要额外填写标题、UP 主或字幕来源。",
   },
   {
-    title: "内容摘要",
-    description: "提炼视频核心观点与关键信息，适合先判断是否值得继续深看。",
+    title: "2. 等待处理",
+    description: "系统会获取视频信息、解析字幕并生成结构化分析，进度会在这里更新。",
   },
   {
-    title: "语义分段",
-    description: "按话题、观点和转折拆解视频，帮助看清每一段在讲什么。",
-  },
-  {
-    title: "视频体检结果",
-    description: "快速判断视频是否有开头吸引点、行动引导和稳定传播关键词。",
-  },
-  {
-    title: "标题封面分析",
-    description: "分析标题写法、情绪触发、封面配合方式和关键词出现频率。",
-  },
-  {
-    title: "脚本结构分析",
-    description: "拆出开头吸引点、内容承诺、段落转折、金句和行动引导。",
-  },
-  {
-    title: "语义与传播机制",
-    description: "识别修辞装置、互动设计、认知负荷和潜在过载点。",
-  },
-  {
-    title: "指标风险与文案优点",
-    description: "汇总整体吸引力、留存风险、内化总结与可借鉴的文案优点。",
+    title: "3. 直接改稿",
+    description: "优先查看行动建议，按优先修改、标题改写、开头改写和 CTA 改写处理。",
   },
 ] as const;

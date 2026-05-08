@@ -45,12 +45,12 @@ export function AppHeader() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
           {authResolving ? (
             <span className="text-sm text-text-muted">加载中...</span>
           ) : authUser ? (
             <>
-              <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 lg:flex">
                 <input
                   className="h-11 w-28 rounded-xl border border-border-subtle bg-surface-elevated px-3 text-sm tracking-[0.16em] text-text-primary outline-none transition focus:border-action-secondary"
                   value={redeemUsageCode}
@@ -84,19 +84,48 @@ export function AppHeader() {
                 </span>
               </div>
               {redeemMessage ? (
-                <span className={redeemMessage.type === "error" ? "text-sm text-danger" : "text-sm text-success"}>
+                <span className={redeemMessage.type === "error" ? "hidden text-sm text-danger xl:inline" : "hidden text-sm text-success xl:inline"}>
                   {redeemMessage.text}
                 </span>
               ) : null}
               <details className="group relative">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl border border-border-subtle bg-surface-elevated px-3 text-sm font-medium text-text-secondary shadow-control transition hover:bg-surface-selected hover:text-text-primary [&::-webkit-details-marker]:hidden">
-                  <span className="max-w-32 truncate">{authUser.phoneNumber}</span>
+                  <span className="max-w-20 truncate sm:max-w-32">{authUser.phoneNumber}</span>
                   <svg className="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </summary>
-                <div className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-2xl border border-border-subtle bg-surface-elevated p-1 shadow-card">
+                <div className="absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border-subtle bg-surface-elevated p-2 shadow-card sm:w-56">
                   <div className="px-3 py-2 text-xs leading-5 text-text-muted">当前账号</div>
+                  <div className="border-b border-border-subtle px-3 pb-3 lg:hidden">
+                    <div className="flex items-center justify-between gap-3 text-sm text-text-secondary">
+                      <span>积分</span>
+                      <span className="font-semibold text-text-primary">{pointsBalance}</span>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        className="min-h-11 min-w-0 flex-1 rounded-xl border border-border-subtle bg-surface px-3 text-sm tracking-[0.16em] text-text-primary outline-none transition focus:border-action-secondary"
+                        value={redeemUsageCode}
+                        onChange={(event) => setRedeemUsageCode(event.target.value.trim().slice(0, 6))}
+                        placeholder="使用码"
+                        autoComplete="one-time-code"
+                        aria-label="兑换使用码"
+                      />
+                      <button
+                        type="button"
+                        className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-subtle bg-surface-muted px-3 text-sm font-medium text-text-secondary transition hover:bg-surface-selected disabled:opacity-60"
+                        onClick={() => void redeemUsageCodeForPoints()}
+                        disabled={redeemingUsageCode || redeemUsageCode.trim().length !== 6}
+                      >
+                        {redeemingUsageCode ? "兑换中" : "兑换"}
+                      </button>
+                    </div>
+                    {redeemMessage ? (
+                      <div className={redeemMessage.type === "error" ? "mt-2 text-sm text-danger" : "mt-2 text-sm text-success"}>
+                        {redeemMessage.text}
+                      </div>
+                    ) : null}
+                  </div>
                   <Link
                     href="/settings"
                     className="flex min-h-10 items-center rounded-xl px-3 text-sm text-text-secondary transition hover:bg-surface-muted hover:text-text-primary"

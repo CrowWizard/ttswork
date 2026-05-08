@@ -4,8 +4,42 @@
 
 @layer base {
 :root {
-  color: #211f1b;
-  background: #f2eee7;
+  --color-canvas: oklch(94.7% 0.015 78);
+  --color-canvas-warm: oklch(96.8% 0.018 79);
+  --color-canvas-cool: oklch(93.2% 0.013 253);
+  --color-surface: oklch(97.2% 0.014 78);
+  --color-surface-muted: oklch(92.6% 0.018 76);
+  --color-surface-elevated: oklch(98.4% 0.011 80);
+  --color-surface-inset: oklch(90.1% 0.02 77);
+  --color-surface-selected: oklch(98.7% 0.012 82);
+  --color-border-subtle: oklch(84.8% 0.026 75);
+  --color-border-strong: oklch(68.5% 0.035 73);
+  --color-text-primary: oklch(24.3% 0.012 75);
+  --color-text-secondary: oklch(40.6% 0.018 74);
+  --color-text-muted: oklch(42.5% 0.018 73);
+  --color-text-inverse: oklch(99.4% 0.004 83);
+  --color-action-primary: oklch(38.5% 0.055 174);
+  --color-action-primary-hover: oklch(30.5% 0.048 174);
+  --color-action-secondary: oklch(56.5% 0.112 54);
+  --color-action-secondary-hover: oklch(49.5% 0.105 51);
+  --color-action-record: oklch(82.2% 0.108 82);
+  --color-action-record-hover: oklch(77.8% 0.117 79);
+  --color-action-record-active: oklch(48.2% 0.13 33);
+  --color-danger: oklch(47.2% 0.12 31);
+  --color-danger-surface: oklch(94.4% 0.04 34);
+  --color-danger-border: oklch(79.6% 0.067 31);
+  --color-success: oklch(46.5% 0.08 160);
+  --color-success-surface: oklch(93.4% 0.034 148);
+  --color-success-border: oklch(78.8% 0.071 151);
+  --color-warning: oklch(52.6% 0.105 69);
+  --color-warning-surface: oklch(93.7% 0.051 78);
+  --color-warning-border: oklch(80.5% 0.091 77);
+  --color-info: oklch(42.2% 0.055 253);
+  --color-info-surface: oklch(93.8% 0.024 253);
+  --color-info-border: oklch(79.5% 0.047 250);
+
+  color: var(--color-text-primary);
+  background: var(--color-canvas);
 }
 
   html {

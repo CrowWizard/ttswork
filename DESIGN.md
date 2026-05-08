@@ -2,39 +2,39 @@
 name: 语音复刻工作台
 description: 面向单用户建声与文本转语音任务的低干扰工作台式 MVP。
 colors:
-  canvas: "#f2eee7"
-  canvas-warm: "#f7f2e9"
-  canvas-cool: "#e8edf3"
-  surface: "#f8f4ed"
-  surface-muted: "#ede6dc"
-  surface-elevated: "#fbf8f2"
-  surface-inset: "#e5dccf"
-  surface-selected: "#fdfaf4"
-  border-subtle: "#d7cbbb"
-  border-strong: "#a99b8a"
-  text-primary: "#211f1b"
-  text-secondary: "#575047"
-  text-muted: "#7b7166"
-  text-inverse: "#fffefa"
-  action-primary: "#234a42"
-  action-primary-hover: "#19362f"
-  action-secondary: "#b86432"
-  action-secondary-hover: "#9f4e25"
-  action-record: "#f0c66b"
-  action-record-hover: "#e8b24f"
-  action-record-active: "#b63d2f"
-  danger: "#a33a31"
-  danger-surface: "#fae7e2"
-  danger-border: "#e9b6ad"
-  success: "#276b55"
-  success-surface: "#e4f1e9"
-  success-border: "#a8d1bc"
-  warning: "#9a5c19"
-  warning-surface: "#f8ead0"
-  warning-border: "#e2bf7a"
-  info: "#34516f"
-  info-surface: "#e5edf5"
-  info-border: "#b4c6da"
+  canvas: "oklch(94.7% 0.015 78)"
+  canvas-warm: "oklch(96.8% 0.018 79)"
+  canvas-cool: "oklch(93.2% 0.013 253)"
+  surface: "oklch(97.2% 0.014 78)"
+  surface-muted: "oklch(92.6% 0.018 76)"
+  surface-elevated: "oklch(98.4% 0.011 80)"
+  surface-inset: "oklch(90.1% 0.020 77)"
+  surface-selected: "oklch(98.7% 0.012 82)"
+  border-subtle: "oklch(84.8% 0.026 75)"
+  border-strong: "oklch(68.5% 0.035 73)"
+  text-primary: "oklch(24.3% 0.012 75)"
+  text-secondary: "oklch(40.6% 0.018 74)"
+  text-muted: "oklch(42.5% 0.018 73)"
+  text-inverse: "oklch(99.4% 0.004 83)"
+  action-primary: "oklch(38.5% 0.055 174)"
+  action-primary-hover: "oklch(30.5% 0.048 174)"
+  action-secondary: "oklch(56.5% 0.112 54)"
+  action-secondary-hover: "oklch(49.5% 0.105 51)"
+  action-record: "oklch(82.2% 0.108 82)"
+  action-record-hover: "oklch(77.8% 0.117 79)"
+  action-record-active: "oklch(48.2% 0.130 33)"
+  danger: "oklch(47.2% 0.120 31)"
+  danger-surface: "oklch(94.4% 0.040 34)"
+  danger-border: "oklch(79.6% 0.067 31)"
+  success: "oklch(46.5% 0.080 160)"
+  success-surface: "oklch(93.4% 0.034 148)"
+  success-border: "oklch(78.8% 0.071 151)"
+  warning: "oklch(52.6% 0.105 69)"
+  warning-surface: "oklch(93.7% 0.051 78)"
+  warning-border: "oklch(80.5% 0.091 77)"
+  info: "oklch(42.2% 0.055 253)"
+  info-surface: "oklch(93.8% 0.024 253)"
+  info-border: "oklch(79.5% 0.047 250)"
 typography:
   display:
     fontFamily: "Inter, Noto Sans SC, PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif"
@@ -109,7 +109,7 @@ components:
 
 **Creative North Star: "安静的任务台"**
 
-这套界面服务一个工作台式 MVP：用户登录后完成个人建声与文本转语音，注册页只负责账号创建，设置页只负责密码管理。视觉系统必须保持专业、直接、低情绪，避免把当前产品伪装成品牌故事、营销首页或复杂账户中心。当前实现以 Tailwind 语义 token 为唯一前端事实来源，`DESIGN.md` 只记录这些 token 的设计意图，不另建一套旧色板快照。
+这套界面服务一个工作台式 MVP：用户登录后完成个人建声与文本转语音，注册页只负责账号创建，设置页只负责密码管理。视觉系统必须保持专业、直接、低情绪，避免把当前产品伪装成品牌故事、营销首页或复杂账户中心。当前实现以 `app/globals.css` 中的 OKLCH CSS variables 为唯一颜色事实来源，Tailwind 语义 token 只引用这些变量；`DESIGN.md` 记录这些 token 的设计意图，不另建一套旧色板快照。
 
 物理场景是：单个用户在普通办公环境中打开浏览器，想尽快确认登录状态、录制声纹、输入文本并拿到语音结果。界面应像一张整理过的任务台，层级清楚、反馈明确、干扰很少；浅色基底成立，因为当前任务需要表单输入、音频控件和状态反馈的可读性，而不是沉浸式监听或夜间控制台。
 
@@ -124,7 +124,7 @@ components:
 
 ## 2. Colors
 
-调色板采用 restrained 策略：低饱和暖灰承载大部分界面，深绿作为主操作，陶土橙作为焦点与次要动作，录音琥珀只用于录音入口和文字选区。所有命名以 `tailwind.config.ts` 的 `theme.extend.colors` 为准。
+调色板采用 restrained 策略：低饱和暖灰承载大部分界面，深绿作为主操作，陶土橙作为焦点与次要动作，录音琥珀只用于录音入口和文字选区。所有色值以 `app/globals.css` 的 `--color-*` OKLCH CSS variables 为准，`tailwind.config.ts` 只做语义别名映射。
 
 ### Primary
 - **任务深绿** (`action-primary`, `action-primary-hover`): 主按钮与关键提交动作使用的功能色。它不是品牌色，而是“确认执行”的稳定色；hover 使用更深绿色提供即时反馈。
@@ -178,9 +178,9 @@ components:
 系统使用“细边界 + 1px 级轻阴影”的混合分层。阴影只用于补足边界识别，不用于制造漂浮感、玻璃质感或模板化卡片。内部面板优先使用柔砂背景与细边框，而不是继续叠加重阴影。
 
 ### Shadow Vocabulary
-- **Card Shadow** (`0 1px 2px rgba(69, 53, 35, 0.05)`): 当前 `app-card` 默认阴影，用于页面主任务卡的轻微边界提示。
-- **Panel Shadow** (`0 1px 1px rgba(69, 53, 35, 0.04)`): 当前 `app-panel` 默认阴影，用于卡片内部的轻分组。
-- **Control Shadow** (`inset 0 1px 0 rgba(255, 254, 250, 0.55)`): 当前按钮与输入控件的内侧高光，避免控件在同色表面上糊成一片。
+- **Card Shadow** (`0 1px 2px oklch(35% 0.035 70 / 0.05)`): 当前 `app-card` 默认阴影，用于页面主任务卡的轻微边界提示。
+- **Panel Shadow** (`0 1px 1px oklch(35% 0.035 70 / 0.04)`): 当前 `app-panel` 默认阴影，用于卡片内部的轻分组。
+- **Control Shadow** (`inset 0 1px 0 oklch(99% 0.004 83 / 0.55)`): 当前按钮与输入控件的内侧高光，避免控件在同色表面上糊成一片。
 
 ### Named Rules
 **The Shadow Has a Job Rule.** 阴影只能表达任务容器或控件边界；如果一个区域已经有背景色和边框，就不要再额外加重阴影。

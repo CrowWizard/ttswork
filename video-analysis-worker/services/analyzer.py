@@ -264,6 +264,27 @@ class SemanticAnalysis(BaseModel):
     emotion_curve: list[dict[str, str]] = Field(default_factory=list)
 
 
+class CreatorFix(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priority: str = ""
+    problem: str = ""
+    reason: str = ""
+    rewrite: str = ""
+
+
+class CreatorActionPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    keep_points: list[str] = Field(default_factory=list)
+    priority_fixes: list[CreatorFix] = Field(default_factory=list)
+    title_rewrites: list[str] = Field(default_factory=list)
+    opening_rewrites: list[str] = Field(default_factory=list)
+    cta_rewrites: list[str] = Field(default_factory=list)
+    overload_rewrites: list[str] = Field(default_factory=list)
+    reuse_template: list[str] = Field(default_factory=list)
+
+
 class MetadataJSON(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -276,6 +297,7 @@ class MetadataJSON(BaseModel):
     golden_quote_count: Optional[int] = None
     interaction_count: Optional[int] = None
     cognitive_load_distribution: dict[str, int] = Field(default_factory=dict)
+    creator_action_plan: Optional[CreatorActionPlan] = None
 
 
 class Step2Output(BaseModel):
@@ -355,7 +377,7 @@ STEP1_EXAMPLE = json.dumps({"visual_hook": {"text": "你是不是一觉得头发
 
 STEP2_EXAMPLE = json.dumps({"packaging": {"title_formulas": ["悬念式", "反常识式"], "title_hook_words": ["千万别"], "primary_psychology": "焦虑", "secondary_psychology": "好奇", "keywords": ["洗头", "防脱"], "keyword_density": "高", "seo_friendly": True, "cover_text": "发量翻倍", "cover_relation": "互补", "visual_emotion": "焦虑", "color_scheme": ["红", "黄"], "typography_emotion": "冲击"}, "semantic": {"psychological_triggers": ["恐惧诉求"], "rhetorical_devices": [{"type": "恐惧诉求", "text_snippet": "头发会掉光", "time_range": {"start": "00:00", "end": "00:05"}, "mechanism": "通过后果引发焦虑"}], "tone_tags": ["网感", "亲切"], "net_slang": ["别傻了"], "persona_catchphrases": ["99%的人都不知道"], "interaction_designs": [{"type": "弹幕提问", "trigger_text": "你中招了没", "time": "00:05", "expected_response": "刷中招了", "placement_strategy": "中部留存"}], "knowledge_density_curve": [{"time_range": {"start": "00:15", "end": "00:45"}, "density": 4, "topic": "洗发水温", "term_count": 2}], "cognitive_load": "中", "overload_warnings": ["00:45-01:10 术语密集"], "emotion_curve": [{"time": "00:00", "emotion": "紧张"}]}}, ensure_ascii=False, indent=2)
 
-STEP3_EXAMPLE = json.dumps({"health_card": {"one_line_summary": "洗头误区导致脱发, 三招解决", "core_keywords": ["洗头", "防脱", "误区"], "has_hook": True, "has_cta": True, "hook_and_cta_quotes": ["你是不是一觉得头发油就去疯狂洗头？", "点赞收藏明天洗头试试看"]}, "packaging": {}, "script_layer": {}, "semantic_layer": {}, "summary": {"core_message": "正确洗头防脱", "clever_design": "00:05用反常识句式制造焦虑", "optimization": "原句: 别傻了这样只会越洗越掉 -> 新句: 你以为在清洁头皮, 其实在亲手杀死毛囊。理由: 后果更具体"}, "metadata_json": {"retention_risk_points": ["01:00-01:30 连续干货无钩子"]}}, ensure_ascii=False, indent=2)
+STEP3_EXAMPLE = json.dumps({"health_card": {"one_line_summary": "洗头误区导致脱发, 三招解决", "core_keywords": ["洗头", "防脱", "误区"], "has_hook": True, "has_cta": True, "hook_and_cta_quotes": ["你是不是一觉得头发油就去疯狂洗头？", "点赞收藏明天洗头试试看"]}, "packaging": {}, "script_layer": {}, "semantic_layer": {}, "summary": {"core_message": "正确洗头防脱", "clever_design": "00:05用反常识句式制造焦虑", "optimization": "原句: 别傻了这样只会越洗越掉 -> 新句: 你以为在清洁头皮, 其实在亲手杀死毛囊。理由: 后果更具体"}, "metadata_json": {"retention_risk_points": ["01:00-01:30 连续干货无钩子"], "creator_action_plan": {"keep_points": ["保留反常识开头, 继续用日常误区切入。"], "priority_fixes": [{"priority": "P1", "problem": "开头只提问题, 后果不够具体。", "reason": "观众不知道不改会损失什么, 前 3 秒停留动力不足。", "rewrite": "把原句改成: 你以为洗得越勤越干净, 其实是在让头皮屏障越来越脆。"}, {"priority": "P2", "problem": "中段连续讲 3 个概念。", "reason": "普通观众需要同时记判断标准、原因和做法, 容易暂停退出。", "rewrite": "拆成: 先记一个判断标准 -> 给一个生活例子 -> 再讲下一步。"}, {"priority": "P3", "problem": "结尾 CTA 只说点赞收藏。", "reason": "动作太泛, 观众不知道评论什么或收藏后怎么用。", "rewrite": "改成: 评论区打出你的发质, 我按油头、干头、敏感头继续拆洗法。"}], "title_rewrites": ["别再天天洗头了: 这 3 个动作才是掉发元凶", "头发越洗越油? 先改掉这 3 个洗头误区"], "opening_rewrites": ["前 15 秒: 你是不是头发一油就立刻洗? 先停一下, 真正让你越洗越油的, 不是出油, 而是这 3 个动作。看完你就能按发质改洗法。"], "cta_rewrites": ["如果你不知道自己是哪种发质, 在评论区写油头/干头/敏感头, 我下一条按类型给你拆。"], "overload_rewrites": ["01:00-01:30: 把术语解释拆成三句: 先说判断标准, 再举生活例子, 最后给操作动作。"], "reuse_template": ["标题: 反常识误区 + 明确后果 + 数字步骤", "开头: 先指出观众正在做错的动作, 再给看完收益", "正文: 每段只讲一个误区, 用判断标准 -> 例子 -> 改法推进", "结尾: 引导观众评论自己的具体场景"]}}}, ensure_ascii=False, indent=2)
 
 
 class AnalyzerService:
@@ -787,7 +809,9 @@ class AnalyzerService:
             f"标题: \"{title}\" | 封面: {cover_url or '未提供'}\n"
             "仅输出合法JSON对象, 必须严格仿照下方结构示例。\n\n"
             f"=== 结构示例 ===\n{STEP3_EXAMPLE}\n\n"
-            "填写规则: health_card.core_keywords严格3个; summary.core_message尽量不超过15字; packaging/script_layer/semantic_layer直接复制透传数据; 禁止输出Markdown。\n\n"
+            "填写规则: health_card.core_keywords严格3个; summary.core_message尽量不超过15字; packaging/script_layer/semantic_layer直接复制透传数据; "
+            "metadata_json.creator_action_plan 必须偏创作动作, 不要只诊断; priority_fixes 至少 3 个, 每个都要包含 problem、reason、rewrite; "
+            "必须给出标题改写、开头15秒改写、CTA改写、信息过载片段改写和下一条视频复用模板; 禁止输出Markdown。\n\n"
             "=== 透传数据 ===\n"
             f"packaging: {packaging.model_dump_json(exclude_unset=True)}\n"
             f"script_layer: {structure.model_dump_json(exclude_unset=True)}\n"
@@ -797,7 +821,7 @@ class AnalyzerService:
         report.packaging = packaging
         report.script_layer = structure
         report.semantic_layer = semantic
-        report.metadata_json = _postprocess_metadata(report.metadata_json, structure, semantic, total_duration)
+        report.metadata_json = _postprocess_metadata(report.metadata_json, structure, semantic, packaging, total_duration)
         return report
 
     def _build_mock_report(self, title: str, transcript_text: str, duration_seconds: float | None) -> tuple[FinalReport, list[Paragraph]]:
@@ -824,7 +848,7 @@ class AnalyzerService:
             summary=Internalization(core_message=(title[:15] or "视频要点"), clever_design=f"00:00用直接开场降低理解成本: {sentences[0][:30]}", optimization="原句: 开场平铺 -> 新句: 先给反差结论再展开。理由: 更利于前三秒留存"),
             metadata_json=MetadataJSON(retention_risk_points=[]),
         )
-        report.metadata_json = _postprocess_metadata(report.metadata_json, structure, semantic, duration)
+        report.metadata_json = _postprocess_metadata(report.metadata_json, structure, semantic, packaging, duration)
         return report, []
 
     def _to_output(self, report: FinalReport, paragraphs: list[Paragraph], model_name: str) -> AnalysisOutput:
@@ -847,7 +871,13 @@ class AnalyzerService:
         )
 
 
-def _postprocess_metadata(metadata: MetadataJSON, structure: StructureExtract, semantic: SemanticAnalysis, total_duration: float) -> MetadataJSON:
+def _postprocess_metadata(
+    metadata: MetadataJSON,
+    structure: StructureExtract,
+    semantic: SemanticAnalysis,
+    packaging: PackagingAnalysis,
+    total_duration: float,
+) -> MetadataJSON:
     densities = [item.density for item in semantic.knowledge_density_curve]
     total = len(densities) or 1
     low = len([item for item in densities if item <= 2])
@@ -861,7 +891,124 @@ def _postprocess_metadata(metadata: MetadataJSON, structure: StructureExtract, s
     metadata.narrative_curve_text = structure.narrative_curve_text
     metadata.structural_blocks = structure.structural_blocks
     metadata.cognitive_load_distribution = {"low": round(low / total * 100), "medium": round(medium / total * 100), "high": round(high / total * 100)}
+    metadata.creator_action_plan = _merge_creator_action_plan(metadata.creator_action_plan, structure, semantic, packaging)
     return metadata
+
+
+def _merge_creator_action_plan(
+    plan: CreatorActionPlan | None,
+    structure: StructureExtract,
+    semantic: SemanticAnalysis,
+    packaging: PackagingAnalysis,
+) -> CreatorActionPlan:
+    fallback = _build_fallback_creator_action_plan(structure, semantic, packaging)
+    merged = plan or CreatorActionPlan()
+    merged.keep_points = _pick_non_empty(merged.keep_points, fallback.keep_points)
+    merged.priority_fixes = _pick_non_empty_fixes(merged.priority_fixes, fallback.priority_fixes)
+    merged.title_rewrites = _pick_non_empty(merged.title_rewrites, fallback.title_rewrites)
+    merged.opening_rewrites = _pick_non_empty(merged.opening_rewrites, fallback.opening_rewrites)
+    merged.cta_rewrites = _pick_non_empty(merged.cta_rewrites, fallback.cta_rewrites)
+    merged.overload_rewrites = _pick_non_empty(merged.overload_rewrites, fallback.overload_rewrites)
+    merged.reuse_template = _pick_non_empty(merged.reuse_template, fallback.reuse_template)
+    return merged
+
+
+def _build_fallback_creator_action_plan(
+    structure: StructureExtract,
+    semantic: SemanticAnalysis,
+    packaging: PackagingAnalysis,
+) -> CreatorActionPlan:
+    fixes: list[CreatorFix] = []
+    if not structure.visual_hook:
+        fixes.append(
+            CreatorFix(
+                priority="P1",
+                problem="开头抓注意力不足",
+                reason="观众进入后还不知道为什么要继续看, 前 3 秒容易流失。",
+                rewrite="把最强冲突、结果或反常识结论提前到第一句。",
+            )
+        )
+
+    if not structure.promise_hook:
+        fixes.append(
+            CreatorFix(
+                priority="P2",
+                problem="开头 15 秒缺少观看收益",
+                reason="观众不容易判断看完能获得什么, 会降低继续观看意愿。",
+                rewrite="补一句明确承诺: 看完你可以拿走哪几个判断标准或操作步骤。",
+            )
+        )
+
+    if semantic.overload_warnings or semantic.cognitive_load in ["高", "中高"]:
+        fixes.append(
+            CreatorFix(
+                priority="P3",
+                problem="信息密度偏高",
+                reason="连续概念会增加理解负担, 普通观众可能暂停、回看或直接退出。",
+                rewrite="把高密度段落拆成判断标准、例子、行动三句话。",
+            )
+        )
+
+    if not structure.cta:
+        fixes.append(
+            CreatorFix(
+                priority="P3",
+                problem="结尾缺少具体行动引导",
+                reason="只讲完观点不安排下一步, 评论、收藏和关注转化会变弱。",
+                rewrite="用一个低门槛问题收尾, 引导观众评论自己的具体场景。",
+            )
+        )
+
+    while len(fixes) < 3:
+        priority = f"P{len(fixes) + 1}"
+        fixes.append(
+            CreatorFix(
+                priority=priority,
+                problem="段落承接可以更明确",
+                reason="每段之间如果缺少转折或小结, 观众容易丢失主线。",
+                rewrite="在每段结尾补一句: 这一点解决什么问题, 下一段为什么更关键。",
+            )
+        )
+
+    formulas = " + ".join(packaging.title_formulas[:2]) if packaging.title_formulas else "明确人群 + 明确结果 + 情绪触发"
+    primary_psychology = packaging.primary_psychology or "观众最关心的结果"
+    first_hook = structure.visual_hook.text if structure.visual_hook else "先别急着照做, 真正影响结果的是接下来这个细节"
+    cta_text = structure.cta.text if structure.cta else "把你的具体场景发在评论区, 我按类型继续拆解"
+    overload_source = semantic.overload_warnings[0] if semantic.overload_warnings else "信息最密的一段"
+
+    return CreatorActionPlan(
+        keep_points=[
+            f"保留{primary_psychology}触发, 继续让观众知道这件事和自己有关。",
+            f"保留{formulas}的标题方向, 但把结果写得更具体。",
+        ],
+        priority_fixes=fixes[:3],
+        title_rewrites=[
+            f"别再忽略这个问题: 用 3 步看懂{primary_psychology}",
+            f"真正拉开差距的不是努力, 而是这 3 个判断标准",
+        ],
+        opening_rewrites=[f"前 15 秒: {first_hook}。看完你能拿走 3 个判断标准, 直接检查自己有没有踩坑。"],
+        cta_rewrites=[f"结尾改成: {cta_text}。我会挑 3 个高频场景继续做下一条。"],
+        overload_rewrites=[f"{overload_source}: 拆成三句讲, 先给判断标准, 再举一个例子, 最后给观众下一步动作。"],
+        reuse_template=[
+            f"标题: {formulas} + 明确收益。",
+            "开头: 前 3 秒给冲突, 15 秒内说明看完能带走什么。",
+            f"正文: 按 {structure.logic_flow or '问题 -> 原因 -> 方法 -> 总结'} 推进, 每段只解决一个问题。",
+            "结尾: 用具体问题引导评论, 用步骤价值引导收藏。",
+        ],
+    )
+
+
+def _pick_non_empty(primary: list[str], fallback: list[str]) -> list[str]:
+    values = [item for item in primary if item.strip()]
+    return values or fallback
+
+
+def _pick_non_empty_fixes(primary: list[CreatorFix], fallback: list[CreatorFix]) -> list[CreatorFix]:
+    values = [item for item in primary if item.problem.strip() or item.reason.strip() or item.rewrite.strip()]
+    if len(values) >= 3:
+        return values[:3]
+
+    return (values + fallback)[:3]
 
 
 def _derive_structure_sections(paragraphs: list[Paragraph], structure: StructureExtract) -> list[dict[str, Any]]:

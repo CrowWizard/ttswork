@@ -26,7 +26,7 @@ bilibili_stub.SubtitleTrack = object
 bilibili_stub.VideoSnapshot = object
 sys.modules.setdefault("services.bilibili", bilibili_stub)
 
-from services.analyzer import AnalysisResultFormatError, AnalyzerService, ParagraphsWrapper, StructureExtract, Step2Output
+from services.analyzer import AnalysisResultFormatError, AnalyzerService, MetadataJSON, ParagraphsWrapper, StructureExtract, Step2Output
 from services.subtitle import SubtitleFetchError, SubtitleService, SubtitleUnavailableError
 from services.transcript import TranscriptPayload
 from worker import process_job, PublicWorkerError, resolve_transcript
@@ -258,6 +258,7 @@ class AnalysisAndStatusWritebackTest(unittest.TestCase):
         self.assertEqual(db.ready_payload["semantic_analysis"], analysis.semantic_analysis)
         self.assertEqual(db.ready_payload["internalization_summary"], analysis.internalization_summary)
         self.assertEqual(db.ready_payload["metadata_json"], analysis.metadata_json)
+        self.assertNotIn("creator_action_plan", db.ready_payload["metadata_json"])
         self.assertEqual(db.ready_payload["model_name"], "mock-model")
         self.assertEqual(db.ready_payload["prompt_version"], "video-analysis-v3")
         self.assertEqual(
@@ -320,6 +321,25 @@ class TimelinePayloadTest(unittest.TestCase):
 
 
 class AnalyzerNormalizationTest(unittest.TestCase):
+    def test_mock_analysis_writes_creator_action_plan_to_metadata(self) -> None:
+        service = AnalyzerService(SimpleNamespace(qwen_mock_mode=True), Path("/tmp/not-used-prompt.txt"))
+
+        output = service.analyze(title="测试标题", transcript_text="第一句。第二句。", duration_seconds=60)
+        plan = output.metadata_json.get("creator_action_plan")
+
+        self.assertIsInstance(plan, dict)
+        self.assertGreaterEqual(len(plan["priority_fixes"]), 3)
+        self.assertTrue(plan["title_rewrites"])
+        self.assertTrue(plan["opening_rewrites"])
+        self.assertTrue(plan["cta_rewrites"])
+        self.assertTrue(plan["overload_rewrites"])
+        self.assertTrue(plan["reuse_template"])
+
+    def test_metadata_model_allows_missing_creator_action_plan_for_old_data(self) -> None:
+        metadata = MetadataJSON.model_validate({"retention_risk_points": []})
+
+        self.assertIsNone(metadata.creator_action_plan)
+
     def test_paragraph_summary_auto_trims_key_sentences_to_three(self) -> None:
         service = AnalyzerService(
             SimpleNamespace(
