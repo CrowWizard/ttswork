@@ -224,6 +224,8 @@ export function BilibiliAnalysisWorkspace() {
         window.clearTimeout(pollTimerRef.current);
       }
     };
+    // 仅在页面首次加载时恢复上次任务，后续轮询由 pollJob 接管。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopPolling = () => {
@@ -381,6 +383,11 @@ export function BilibiliAnalysisWorkspace() {
                 <p className="mt-2 text-sm leading-6 text-text-muted">
                   {jobDetail ? `任务 ${jobDetail.jobId}` : "先输入视频链接或 BV 号。分析完成后，这里会输出摘要、语义分段、标题封面分析、脚本结构和语义机制。"}
                 </p>
+                {jobDetail ? (
+                  <p className="mt-1 break-all text-sm leading-6 text-text-muted">
+                    输入视频：{jobDetail.source.inputValue ?? jobDetail.source.normalizedBvid}
+                  </p>
+                ) : null}
               </div>
 
               {jobDetail ? <StageProgressPanel detail={jobDetail} /> : null}
@@ -403,6 +410,28 @@ function StatusBadge({ status }: { status: VideoAnalysisJobStatus }) {
   );
 }
 
+function readCachedJob(): CachedJob | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<CachedJob>;
+    return parsed.jobId && parsed.input ? { jobId: parsed.jobId, input: parsed.input } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedJob(job: CachedJob) {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(job));
+}
+
+function clearCachedJob() {
+  window.localStorage.removeItem(STORAGE_KEY);
+}
+
 function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
   if (detail.status !== "READY" || !detail.result) {
     return <ResultPlaceholder detail={detail} />;
@@ -415,6 +444,7 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
   const semantic = result.semanticAnalysis;
   const internalization = result.internalizationSummary;
   const metadata = result.metadataJson;
+  const copyAdvantages = buildCopyAdvantages(result);
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -446,6 +476,18 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
               <div>{section.summary}</div>
             </div>
           )) : <EmptyLine text="暂无语义分段" />}
+        </div>
+      </article>
+
+      <article className="app-panel p-5 lg:col-span-2">
+        <h3 className="text-sm font-semibold text-text-primary">视频审计点</h3>
+        <div className="mt-3 grid gap-4 lg:grid-cols-2">
+          {buildAuditSections(result).map((section) => (
+            <div key={section.title} className="text-sm leading-6 text-text-muted">
+              <div className="font-semibold text-text-primary">{section.title}</div>
+              <TextList items={section.items} empty="暂无审计点" />
+            </div>
+          ))}
         </div>
       </article>
 
@@ -508,7 +550,7 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
         <h3 className="text-sm font-semibold text-text-primary">语义与传播机制</h3>
         <div className="mt-3 grid gap-4 lg:grid-cols-2">
           <div className="space-y-3 text-sm leading-6 text-text-muted">
-            <FieldLine label="认知负荷" value={semantic?.cognitive_load} />
+          <FieldLine label="认知负荷" value={formatCognitiveLoad(semantic?.cognitive_load)} />
             <FieldLine label="心理触发器" value={joinList(semantic?.psychological_triggers)} />
             <FieldLine label="语气标签" value={joinList(semantic?.tone_tags)} />
             <FieldLine label="网感词" value={joinList(semantic?.net_slang)} />
@@ -533,23 +575,23 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
           <FieldLine label="核心信息" value={internalization?.core_message} />
           <FieldLine label="巧妙设计" value={internalization?.clever_design} />
           <FieldLine label="优化建议" value={internalization?.optimization} />
-          <FieldLine label="钩子分" value={metadata?.hook_score === null || metadata?.hook_score === undefined ? null : `${metadata.hook_score}/10`} />
+          <FieldLine label="整体吸引力评分" value={formatScore(metadata?.hook_score)} />
           <FieldLine label="金句数" value={metadata?.golden_quote_count?.toString()} />
           <FieldLine label="互动数" value={metadata?.interaction_count?.toString()} />
-          <FieldLine label="认知负荷分布" value={formatLoadDistribution(metadata?.cognitive_load_distribution)} />
+          <FieldLine label="信息理解难度分布" value={formatLoadDistribution(metadata?.cognitive_load_distribution)} />
           <TextList items={metadata?.retention_risk_points} empty="暂无留存风险点" />
         </div>
       </article>
 
       <article className="app-panel p-5">
-        <h3 className="text-sm font-semibold text-text-primary">可复用文案建议</h3>
+        <h3 className="text-sm font-semibold text-text-primary">文案优点</h3>
         <div className="mt-3 space-y-3">
-          {result.copySuggestions.length ? result.copySuggestions.map((suggestion) => (
-            <div key={`${suggestion.type}-${suggestion.content}`} className="text-sm leading-6 text-text-muted">
-              <div className="font-semibold text-text-primary">{suggestion.type}</div>
-              <div>{suggestion.content}</div>
+          {copyAdvantages.length ? copyAdvantages.map((advantage) => (
+            <div key={`${advantage.title}-${advantage.content}`} className="text-sm leading-6 text-text-muted">
+              <div className="font-semibold text-text-primary">{advantage.title}</div>
+              <div>{advantage.content}</div>
             </div>
-          )) : <EmptyLine text="暂无文案建议" />}
+          )) : <EmptyLine text="暂无文案优点" />}
         </div>
       </article>
     </div>
@@ -705,18 +747,44 @@ function formatKeywordDensity(value: string | null | undefined) {
   return `${value}：${descriptions[value] ?? "表示核心词在标题、封面和正文里出现的集中程度。"}`;
 }
 
+function formatPsychology(packaging: PackagingAnalysis | null) {
+  return [packaging?.primary_psychology, packaging?.secondary_psychology].filter(Boolean).join(" / ") || "暂无";
+}
+
+function formatCognitiveLoad(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const descriptions: Record<string, string> = {
+    低: "低，信息容易消化，观众基本不用停下来理解。",
+    中: "中，信息量适中，需要集中注意力但不明显吃力。",
+    高: "高，信息很密，观众可能需要暂停、回看或依赖字幕理解。",
+  };
+
+  return descriptions[value] ?? value;
+}
+
+function formatScore(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return `${value} 分，满分 10 分；分数越高，表示越能抓住注意力并推动观众继续看。`;
+}
+
 function formatLoadDistribution(value: Record<string, number> | undefined) {
   if (!value) {
     return null;
   }
 
   const parts = [
-    value.low === undefined ? null : `低 ${value.low}%`,
-    value.medium === undefined ? null : `中 ${value.medium}%`,
-    value.high === undefined ? null : `高 ${value.high}%`,
+    value.low === undefined ? null : `容易看懂 ${value.low}%`,
+    value.medium === undefined ? null : `需要集中注意力 ${value.medium}%`,
+    value.high === undefined ? null : `信息很密 ${value.high}%`,
   ].filter(Boolean);
 
-  return parts.length ? parts.join("；") : null;
+  return parts.length ? `${parts.join("；")}。这表示不同难度段落在全片中的占比，不是质量分。` : null;
 }
 
 function FieldLine({ label, value }: { label: string; value: string | null | undefined }) {
@@ -733,8 +801,99 @@ function HookBlock({ title, hook }: { title: string; hook: HookDetail | null | u
     return <FieldLine label={title} value={null} />;
   }
 
-  const score = hook.hook_score === undefined ? "" : `，${hook.hook_score}/10`;
+  const score = hook.hook_score === undefined ? "" : `，吸引力评分 ${hook.hook_score} 分，满分 10 分`;
   return <FieldLine label={title} value={`${hook.time ?? "未知时间"} ${hook.text ?? ""}${score}`} />;
+}
+
+function buildCopyAdvantages(result: VideoAnalysisResult) {
+  const packaging = result.packagingAnalysis;
+  const script = result.scriptAnalysis;
+  const semantic = result.semanticAnalysis;
+  const internalization = result.internalizationSummary;
+  const advantages: Array<{ title: string; content: string }> = [];
+
+  if (packaging?.title_formulas?.length || packaging?.primary_psychology) {
+    advantages.push({
+      title: "标题封面优点",
+      content: `用了${joinList(packaging?.title_formulas) ?? "明确"}写法，主要调动${packaging?.primary_psychology ?? "观众兴趣"}心理，能降低用户判断成本。`,
+    });
+  }
+
+  if (script?.visual_hook?.text || script?.promise_hook?.text) {
+    advantages.push({
+      title: "开头优点",
+      content: `开头先抛出“${script?.visual_hook?.text ?? script?.promise_hook?.text}”，随后交代观众继续看的理由，利于前 15 秒留存。`,
+    });
+  }
+
+  if (script?.logic_flow || script?.structural_blocks?.meat?.length) {
+    advantages.push({
+      title: "结构优点",
+      content: `脚本采用${script?.logic_flow ?? "清晰"}结构，主体内容分段展开，观众更容易跟住论点推进。`,
+    });
+  }
+
+  if (semantic?.interaction_designs?.length || result.highlights.length) {
+    advantages.push({
+      title: "传播优点",
+      content: `包含${result.highlights.length}个适合引用的金句，并设置互动点，便于评论、弹幕或二次传播。`,
+    });
+  }
+
+  if (internalization?.clever_design) {
+    advantages.push({ title: "最巧妙设计", content: internalization.clever_design });
+  }
+
+  return advantages;
+}
+
+function buildAuditSections(result: VideoAnalysisResult) {
+  const packaging = result.packagingAnalysis;
+  const script = result.scriptAnalysis;
+  const semantic = result.semanticAnalysis;
+  const internalization = result.internalizationSummary;
+  const metadata = result.metadataJson;
+
+  return [
+    {
+      title: "包装层，决定点不点",
+      items: [
+        `标题公式：${joinList(packaging?.title_formulas) ?? "暂无"}，审计它是否用悬念、数字、对比或情绪触发点击。`,
+        `心理触发：${formatPsychology(packaging)}，审计它主要调动好奇、焦虑、认同还是愤怒。`,
+        `关键词密度：${formatKeywordDensity(packaging?.keyword_density) ?? "暂无"}`,
+        `封面关系：${packaging?.cover_relation ?? "暂无"}，审计封面文字和标题是互补还是重复。`,
+        `视觉情绪：${packaging?.visual_emotion ?? "暂无"}，审计字体、颜色和大小带来的第一感受。`,
+      ],
+    },
+    {
+      title: "脚本层，决定看不看得完",
+      items: [
+        `前 3 秒：${script?.visual_hook?.text ?? "暂无"}，审计它是否快速建立冲突、痛点或高光预期。`,
+        `3 到 15 秒：${script?.promise_hook?.text ?? "暂无"}，审计它是否告诉观众继续看能得到什么。`,
+        `正文骨架：${script?.logic_flow ?? "暂无"}，审计它是并列、递进、流程、故事还是问题解决。`,
+        `二次留存：${script?.structural_blocks?.re_hook ?? "暂无"}，审计中后段有没有重新拉回注意力。`,
+        `段落转折：${script?.segment_hooks?.length ?? 0} 个，审计每段结尾是否留下继续看的理由。`,
+      ],
+    },
+    {
+      title: "互动层，决定会不会行动",
+      items: [
+        `互动设计：${semantic?.interaction_designs?.length ?? 0} 个，审计是否引导弹幕、评论、站队或转发。`,
+        `引导行动：${script?.cta?.text ?? "暂无"}，审计结尾是否明确让观众评论、点赞、收藏或关注。`,
+        `金句数量：${result.highlights.length} 个，审计是否有适合截图、引用和传播的短句。`,
+        `网感词：${joinList(semantic?.net_slang) ?? "暂无"}，审计它是否贴近 B 站语境和圈层表达。`,
+      ],
+    },
+    {
+      title: "总结层，决定能不能复用",
+      items: [
+        `唯一核心信息：${internalization?.core_message ?? "暂无"}，审计视频是否能被一句话讲清楚。`,
+        `最巧妙设计：${internalization?.clever_design ?? "暂无"}，审计它最值得借鉴的是开场、转场、类比还是节奏。`,
+        `信息理解难度：${formatLoadDistribution(metadata?.cognitive_load_distribution) ?? "暂无"}`,
+        `优化方向：${internalization?.optimization ?? "暂无"}`,
+      ],
+    },
+  ];
 }
 
 function StructuralBlocksBlock({ blocks }: { blocks: ScriptAnalysis["structural_blocks"] | undefined }) {
@@ -834,7 +993,7 @@ const RESULT_SECTIONS = [
     description: "识别修辞装置、互动设计、认知负荷和潜在过载点。",
   },
   {
-    title: "指标风险与文案建议",
-    description: "汇总钩子分、留存风险、内化总结与可复用改写方案。",
+    title: "指标风险与文案优点",
+    description: "汇总整体吸引力、留存风险、内化总结与可借鉴的文案优点。",
   },
 ] as const;

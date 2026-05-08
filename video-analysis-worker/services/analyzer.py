@@ -143,18 +143,18 @@ class VideoHealthCard(BaseModel):
 class PackagingAnalysis(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    title_formulas: list[Literal["悬念式", "数字式", "对比式", "情绪呐喊式", "反常识式", "指令式"]]
+    title_formulas: list[str]
     title_hook_words: list[str] = Field(default_factory=list)
-    primary_psychology: Literal["好奇", "焦虑", "认同", "愤怒", "贪婪", "恐惧", "优越感"]
-    secondary_psychology: Optional[Literal["好奇", "焦虑", "认同", "愤怒", "贪婪", "恐惧", "优越感"]] = None
+    primary_psychology: str = Field(min_length=1)
+    secondary_psychology: Optional[str] = None
     keywords: list[str] = Field(default_factory=list)
-    keyword_density: Literal["高", "中", "低"]
+    keyword_density: str = Field(min_length=1)
     seo_friendly: bool
     cover_text: Optional[str] = None
-    cover_relation: Literal["互补", "重复", "冲突", "无关"]
-    visual_emotion: Literal["活泼", "严肃", "焦虑", "治愈", "压迫", "专业"]
+    cover_relation: str = Field(min_length=1)
+    visual_emotion: str = Field(min_length=1)
     color_scheme: Optional[list[str]] = None
-    typography_emotion: Optional[Literal["冲击", "精致", "随意", "权威"]] = None
+    typography_emotion: Optional[str] = None
 
 
 class HookDetail(BaseModel):
@@ -259,7 +259,7 @@ class SemanticAnalysis(BaseModel):
     persona_catchphrases: list[str] = Field(default_factory=list)
     interaction_designs: list[InteractionDesign] = Field(default_factory=list)
     knowledge_density_curve: list[KnowledgePoint] = Field(default_factory=list)
-    cognitive_load: Literal["低", "中", "高"]
+    cognitive_load: str = Field(min_length=1)
     overload_warnings: list[str] = Field(default_factory=list)
     emotion_curve: list[dict[str, str]] = Field(default_factory=list)
 
@@ -767,8 +767,8 @@ class AnalyzerService:
             "仅输出合法JSON对象, 必须严格仿照下方结构示例。\n\n"
             f"=== 结构示例 ===\n{STEP2_EXAMPLE}\n\n"
             "字段约束: 所有结论必须尽量引用字幕原句和时间戳;\n"
-            "packaging.title_formulas 只能从 [悬念式, 数字式, 对比式, 情绪呐喊式, 反常识式, 指令式] 中选择;\n"
-            "semantic.rhetorical_devices.type、semantic.tone_tags、semantic.interaction_designs.type、semantic.interaction_designs.placement_strategy 优先参考示例风格，但允许按内容语义自由表达; 禁止输出Markdown。\n\n"
+            "PackagingAnalysis 与 SemanticAnalysis 中的标签字段优先参考示例风格，但允许按内容语义自由表达;\n"
+            "布尔、时间范围、数值范围与对象结构必须保持合法; 禁止输出Markdown。\n\n"
             f"【字幕素材】{text_for_semantic}"
         )
         return self._call_json_model(prompt, Step2Output, 0.5, step="ANALYSIS_SEMANTIC_PACKAGING")
@@ -892,12 +892,12 @@ def _derive_structure_sections(paragraphs: list[Paragraph], structure: Structure
 
 
 def _derive_copy_suggestions(packaging: PackagingAnalysis, summary: Internalization) -> list[dict[str, Any]]:
-    title_content = " / ".join(packaging.title_hook_words[:3]) or "用标题前半句直接放大核心冲突"
-    formulas = "、".join(packaging.title_formulas) or "悬念式"
+    title_content = " / ".join(packaging.title_hook_words[:3]) or "核心冲突明确"
+    formulas = "、".join(packaging.title_formulas) or "清晰标题"
     return [
-        CopySuggestion(type="title", content=f"可尝试{formulas}标题，突出：{title_content}").model_dump(),
-        CopySuggestion(type="opening", content=summary.clever_design).model_dump(),
-        CopySuggestion(type="optimization", content=summary.optimization).model_dump(),
+        CopySuggestion(type="标题优点", content=f"采用{formulas}写法，并突出“{title_content}”，有利于用户快速判断是否要点开。").model_dump(),
+        CopySuggestion(type="结构优点", content=summary.clever_design).model_dump(),
+        CopySuggestion(type="复用价值", content=f"可复用点：{summary.core_message}。后续同类内容可以借鉴这个核心表达与节奏安排。").model_dump(),
     ]
 
 

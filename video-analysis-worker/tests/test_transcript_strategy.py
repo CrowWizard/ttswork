@@ -502,6 +502,47 @@ class AnalyzerNormalizationTest(unittest.TestCase):
         self.assertEqual(semantic.semantic.rhetorical_devices[0].type, "数字对比")
         self.assertEqual(semantic.semantic.tone_tags, ["硬核", "警示", "理性"])
         self.assertEqual(semantic.semantic.interaction_designs[0].placement_strategy, "标题/封面引流")
+        self.assertEqual(semantic.semantic.cognitive_load, "中")
+
+    def test_packaging_and_cognitive_load_allow_free_text(self) -> None:
+        semantic = Step2Output.model_validate(
+            {
+                "packaging": {
+                    "title_formulas": ["身份代入式", "数字冲击式"],
+                    "title_hook_words": ["大放水"],
+                    "primary_psychology": "复杂焦虑",
+                    "secondary_psychology": "政策好奇",
+                    "keywords": ["7万亿"],
+                    "keyword_density": "中高",
+                    "seo_friendly": True,
+                    "cover_text": "封面文案",
+                    "cover_relation": "重复偏互补",
+                    "visual_emotion": "宏大压迫感",
+                    "color_scheme": ["深蓝"],
+                    "typography_emotion": "强冲击",
+                },
+                "semantic": {
+                    "psychological_triggers": ["权威效应"],
+                    "rhetorical_devices": [],
+                    "tone_tags": ["硬核", "警示"],
+                    "net_slang": [],
+                    "persona_catchphrases": [],
+                    "interaction_designs": [],
+                    "knowledge_density_curve": [],
+                    "cognitive_load": "中高",
+                    "overload_warnings": [],
+                    "emotion_curve": [],
+                },
+            }
+        )
+
+        self.assertEqual(semantic.packaging.title_formulas, ["身份代入式", "数字冲击式"])
+        self.assertEqual(semantic.packaging.primary_psychology, "复杂焦虑")
+        self.assertEqual(semantic.packaging.keyword_density, "中高")
+        self.assertEqual(semantic.packaging.cover_relation, "重复偏互补")
+        self.assertEqual(semantic.packaging.visual_emotion, "宏大压迫感")
+        self.assertEqual(semantic.packaging.typography_emotion, "强冲击")
+        self.assertEqual(semantic.semantic.cognitive_load, "中高")
 
 
 def _source(transcript_text: str | None = None) -> SimpleNamespace:
