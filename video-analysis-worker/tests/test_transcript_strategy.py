@@ -67,16 +67,34 @@ class FakeAsrService:
     def __init__(self, result: str | Exception = "ASR 文本") -> None:
         self._result = result
         self.called = False
+        self.last_kwargs: dict[str, Any] | None = None
 
     def transcribe(self, **kwargs: Any) -> str:
         return self.transcribe_payload(**kwargs).text
 
     def transcribe_payload(self, **kwargs: Any) -> TranscriptPayload:
         self.called = True
+        self.last_kwargs = kwargs
         if isinstance(self._result, Exception):
             raise self._result
 
         return TranscriptPayload(text=self._result, timeline_text=f"[00:00] {self._result}", duration_seconds=kwargs.get("duration_seconds"))
+
+
+class FakeAudioStorageService:
+    def __init__(self) -> None:
+        self.called = False
+        self.audio_url: str | None = None
+
+    def download_and_store(self, **kwargs: Any) -> SimpleNamespace:
+        self.called = True
+        self.audio_url = kwargs["audio_url"]
+        return SimpleNamespace(
+            bucket="voice-mvp",
+            object_key="video-analysis/asr-audio/BV1test/123.m4a",
+            public_url="https://minio.example.invalid/voice-mvp/video-analysis/asr-audio/BV1test/123.m4a",
+            size_bytes=123,
+        )
 
 
 class FakeLogger:
@@ -176,6 +194,30 @@ class TranscriptStrategyTest(unittest.TestCase):
         self.assertTrue(asr.called)
         self.assertEqual(db.updates[0]["subtitleStatus"], "UNAVAILABLE")
         self.assertEqual(db.updates[-1]["transcriptSource"], "ASR")
+
+    def test_asr_uses_stored_audio_url_when_storage_is_enabled(self) -> None:
+        db = FakeDb()
+        bilibili = FakeBilibiliService()
+        asr = FakeAsrService("ASR 转写文本")
+        storage = FakeAudioStorageService()
+
+        resolve_transcript(
+            db,
+            _source(),
+            _snapshot(),
+            bilibili,
+            FakeSubtitleService(SubtitleUnavailableError("无字幕")),
+            asr,
+            storage,
+        )
+
+        self.assertTrue(storage.called)
+        self.assertEqual(storage.audio_url, "https://example.invalid/BV1test/123.m4a")
+        self.assertTrue(asr.called)
+        self.assertEqual(
+            asr.last_kwargs["audio_url"],
+            "https://minio.example.invalid/voice-mvp/video-analysis/asr-audio/BV1test/123.m4a",
+        )
 
     def test_subtitle_fetch_error_fails_without_asr_fallback(self) -> None:
         db = FakeDb()
@@ -300,6 +342,20 @@ class TimelinePayloadTest(unittest.TestCase):
 
         self.assertEqual(payload.text, "全文\n第一句")
         self.assertEqual(payload.timeline_text, "[00:01] 第一句")
+
+    def test_minio_public_url_uses_public_base_url_without_signature_query(self) -> None:
+        from services.audio_storage import _build_public_object_url
+
+        public_url = _build_public_object_url(
+            "https://cdn.example.com/minio",
+            "video-analysis",
+            "audio/BV1.m4a",
+        )
+
+        self.assertEqual(
+            public_url,
+            "https://cdn.example.com/minio/video-analysis/audio/BV1.m4a",
+        )
 
     def test_process_job_writes_stable_error_for_invalid_analysis_result(self) -> None:
         db = FakeProcessDb()

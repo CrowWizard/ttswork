@@ -1,7 +1,7 @@
 [Unit]
-Description=Bili x11vnc remote access
-After=bili-xvfb.service
-Requires=bili-xvfb.service
+Description=x11vnc remote access
+After=xvfb.service
+Requires=xvfb.service
 
 [Service]
 ExecStart=/usr/bin/x11vnc -display :99 -forever -shared -rfbauth /root/.vnc/passwd -listen 0.0.0.0 -rfbport 5900
@@ -10,7 +10,7 @@ RestartSec=5
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=bili-x11vnc
+SyslogIdentifier=x11vnc
 
 [Install]
 WantedBy=multi-user.target

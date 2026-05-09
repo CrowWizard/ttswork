@@ -1,7 +1,7 @@
 [Unit]
 Description=Bili video analysis worker
-After=network.target bili-xvfb.service
-Wants=bili-xvfb.service
+After=network.target xvfb.service
+Wants=xvfb.service
 
 [Service]
 WorkingDirectory=/home/ttswork/ttswork/video-analysis-worker

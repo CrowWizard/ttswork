@@ -209,7 +209,7 @@ class PatchrightClient:
                 await self.add_bilibili_cookies(_parse_cookie_header(self._cookie_header))
         except Exception as exc:
             raise BiliApiError(
-                f"无法启动 Patchright 浏览器上下文，请确认系统依赖（如 libnss3、libxss1 等）已安装，"
+                f"无法启动 Patchright 浏览器上下文，请确认系统依赖已安装，"
                 f"或在有图形界面的环境中运行。错误: {exc}"
             ) from exc
 

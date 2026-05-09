@@ -31,6 +31,13 @@ class WorkerConfig:
     qwen_api_key: str
     bilibili_cookie: str
     bilibili_user_agent: str
+    minio_endpoint: str
+    minio_port: int
+    minio_use_ssl: bool
+    minio_access_key: str
+    minio_secret_key: str
+    minio_bucket: str
+    minio_public_base_url: str
     dashscope_api_key: str
     dashscope_asr_model: str
     dashscope_asr_timeout: int
@@ -59,6 +66,7 @@ def load_config() -> WorkerConfig:
 
     db_config = _as_dict(file_config.get("database"))
     server_config = _as_dict(file_config.get("server"))
+    minio_config = _as_dict(file_config.get("minio"))
     qwen_config = _as_dict(file_config.get("qwen"))
     database_url_config = _parse_database_url(_env_string("DATABASE_URL", env_values, ""))
 
@@ -113,6 +121,17 @@ def load_config() -> WorkerConfig:
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
             ),
+        ),
+        minio_endpoint=_env_string("MINIO_ENDPOINT", env_values, minio_config.get("endpoint", "127.0.0.1")),
+        minio_port=_env_int("MINIO_PORT", env_values, minio_config.get("port", 9000)),
+        minio_use_ssl=_env_bool("MINIO_USE_SSL", env_values, minio_config.get("useSSL", False)),
+        minio_access_key=_env_string("MINIO_ACCESS_KEY", env_values, minio_config.get("accessKey", "minioadmin")),
+        minio_secret_key=_env_string("MINIO_SECRET_KEY", env_values, minio_config.get("secretKey", "minioadmin")),
+        minio_bucket=_env_string("MINIO_BUCKET", env_values, minio_config.get("bucket", "video-analysis")),
+        minio_public_base_url=_env_string(
+            "MINIO_PUBLIC_BASE_URL",
+            env_values,
+            minio_config.get("publicBaseUrl", "http://127.0.0.1/minio"),
         ),
         dashscope_api_key=_env_string("DASHSCOPE_API_KEY", env_values, qwen_config.get("apiKey", "")),
         dashscope_asr_model=_env_string("DASHSCOPE_ASR_MODEL", env_values, "qwen3-asr-flash-filetrans"),

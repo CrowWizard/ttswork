@@ -10,6 +10,7 @@ from db import ClaimedJob, Database, VideoSourceRecord
 from logging_utils import init_logger, log_event
 from services.analyzer import AnalysisResultFormatError, AnalyzerService
 from services.asr import AsrService
+from services.audio_storage import AudioStorageService
 from services.bilibili import BilibiliService, VideoSnapshot
 from services.subtitle import SubtitleFetchError, SubtitleService, SubtitleUnavailableError
 from services.transcript import TranscriptPayload
@@ -43,6 +44,7 @@ def main() -> None:
     bilibili = BilibiliService(config)
     subtitle_service = SubtitleService(config)
     asr_service = AsrService(config)
+    audio_storage_service = AudioStorageService(config)
     analyzer = AnalyzerService(
         config,
         Path(__file__).resolve().parent / "prompts" / "video_analysis_prompt.txt",
@@ -72,7 +74,7 @@ def main() -> None:
             time.sleep(config.poll_interval_seconds)
             continue
 
-        process_job(logger, db, bilibili, subtitle_service, asr_service, analyzer, job)
+        process_job(logger, db, bilibili, subtitle_service, asr_service, analyzer, job, audio_storage_service)
 
 
 def process_job(
@@ -83,6 +85,7 @@ def process_job(
     asr_service: AsrService,
     analyzer: AnalyzerService,
     job: ClaimedJob,
+    audio_storage_service: AudioStorageService | None = None,
 ) -> None:
     log_event(logger, "info", "job.claimed", jobId=job.id, sourceId=job.video_source_id)
     job_started_at = time.monotonic()
@@ -161,7 +164,16 @@ def process_job(
             job_id=job.id,
             source_id=source.id,
             message="获取字幕或转写",
-            action=lambda: resolve_transcript(db, source, snapshot, bilibili, subtitle_service, asr_service, logger=logger),
+            action=lambda: resolve_transcript(
+                db,
+                source,
+                snapshot,
+                bilibili,
+                subtitle_service,
+                asr_service,
+                audio_storage_service,
+                logger=logger,
+            ),
             subtitleTrackCount=len(snapshot.subtitle_tracks),
             hasCachedTranscript=bool((source.transcript_text or "").strip()),
         )
@@ -459,6 +471,7 @@ def resolve_transcript(
     bilibili: BilibiliService,
     subtitle_service: SubtitleService,
     asr_service: AsrService,
+    audio_storage_service: AudioStorageService | None = None,
     logger: Any | None = None,
 ) -> TranscriptPayload:
     cached_transcript = (source.transcript_text or "").strip()
@@ -543,12 +556,30 @@ def resolve_transcript(
         if logger:
             log_event(logger, "debug", "asr.audio_url.fetch.start", sourceId=source.id, bvid=snapshot.bvid, cid=snapshot.cid)
         audio_url = bilibili.fetch_audio_url(snapshot.bvid, snapshot.cid)
+        transcribe_audio_url = audio_url
+        if audio_storage_service:
+            if logger:
+                log_event(logger, "debug", "asr.audio.store.start", sourceId=source.id, bvid=snapshot.bvid, cid=snapshot.cid)
+            stored_audio = audio_storage_service.download_and_store(bvid=snapshot.bvid, cid=snapshot.cid, audio_url=audio_url)
+            transcribe_audio_url = stored_audio.public_url
+            if logger:
+                log_event(
+                    logger,
+                    "debug",
+                    "asr.audio.store.ready",
+                    sourceId=source.id,
+                    bvid=snapshot.bvid,
+                    bucket=stored_audio.bucket,
+                    objectKey=stored_audio.object_key,
+                    sizeBytes=stored_audio.size_bytes,
+                    publicUrl=stored_audio.public_url,
+                )
         if logger:
             log_event(logger, "debug", "asr.transcribe.start", sourceId=source.id, bvid=snapshot.bvid, audioUrlAvailable=bool(audio_url))
         asr_payload = asr_service.transcribe_payload(
             bvid=snapshot.bvid,
             title=snapshot.title,
-            audio_url=audio_url,
+            audio_url=transcribe_audio_url,
             duration_seconds=snapshot.duration_seconds,
         )
         transcript_text = asr_payload.text

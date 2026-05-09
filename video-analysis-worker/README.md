@@ -64,6 +64,13 @@ Worker 新增配置：
 - `VIDEO_ANALYSIS_LLM_MODEL`
 - `BILIBILI_COOKIE`
 - `BILIBILI_USER_AGENT`
+- `MINIO_ENDPOINT`
+- `MINIO_PORT`
+- `MINIO_USE_SSL`
+- `MINIO_ACCESS_KEY`
+- `MINIO_SECRET_KEY`
+- `MINIO_BUCKET`
+- `MINIO_PUBLIC_BASE_URL`
 
 ## Bilibili 抓取实现
 
@@ -102,7 +109,7 @@ python3 video-analysis-worker/scripts/test_biliapi_subtitle_download.py \
 1. 事务领取最早的 `PENDING` 任务并更新为 `PROCESSING`
 2. 根据 `normalizedBvid` 拉取 B 站视频基础信息
 3. 优先抓字幕
-4. 无字幕时走 ASR
+4. 无字幕时先下载音频并上传到 MinIO，再使用 MinIO 匿名公开 URL 走 ASR
 5. 将 `transcriptText` 送入结构化分析器
 6. 成功回写 `READY`，失败回写 `FAILED`
 

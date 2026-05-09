@@ -3,5 +3,6 @@ pydantic>=2.11,<3
 python-dotenv>=1.0,<2
 PyYAML>=6.0,<7
 requests>=2.32,<3
+minio>=7.2,<8
 patchright>=1.52,<2
 dashscope>=1.20,<2

@@ -11,6 +11,7 @@ coverage
 # next.js
 .next/
 out/
+out.tar.gz
 
 # production
 build
@@ -70,3 +71,4 @@ __pycache__/
 *.pyc
 video-analysis-worker/.biliapi-profile/
 video-analysis-worker/tmp/
+dist

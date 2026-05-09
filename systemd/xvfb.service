@@ -1,5 +1,5 @@
 [Unit]
-Description=Bili Xvfb virtual display
+Description=Xvfb virtual display
 After=network.target
 
 [Service]
@@ -9,7 +9,7 @@ RestartSec=3
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=bili-xvfb
+SyslogIdentifier=xvfb
 
 [Install]
 WantedBy=multi-user.target
