@@ -90,6 +90,27 @@ type ParsedVideoAnalysisInput = {
   normalizedUrl: string | null;
 };
 
+type VideoAnalysisEstimateDto = {
+  totalSeconds: number | null;
+  remainingSeconds: number | null;
+  readyAt: string | null;
+  confidence: "low" | "medium" | "high";
+  message: string;
+};
+
+type StageEventDto = {
+  eventId: string;
+  stage: string;
+  status: string;
+  message: string | null;
+  details: Record<string, unknown> | null;
+  startedAt: string;
+  completedAt: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function parseVideoAnalysisInput(rawInput: string): ParsedVideoAnalysisInput | null {
   const inputValue = rawInput.trim();
 
@@ -252,7 +273,7 @@ function toVideoAnalysisResultDto(job: SelectedVideoAnalysisJob) {
   };
 }
 
-function toVideoAnalysisJobDetailDto(job: SelectedVideoAnalysisJob, source: SelectedVideoSource) {
+function toVideoAnalysisJobDetailDto(job: SelectedVideoAnalysisJob, source: SelectedVideoSource, stageEvents: StageEventDto[]) {
   return {
     jobId: job.id,
     status: job.status,
@@ -270,6 +291,7 @@ function toVideoAnalysisJobDetailDto(job: SelectedVideoAnalysisJob, source: Sele
     updatedAt: job.updatedAt,
     source: toVideoSourceDto(source),
     result: toVideoAnalysisResultDto(job),
+    estimate: buildVideoAnalysisEstimate(job, source, stageEvents),
   };
 }
 
@@ -285,6 +307,85 @@ function toVideoAnalysisStageEventDto(event: SelectedVideoAnalysisStageEvent) {
     durationMs: event.durationMs,
     createdAt: event.createdAt,
     updatedAt: event.updatedAt,
+  };
+}
+
+const ALL_STAGES: string[] = [
+  "SOURCE_LOAD",
+  "SNAPSHOT_FETCH",
+  "METADATA_SYNC",
+  "TRANSCRIPT_RESOLVE",
+  "ANALYSIS_PARAGRAPH_SUMMARY",
+  "ANALYSIS_STRUCTURE",
+  "ANALYSIS_SEMANTIC_PACKAGING",
+  "ANALYSIS_FINAL_REPORT",
+  "RESULT_WRITEBACK",
+];
+
+function buildVideoAnalysisEstimate(job: SelectedVideoAnalysisJob, source: SelectedVideoSource, stageEvents: StageEventDto[]): VideoAnalysisEstimateDto | null {
+  if (job.status === "READY" || job.status === "FAILED") {
+    return null;
+  }
+
+  const durationSeconds = source.durationSeconds;
+  if (durationSeconds === null || durationSeconds === undefined) {
+    return {
+      totalSeconds: null,
+      remainingSeconds: null,
+      readyAt: null,
+      confidence: "low",
+      message: "正在获取视频信息，拿到时长后会给出更准确的预计时间。",
+    };
+  }
+
+  const currentStage = job.currentStage;
+  const currentStageIndex = currentStage ? ALL_STAGES.indexOf(currentStage) : -1;
+  const progressIndex = currentStageIndex >= 0 ? currentStageIndex : 0;
+
+  const succeededMs = stageEvents
+    .filter((e) => e.status === "SUCCEEDED" && e.durationMs != null)
+    .reduce((sum, e) => sum + (e.durationMs as number), 0);
+
+  let totalSeconds: number;
+  if (source.subtitleStatus === "FAILED" || source.transcriptStatus === "FAILED") {
+    totalSeconds = 120;
+  } else if (source.subtitleStatus === "READY" && source.transcriptStatus === "READY") {
+    totalSeconds = Math.max(60, Math.round(durationSeconds * 0.5));
+  } else if (source.transcriptSource === "SUBTITLE") {
+    totalSeconds = Math.max(60, Math.round(durationSeconds * 0.6));
+  } else {
+    totalSeconds = Math.max(120, Math.round(durationSeconds * 1.5));
+  }
+
+  const totalProgressStages = Math.min(progressIndex + 1, ALL_STAGES.length);
+  const estimatedElapsed = Math.round((totalProgressStages / ALL_STAGES.length) * totalSeconds);
+  let remainingMs = Math.max(0, (estimatedElapsed * 1000) - succeededMs);
+
+  if (remainingMs < 5000) {
+    remainingMs = 5000;
+  }
+
+  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  const readyAt = new Date(Date.now() + remainingMs).toISOString();
+
+  let confidence: "low" | "medium" | "high" = "low";
+  const completedStages = stageEvents.filter((e) => e.status === "SUCCEEDED").length;
+  if (completedStages >= 3) {
+    confidence = "medium";
+  }
+  if (completedStages >= 6) {
+    confidence = "high";
+  }
+
+  const minutes = Math.max(1, Math.round(remainingSeconds / 60));
+  const message = `预计还需要约 ${minutes} 分钟，可以先去忙其他，稍后回来查看。`;
+
+  return {
+    totalSeconds,
+    remainingSeconds,
+    readyAt,
+    confidence,
+    message,
   };
 }
 
@@ -531,7 +632,7 @@ export function createVideoAnalysisRoutes(cfg: AppConfig) {
       const stageEvents = await loadStageEventsByJobId(job.id);
 
       return c.json({
-        ...toVideoAnalysisJobDetailDto(job, source),
+        ...toVideoAnalysisJobDetailDto(job, source, stageEvents),
         stageEvents,
       });
     } catch (error) {
@@ -651,6 +752,7 @@ export function createVideoAnalysisRoutes(cfg: AppConfig) {
       const sourceMap = await loadSourcesByIds([...new Set(jobs.map((job) => job.videoSourceId))]);
       const currentJob = jobs[0] ?? null;
       const currentSource = currentJob ? sourceMap.get(currentJob.videoSourceId) ?? null : null;
+      const currentStageEvents = currentJob ? await loadStageEventsByJobId(currentJob.id) : [];
 
       loggerDebug("video_analysis.workspace.loaded", {
         userId: currentUser.id,
@@ -662,7 +764,7 @@ export function createVideoAnalysisRoutes(cfg: AppConfig) {
       });
 
       return c.json({
-        currentJob: currentJob && currentSource ? toVideoAnalysisJobDetailDto(currentJob, currentSource) : null,
+        currentJob: currentJob && currentSource ? toVideoAnalysisJobDetailDto(currentJob, currentSource, currentStageEvents) : null,
         recentJobs: jobs.map((job) => toVideoAnalysisJobListItemDto(job, sourceMap.get(job.videoSourceId) ?? null)),
       });
     } catch (error) {

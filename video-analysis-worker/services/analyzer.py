@@ -75,6 +75,15 @@ PLACEMENT_STRATEGY_ALIASES = {
     "结尾收口": "结尾转化",
 }
 
+_SUGGESTION_TYPE_ALIASES = {
+    "脚本调整": "script",
+    "脚本": "script",
+    "剪辑": "editing",
+    "字幕": "subtitle",
+    "节奏": "pacing",
+    "引导": "cta",
+}
+
 
 class AnalysisResultFormatError(RuntimeError):
     def __init__(
@@ -197,14 +206,41 @@ class CTADetail(BaseModel):
     optimization_hint: Optional[str] = None
 
 
+class StructureBlockTimeRange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: TimeStr
+    end: TimeStr
+
+
+class StructureBlockSuggestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: str = Field(min_length=1)
+    target_time: TimeStr
+    content: str = Field(min_length=1)
+    target_seconds: Optional[int] = Field(default=None, ge=0)
+    target_percent: Optional[float] = Field(default=None, ge=0, le=100)
+
+
+class StructureBlockDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    strengths: list[str] = Field(default_factory=list, max_length=3)
+    weaknesses: list[str] = Field(default_factory=list, max_length=3)
+    suggestions: list[StructureBlockSuggestion] = Field(default_factory=list, max_length=3)
+
+
 class StructuralBlocksOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    hook: Optional[str] = None
-    promise: Optional[str] = None
-    meat: list[str] = Field(default_factory=list)
-    re_hook: Optional[str] = None
-    cta: Optional[str] = None
+    hook: Optional[StructureBlockDetail] = None
+    promise: Optional[StructureBlockDetail] = None
+    meat: list[StructureBlockDetail] = Field(default_factory=list)
+    re_hook: Optional[StructureBlockDetail] = None
+    cta: Optional[StructureBlockDetail] = None
 
 
 class StructureExtract(BaseModel):
@@ -373,7 +409,7 @@ class AnalysisOutput:
     prompt_version: str = PROMPT_VERSION
 
 
-STEP1_EXAMPLE = json.dumps({"visual_hook": {"text": "你是不是一觉得头发油就去疯狂洗头？", "time": "00:00", "type": "痛点提问", "mechanism": "通过提问日常习惯引发好奇", "hook_score": 8}, "promise_hook": {"text": "今天教你三个防脱秘籍", "time": "00:10", "type": "直给结论", "mechanism": "明确告知看完能得到具体方案", "hook_score": 7}, "segment_hooks": [{"time": "00:58", "text": "但这还不是最严重的", "function": "悬念预告", "next_segment_hint": "下一段将揭示更严重的后果", "hook_score": 9}], "narrative_arc": [{"time": "00:00", "event": "冲突引入"}, {"time": "02:00", "event": "解决方案"}], "narrative_curve_text": "00:00 [冲突引入] 原句 -> 02:00 [解决方案] 原句", "structural_blocks": {"hook": "00:00-00:05", "promise": "00:05-00:15", "meat": ["00:15-00:45"], "re_hook": "01:20-01:25", "cta": "02:00-02:10"}, "quotes": [{"text": "别傻了这样只会越洗越掉", "time": "00:05", "viral_reason": "反常识", "screenshot_friendly": True, "share_scenario": "弹幕刷屏"}], "cta": {"text": "点赞收藏明天洗头试试看", "time": "02:00", "cta_type": "组合", "target_audience": "有脱发焦虑的年轻人", "optimization_hint": "建议加入具体预期效果"}, "logic_flow": "问题-解决方案"}, ensure_ascii=False, indent=2)
+STEP1_EXAMPLE = json.dumps({"visual_hook": {"text": "你是不是一觉得头发油就去疯狂洗头？", "time": "00:00", "type": "痛点提问", "mechanism": "通过提问日常习惯引发好奇", "hook_score": 8}, "promise_hook": {"text": "今天教你三个防脱秘籍", "time": "00:10", "type": "直给结论", "mechanism": "明确告知看完能得到具体方案", "hook_score": 7}, "segment_hooks": [{"time": "00:58", "text": "但这还不是最严重的", "function": "悬念预告", "next_segment_hint": "下一段将揭示更严重的后果", "hook_score": 9}], "narrative_arc": [{"time": "00:00", "event": "冲突引入"}, {"time": "02:00", "event": "解决方案"}], "narrative_curve_text": "00:00 [冲突引入] 原句 -> 02:00 [解决方案] 原句", "structural_blocks": {"hook": {"name": "开头抓注意力", "summary": "用痛点问题快速建立观看动机。", "strengths": ["开场问题明确", "与目标用户痛点相关"], "weaknesses": ["利益承诺出现偏晚"], "suggestions": [{"type": "script", "target_time": "00:02", "content": "建议补一句看完收益，让观众知道继续看的理由。"}]}, "promise": {"name": "内容承诺", "summary": "给出三个防脱秘籍的承诺。", "strengths": ["承诺数量具体"], "weaknesses": ["承诺位置偏晚"], "suggestions": []}, "meat": [{"name": "主体内容 1", "summary": "解释主要观点，但中段信息密度偏高。", "strengths": ["步骤完整"], "weaknesses": ["连续概念较多"], "suggestions": [{"type": "pacing", "target_time": "00:48", "content": "这里建议插入一个例子或小结，降低理解负担。"}]}], "re_hook": {"name": "二次留存", "summary": "在信息最密处补一句阶段性小结。", "strengths": ["提醒观众已看完一半"], "weaknesses": ["没有设计新悬念"], "suggestions": [{"type": "script", "target_time": "01:30", "content": "补一句但真正容易踩坑的不是这里，而是接下来这个细节。"}]}, "cta": {"name": "引导行动", "summary": "用具体问题引导评论。", "strengths": ["动作明确"], "weaknesses": ["缺少收藏理由"], "suggestions": [{"type": "cta", "target_time": "02:50", "content": "补一句先收藏，下次遇到同类问题可以直接对照检查。"}]}}, "quotes": [{"text": "别傻了这样只会越洗越掉", "time": "00:05", "viral_reason": "反常识", "screenshot_friendly": True, "share_scenario": "弹幕刷屏"}], "cta": {"text": "点赞收藏明天洗头试试看", "time": "02:00", "cta_type": "组合", "target_audience": "有脱发焦虑的年轻人", "optimization_hint": "建议加入具体预期效果"}, "logic_flow": "问题-解决方案"}, ensure_ascii=False, indent=2)
 
 STEP2_EXAMPLE = json.dumps({"packaging": {"title_formulas": ["悬念式", "反常识式"], "title_hook_words": ["千万别"], "primary_psychology": "焦虑", "secondary_psychology": "好奇", "keywords": ["洗头", "防脱"], "keyword_density": "高", "seo_friendly": True, "cover_text": "发量翻倍", "cover_relation": "互补", "visual_emotion": "焦虑", "color_scheme": ["红", "黄"], "typography_emotion": "冲击"}, "semantic": {"psychological_triggers": ["恐惧诉求"], "rhetorical_devices": [{"type": "恐惧诉求", "text_snippet": "头发会掉光", "time_range": {"start": "00:00", "end": "00:05"}, "mechanism": "通过后果引发焦虑"}], "tone_tags": ["网感", "亲切"], "net_slang": ["别傻了"], "persona_catchphrases": ["99%的人都不知道"], "interaction_designs": [{"type": "弹幕提问", "trigger_text": "你中招了没", "time": "00:05", "expected_response": "刷中招了", "placement_strategy": "中部留存"}], "knowledge_density_curve": [{"time_range": {"start": "00:15", "end": "00:45"}, "density": 4, "topic": "洗发水温", "term_count": 2}], "cognitive_load": "中", "overload_warnings": ["00:45-01:10 术语密集"], "emotion_curve": [{"time": "00:00", "emotion": "紧张"}]}}, ensure_ascii=False, indent=2)
 
@@ -546,6 +582,10 @@ class AnalyzerService:
                 self._normalize_quote(item, index) if isinstance(item, dict) else item
                 for index, item in enumerate(quotes)
             ]
+
+        structural_blocks = normalized_payload.get("structural_blocks")
+        if isinstance(structural_blocks, dict):
+            normalized_payload["structural_blocks"] = self._normalize_structural_blocks_payload(structural_blocks)
 
         return normalized_payload
 
@@ -734,6 +774,85 @@ class AnalyzerService:
 
         return normalized
 
+    def _normalize_structural_blocks_payload(self, blocks: dict[str, Any]) -> dict[str, Any]:
+        normalized_blocks = dict(blocks)
+
+        for key in ["hook", "promise", "re_hook", "cta"]:
+            value = normalized_blocks.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str):
+                normalized_blocks[key] = _convert_string_range_to_block_detail(value, key)
+                self._last_normalization_warnings.append({
+                    "step": "ANALYSIS_STRUCTURE",
+                    "field": f"structural_blocks.{key}",
+                    "originalValue": value,
+                    "normalizedValue": "converted_legacy_string_to_object",
+                    "strategy": "legacy_string_block",
+                })
+            elif isinstance(value, dict):
+                normalized_blocks[key] = self._normalize_structural_block_detail(value, f"structural_blocks.{key}")
+
+        meat = normalized_blocks.get("meat")
+        if isinstance(meat, list):
+            normalized_meat = []
+            for index, item in enumerate(meat):
+                if isinstance(item, str):
+                    normalized_meat.append(_convert_string_range_to_block_detail(item, f"主体内容 {index + 1}"))
+                    self._last_normalization_warnings.append({
+                        "step": "ANALYSIS_STRUCTURE",
+                        "field": f"structural_blocks.meat[{index}]",
+                        "originalValue": item,
+                        "normalizedValue": "converted_legacy_string_to_object",
+                        "strategy": "legacy_string_block",
+                    })
+                elif isinstance(item, dict):
+                    normalized_meat.append(self._normalize_structural_block_detail(item, f"structural_blocks.meat[{index}]"))
+                else:
+                    normalized_meat.append(item)
+            normalized_blocks["meat"] = normalized_meat
+
+        return normalized_blocks
+
+    def _normalize_structural_block_detail(self, block: dict[str, Any], field_path: str) -> dict[str, Any]:
+        normalized = dict(block)
+
+        for removed_field in ["time_range", "score", "start_seconds", "end_seconds", "start_percent", "end_percent", "suitable_position", "position_purpose"]:
+            if removed_field in normalized:
+                normalized.pop(removed_field)
+
+        suggestions = normalized.get("suggestions")
+        if isinstance(suggestions, list):
+            trimmed = []
+            for suggestion in suggestions:
+                if isinstance(suggestion, dict):
+                    trimmed_suggestion = dict(suggestion)
+                    suggestion_type = trimmed_suggestion.get("type")
+                    if isinstance(suggestion_type, str) and suggestion_type not in ("script", "editing", "subtitle", "pacing", "cta"):
+                        normalized_type = _SUGGESTION_TYPE_ALIASES.get(suggestion_type)
+                        if normalized_type:
+                            trimmed_suggestion["type"] = normalized_type
+                            self._last_normalization_warnings.append({
+                                "step": "ANALYSIS_STRUCTURE",
+                                "field": f"{field_path}.suggestions[].type",
+                                "originalValue": suggestion_type,
+                                "normalizedValue": normalized_type,
+                                "strategy": "alias_map",
+                            })
+                    trimmed.append(trimmed_suggestion)
+            if len(trimmed) > 3:
+                self._last_normalization_warnings.append({
+                    "step": "ANALYSIS_STRUCTURE",
+                    "field": f"{field_path}.suggestions",
+                    "originalLength": len(trimmed),
+                    "trimmedLength": 3,
+                    "strategy": "keep_first_3",
+                })
+                trimmed = trimmed[:3]
+            normalized["suggestions"] = trimmed
+
+        return normalized
+
     def _generate_paragraph_summary(self, full_text: str) -> list[Paragraph]:
         example = json.dumps(
             {
@@ -772,7 +891,10 @@ class AnalyzerService:
             "你是资深视频结构分析师。从字幕提取结构化信息。\n"
             "仅输出合法JSON对象, 必须严格仿照下方结构示例的字段名和格式。\n\n"
             f"=== 结构示例 ===\n{STEP1_EXAMPLE}\n\n"
-            "字段约束: 所有时间戳格式 MM:SS; structural_blocks 的 hook/promise/re_hook/cta 是字符串时间范围; meat 是字符串数组; quotes.text 最多 20 字;\n"
+            "字段约束: 所有时间戳格式 MM:SS; structural_blocks 的 hook/promise/re_hook/cta 是对象或 null, meat 是对象数组;\n"
+            "每个结构块对象必须包含: name(中文名称), summary(一句话总结), strengths(1到3条优点), weaknesses(1到3条不足), suggestions(0到3条建议);\n"
+            "每条 suggestions 对象必须包含: type(从 script/editing/subtitle/pacing/cta 中选择), target_time(MM:SS), content(具体改法);\n"
+            "quotes.text 最多 20 字;\n"
             "hook.type 只能从 [直给结论, 痛点提问, 反常理, 展示后果, 展示高光片段, 昂贵设备, 数据冲击, 身份认同] 中选择;\n"
             "segment_hooks.function 只能从 [悬念预告, 认知冲突, 利益强化, 情绪转折, 互动引导] 中选择;\n"
             "quotes.viral_reason 只能从 [结论颠覆, 情绪共鸣, 金句格式, 圈层黑话, 实用干货, 反常识] 中选择;\n"
@@ -833,7 +955,11 @@ class AnalyzerService:
             segment_hooks=[],
             narrative_arc=[{"time": "00:00", "event": "主题引入"}, {"time": _format_seconds_to_time(duration), "event": "总结收束"}],
             narrative_curve_text=f"00:00 [主题引入] {sentences[0][:20]} -> {_format_seconds_to_time(duration)} [总结收束]",
-            structural_blocks=StructuralBlocksOutput(hook="00:00-00:10", meat=["00:10-01:00"], cta=None),
+            structural_blocks=StructuralBlocksOutput(
+                hook=StructureBlockDetail(name="开头抓注意力", summary="用核心问题快速吸引观众注意。", strengths=["开场直接"], weaknesses=["信息略单薄"], suggestions=[]),
+                meat=[StructureBlockDetail(name="主体内容 1", summary="展开论述主要话题。", strengths=["论证完整"], weaknesses=["信息密度偏高"], suggestions=[StructureBlockSuggestion(type="pacing", target_time="00:35", content="建议在此处插入总结或例子。")])],
+                cta=None,
+            ),
             quotes=[ViralQuote(text=sentences[0][:20], time="00:00", viral_reason="实用干货", screenshot_friendly=True, share_scenario="收藏备用")],
             cta=None,
             logic_flow="递进式",
@@ -889,7 +1015,8 @@ def _postprocess_metadata(
     metadata.video_duration = _format_seconds_to_time(total_duration)
     metadata.narrative_arc = structure.narrative_arc
     metadata.narrative_curve_text = structure.narrative_curve_text
-    metadata.structural_blocks = structure.structural_blocks
+    enriched_blocks = _postprocess_structure_blocks(structure.structural_blocks, total_duration)
+    metadata.structural_blocks = enriched_blocks
     metadata.cognitive_load_distribution = {"low": round(low / total * 100), "medium": round(medium / total * 100), "high": round(high / total * 100)}
     metadata.creator_action_plan = _merge_creator_action_plan(metadata.creator_action_plan, structure, semantic, packaging)
     return metadata
@@ -1009,6 +1136,32 @@ def _pick_non_empty_fixes(primary: list[CreatorFix], fallback: list[CreatorFix])
         return values[:3]
 
     return (values + fallback)[:3]
+
+
+def _convert_string_range_to_block_detail(time_range_str: str, name: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "summary": f"结构块原始时间范围: {time_range_str}",
+        "strengths": [],
+        "weaknesses": [],
+        "suggestions": [],
+    }
+
+
+def _postprocess_structure_blocks(blocks: StructuralBlocksOutput, total_duration: float) -> StructuralBlocksOutput:
+    for field_name in ["hook", "promise", "re_hook", "cta"]:
+        block = getattr(blocks, field_name)
+        if block is not None:
+            _ensure_block_detail(block)
+
+    for block in blocks.meat:
+        _ensure_block_detail(block)
+
+    return blocks
+
+
+def _ensure_block_detail(block: StructureBlockDetail) -> None:
+    pass
 
 
 def _derive_structure_sections(paragraphs: list[Paragraph], structure: StructureExtract) -> list[dict[str, Any]]:

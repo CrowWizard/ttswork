@@ -74,6 +74,30 @@ type PackagingAnalysis = {
   typography_emotion?: string | null;
 };
 
+type StructureBlockSuggestion = {
+  type?: string;
+  target_time?: string;
+  content?: string;
+  target_seconds?: number | null;
+  target_percent?: number | null;
+};
+
+type StructureBlockDetail = {
+  name?: string;
+  summary?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  suggestions?: StructureBlockSuggestion[];
+};
+
+type ScriptAnalysisStructuralBlocks = {
+  hook?: StructureBlockDetail | string | null;
+  promise?: StructureBlockDetail | string | null;
+  meat?: Array<StructureBlockDetail | string>;
+  re_hook?: StructureBlockDetail | string | null;
+  cta?: StructureBlockDetail | string | null;
+};
+
 type HookDetail = {
   text?: string;
   time?: string;
@@ -88,7 +112,7 @@ type ScriptAnalysis = {
   segment_hooks?: Array<{ time?: string; text?: string; function?: string; hook_score?: number }>;
   narrative_arc?: Array<{ time?: string; event?: string }>;
   narrative_curve_text?: string | null;
-  structural_blocks?: { hook?: string | null; promise?: string | null; meat?: string[]; re_hook?: string | null; cta?: string | null };
+  structural_blocks?: ScriptAnalysisStructuralBlocks;
   quotes?: Array<{ text?: string; time?: string; viral_reason?: string; share_scenario?: string }>;
   cta?: { text?: string; time?: string; cta_type?: string; optimization_hint?: string | null } | null;
   logic_flow?: string;
@@ -138,7 +162,7 @@ type MetadataJson = {
   interaction_count?: number | null;
   cognitive_load_distribution?: Record<string, number>;
   narrative_curve_text?: string | null;
-  structural_blocks?: { hook?: string | null; promise?: string | null; meat?: string[]; re_hook?: string | null; cta?: string | null };
+  structural_blocks?: ScriptAnalysisStructuralBlocks;
   creator_action_plan?: CreatorActionPlan;
 };
 
@@ -157,6 +181,14 @@ type VideoAnalysisResult = {
   promptVersion: string | null;
 };
 
+type VideoAnalysisEstimate = {
+  totalSeconds: number | null;
+  remainingSeconds: number | null;
+  readyAt: string | null;
+  confidence: "low" | "medium" | "high";
+  message: string;
+};
+
 type VideoAnalysisJobDetail = {
   jobId: string;
   status: VideoAnalysisJobStatus;
@@ -171,6 +203,7 @@ type VideoAnalysisJobDetail = {
   source: VideoAnalysisSource;
   result: VideoAnalysisResult | null;
   stageEvents: VideoAnalysisStageEvent[];
+  estimate: VideoAnalysisEstimate | null;
 };
 
 type TableRow = {
@@ -483,7 +516,6 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
   const packaging = result.packagingAnalysis;
   const script = result.scriptAnalysis;
   const semantic = result.semanticAnalysis;
-  const internalization = result.internalizationSummary;
   const metadata = result.metadataJson;
   const creatorPlan = metadata?.creator_action_plan ?? buildCreatorActionPlan(result);
 
@@ -538,20 +570,6 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
       </ResultSection>
 
       <div className="space-y-6">
-        <ResultSection title="内化总结与指标风险">
-          <div className="space-y-3 text-sm leading-6 text-text-muted">
-            <DataTable rows={[
-              { label: "核心信息", value: internalization?.core_message },
-              { label: "巧妙设计", value: internalization?.clever_design },
-              { label: "优化建议", value: internalization?.optimization },
-              { label: "整体吸引力评分", value: formatScore(metadata?.hook_score) },
-              { label: "金句数", value: metadata?.golden_quote_count?.toString() },
-              { label: "互动数", value: metadata?.interaction_count?.toString() },
-            ]} />
-            <MetricRiskList items={metadata?.retention_risk_points} />
-          </div>
-        </ResultSection>
-
         <ResultSection title="分析结果">
           <AuditResultsTables rows={buildAuditRows(result)} />
         </ResultSection>
@@ -573,12 +591,14 @@ function StageProgressPanel({ detail }: { detail: VideoAnalysisJobDetail }) {
   const currentStageLabel = detail.currentStage ? getStageLabel(detail.currentStage) : null;
   const currentStageText = currentStageLabel ?? "等待 worker 领取";
   const currentStatusText = formatStageStatus(detail.currentStageStatus);
+  const estimate = detail.estimate;
 
   return (
     <article className="app-panel p-5 lg:col-span-2" aria-labelledby="video-analysis-progress-title">
       <h3 id="video-analysis-progress-title" className="text-sm font-semibold text-text-primary">处理进度</h3>
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         当前阶段：{currentStageText}，阶段结果：{currentStatusText}。
+        {estimate ? `，${estimate.message}` : ""}
       </div>
       <div className="mt-3 grid gap-3 text-sm leading-6 text-text-muted lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="space-y-1">
@@ -586,6 +606,11 @@ function StageProgressPanel({ detail }: { detail: VideoAnalysisJobDetail }) {
           <div>当前阶段：{currentStageText}</div>
           <div>阶段结果：{currentStatusText}</div>
           <div>阶段开始：{formatDateTime(detail.currentStageStartedAt)}</div>
+          {estimate && (
+            <div className="mt-2 rounded-2xl border border-info-border bg-info-surface px-3 py-2 text-xs leading-5 text-info">
+              {estimate.message}
+            </div>
+          )}
         </div>
         <div className="space-y-2">
           <div>{detail.currentStageMessage ?? "暂无阶段说明"}</div>
@@ -662,6 +687,8 @@ function FirstAnalysisEmptyState() {
 }
 
 function AnalysisPendingState({ detail }: { detail: VideoAnalysisJobDetail }) {
+  const estimate = detail.estimate;
+
   return (
     <article className="rounded-2xl border border-border-subtle bg-surface-selected p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -672,9 +699,20 @@ function AnalysisPendingState({ detail }: { detail: VideoAnalysisJobDetail }) {
             worker 完成后会显示摘要、脚本结构、语义机制和分析结果。当前任务会保留在本机，刷新页面后也会继续读取。
           </p>
         </div>
-        <div className="rounded-2xl border border-border-subtle bg-surface-elevated px-4 py-3 text-sm leading-6 text-text-muted">
-          <div className="font-semibold text-text-primary">当前阶段</div>
-          <div className="mt-1">{detail.currentStage ? getStageLabel(detail.currentStage) : STATUS_TEXT[detail.status]}</div>
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-border-subtle bg-surface-elevated px-4 py-3 text-sm leading-6 text-text-muted">
+            <div className="font-semibold text-text-primary">当前阶段</div>
+            <div className="mt-1">{detail.currentStage ? getStageLabel(detail.currentStage) : STATUS_TEXT[detail.status]}</div>
+          </div>
+          {estimate && (
+            <div className="rounded-2xl border border-info-border bg-info-surface px-4 py-3 text-sm leading-6 text-info">
+              <div className="font-semibold text-info">预计等待</div>
+              <div className="mt-1">{estimate.message}</div>
+              {estimate.confidence === "low" && (
+                <div className="mt-1 text-xs text-info/80">预估基于视频长度和已完成的处理阶段，实际时间可能有所不同。</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </article>
@@ -841,61 +879,165 @@ function formatCtaDetail(cta: ScriptAnalysis["cta"] | undefined) {
   return `${cta.time ?? "未知时间"} ${cta.text ?? ""}${type}${hint}`;
 }
 
-function ScriptBlocksTable({ blocks }: { blocks: ScriptAnalysis["structural_blocks"] | undefined }) {
-  const rows = buildStructureBlockRows(blocks);
-
+function isStructureBlockDetail(value: unknown): value is StructureBlockDetail {
   return (
-    <div>
-      <div className="text-sm font-semibold text-text-primary">结构块</div>
-      <MobileStackedRows
-        className="mt-3"
-        empty="LLM 暂未返回结构块。"
-        rows={rows.map((row) => ({
-          title: row.label,
-          fields: [
-            { label: "LLM 返回位置", value: row.value },
-          ],
-        }))}
-      />
-      <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
-        <table className="w-full border-collapse text-left text-sm leading-6">
-          <caption className="sr-only">脚本结构块，包含结构块名称和 LLM 返回位置</caption>
-          <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
-            <tr>
-              <th scope="col" className="w-32 px-3 py-2">结构块</th>
-              <th scope="col" className="px-3 py-2">LLM 返回位置</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border-subtle">
-            {rows.length ? rows.map((row) => (
-              <tr key={row.label} className="align-top">
-                <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.label}</th>
-                <td className="px-3 py-3 text-text-muted">{row.value}</td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan={2} className="px-3 py-3 text-text-muted">LLM 暂未返回结构块。</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    typeof value === "object" &&
+    value !== null &&
+    "summary" in value
   );
 }
 
-function buildStructureBlockRows(blocks: ScriptAnalysis["structural_blocks"] | undefined): TableRow[] {
+type StructureBlockRow = {
+  label: string;
+  block: StructureBlockDetail | null;
+  legacyValue: string | null;
+};
+
+function normalizeStructureBlockRows(blocks: ScriptAnalysisStructuralBlocks | undefined): StructureBlockRow[] {
   if (!blocks) {
     return [];
   }
 
-  return [
-    { label: "开头抓注意力", value: blocks.hook },
-    { label: "内容承诺", value: blocks.promise },
-    { label: "主体内容", value: blocks.meat?.filter((item) => item.trim()).join("；") },
-    { label: "二次留存", value: blocks.re_hook },
-    { label: "引导行动", value: blocks.cta },
-  ].filter((row) => row.value?.trim());
+  const labelMap: Record<string, string> = {
+    hook: "开头抓注意力",
+    promise: "内容承诺",
+    re_hook: "二次留存",
+    cta: "引导行动",
+  };
+
+  const result: StructureBlockRow[] = [];
+
+  for (const key of ["hook", "promise", "re_hook", "cta"] as const) {
+    const value = blocks[key];
+    if (!value) continue;
+
+    if (isStructureBlockDetail(value)) {
+      result.push({ label: labelMap[key], block: value, legacyValue: null });
+    } else if (typeof value === "string" && value.trim()) {
+      result.push({ label: labelMap[key], block: null, legacyValue: value });
+    }
+  }
+
+  const meatArray = blocks.meat || [];
+  for (const item of meatArray) {
+    if (isStructureBlockDetail(item)) {
+      result.push({ label: item.name || "主体内容", block: item, legacyValue: null });
+    } else if (typeof item === "string" && item.trim()) {
+      result.push({ label: "主体内容", block: null, legacyValue: item });
+    }
+  }
+
+  return result;
+}
+
+function buildStructureBlockRows(blocks: ScriptAnalysisStructuralBlocks | undefined): StructureBlockRow[] {
+  return normalizeStructureBlockRows(blocks);
+}
+
+function ScriptBlocksTable({ blocks }: { blocks: ScriptAnalysis["structural_blocks"] | undefined }) {
+  const rows = buildStructureBlockRows(blocks);
+  const hasNewFormat = rows.some((row) => row.block);
+
+  return (
+    <div>
+      <div className="text-sm font-semibold text-text-primary">结构块</div>
+      {hasNewFormat ? (
+        <>
+          <MobileStackedRows
+            className="mt-3"
+            empty="LLM 暂未返回结构块。"
+            rows={rows.map((row) => ({
+              title: row.label,
+              fields: row.block
+                ? [
+                    { label: "摘要", value: row.block.summary },
+                    { label: "优点", value: row.block.strengths?.join("；") },
+                    { label: "不足", value: row.block.weaknesses?.join("；") },
+                    { label: "具体改法", value: formatSuggestions(row.block.suggestions) },
+                  ]
+                : [{ label: "LLM 返回位置", value: row.legacyValue }],
+            }))}
+          />
+          <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+            <table className="min-w-[760px] w-full border-collapse text-left text-sm leading-6">
+              <caption className="sr-only">脚本结构块，包含结构块、摘要、优点、不足和具体改法</caption>
+              <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+                <tr>
+                  <th scope="col" className="w-24 px-3 py-2">结构块</th>
+                  <th scope="col" className="px-3 py-2">摘要</th>
+                  <th scope="col" className="px-3 py-2">优点</th>
+                  <th scope="col" className="px-3 py-2">不足</th>
+                  <th scope="col" className="px-3 py-2">具体改法</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {rows.map((row) => (
+                  <tr key={row.label} className="align-top">
+                    <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.label}</th>
+                    <td className="px-3 py-3 text-text-muted">{row.block?.summary || "暂无"}</td>
+                    <td className="px-3 py-3 text-text-muted">{row.block?.strengths?.join("；") || "暂无"}</td>
+                    <td className="px-3 py-3 text-text-muted">{row.block?.weaknesses?.join("；") || "暂无"}</td>
+                    <td className="px-3 py-3 text-text-muted">{formatSuggestions(row.block?.suggestions)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <>
+          <MobileStackedRows
+            className="mt-3"
+            empty="LLM 暂未返回结构块。"
+            rows={rows.map((row) => ({
+              title: row.label,
+              fields: [
+                { label: "LLM 返回位置", value: row.legacyValue },
+              ],
+            }))}
+          />
+          <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
+            <table className="w-full border-collapse text-left text-sm leading-6">
+              <caption className="sr-only">脚本结构块，包含结构块名称和 LLM 返回位置</caption>
+              <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
+                <tr>
+                  <th scope="col" className="w-32 px-3 py-2">结构块</th>
+                  <th scope="col" className="px-3 py-2">LLM 返回位置</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {rows.length ? rows.map((row) => (
+                  <tr key={row.label} className="align-top">
+                    <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.label}</th>
+                    <td className="px-3 py-3 text-text-muted">{row.legacyValue}</td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={2} className="px-3 py-3 text-text-muted">LLM 暂未返回结构块。</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function formatSuggestions(suggestions: StructureBlockSuggestion[] | undefined): string {
+  if (!suggestions || suggestions.length === 0) return "暂无";
+
+  return suggestions.map((s) => {
+    const target = s.target_time || "未指定";
+    return `[${s.type || "修改"} @ ${target}] ${s.content || ""}`;
+  }).join("；");
+}
+
+function formatStructureBlockAuditValue(value: StructureBlockDetail | string | null | undefined): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  return value.summary || null;
 }
 
 function SegmentHooksTable({ hooks }: { hooks: ScriptAnalysis["segment_hooks"] | undefined }) {
@@ -1382,14 +1524,6 @@ function formatCognitiveLoad(value: string | null | undefined) {
   return descriptions[value] ?? value;
 }
 
-function formatScore(value: number | null | undefined) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  return `${value} 分，满分 10 分；分数越高，表示越能抓住注意力并推动观众继续看。`;
-}
-
 function formatHookDetail(hook: HookDetail | null | undefined) {
   if (!hook) {
     return null;
@@ -1707,7 +1841,10 @@ function buildCreatorActionPlan(result: VideoAnalysisResult): CreatorActionPlan 
     });
   }
 
-  if (!script?.structural_blocks?.re_hook) {
+  const reHookBlock = script?.structural_blocks?.re_hook;
+  const hasReHook = reHookBlock && isStructureBlockDetail(reHookBlock);
+
+  if (!hasReHook) {
     actions.push({
       issue: "中后段二次留存设计不明显，信息变密后容易掉观看。",
       rewrite: "在正文中段加入反转、阶段性结论或下一段预告，把观众重新拉回主线。",
@@ -1816,7 +1953,7 @@ function buildAuditRows(result: VideoAnalysisResult): AuditRow[] {
     {
       layer: "脚本层",
       subject: "二次留存",
-      result: script?.structural_blocks?.re_hook,
+      result: formatStructureBlockAuditValue(script?.structural_blocks?.re_hook),
       benefit: "二次拉回能对抗信息疲劳，提升完播和有效观看时长。",
     },
     {
@@ -1900,30 +2037,6 @@ function TextList({ items, empty, className = "text-text-muted" }: { items: stri
           {item}
         </div>
       ))}
-    </div>
-  );
-}
-
-function MetricRiskList({ items }: { items: string[] | null | undefined }) {
-  const values = (items ?? []).filter((item) => item.trim());
-
-  return (
-    <div className="mt-3 rounded-2xl border border-warning-border bg-warning-surface p-4">
-      <div className="text-xs font-semibold tracking-wide text-warning">指标风险</div>
-      {values.length ? (
-        <ul className="mt-3 space-y-2">
-          {values.map((item) => (
-            <li key={item} className="flex gap-2 text-sm leading-6 text-warning">
-              <span className="mt-0.5 shrink-0 rounded-full border border-warning-border bg-surface-elevated px-2 py-0.5 text-[11px] font-semibold leading-5 text-warning">
-                指标风险
-              </span>
-              <span className="min-w-0 break-words">{item}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="mt-2 text-sm leading-6 text-warning">暂无指标风险。</div>
-      )}
     </div>
   );
 }
