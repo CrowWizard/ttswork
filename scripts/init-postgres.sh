@@ -1,12 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
-DB_NAME="voice_mvp"
-DB_USER="voice_mvp"
-DB_PASS="your_password"
-DB_SCHEMA="public"
+DB_NAME="${DB_NAME:-voice_mvp}"
+DB_USER="${DB_USER:-voice_mvp}"
+DB_PASS="${DB_PASS:-}"
+DB_SCHEMA="${DB_SCHEMA:-public}"
 
-echo "=== PostgreSQL 初始化 ==="
+echo "=== PostgreSQL 18 初始化 ==="
+
+if [ -z "$DB_PASS" ]; then
+  echo "错误：请通过 DB_PASS 环境变量传入数据库密码"
+  echo "示例：sudo -u postgres env DB_PASS='<强密码>' bash scripts/init-postgres.sh"
+  exit 1
+fi
 
 psql -v ON_ERROR_STOP=0 <<-EOSQL
 DO \$\$

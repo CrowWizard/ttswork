@@ -1,438 +1,526 @@
--- Voice MVP 数据库初始化脚本（无外键版本）
--- 用法: sudo -u postgres psql -f init-db.sql
--- 或者: psql -h 127.0.0.1 -U postgres -f init-db.sql
+-- Voice MVP PostgreSQL 18 空库初始化脚本
+-- 用法：PGPASSWORD='<密码>' psql -h 127.0.0.1 -U voice_mvp -d voice_mvp -v ON_ERROR_STOP=1 -f api-server/init-db.sql
+-- 说明：本脚本只面向新服务器空数据库，不包含旧数据迁移、补列、回填或破坏性结构修改。
 
--- 1. 创建数据库（如果不存在）
-SELECT 'CREATE DATABASE voice_mvp'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'voice_mvp')\gexec
+BEGIN;
 
--- 2. 创建用户（如果不存在）并设置密码
---    ⚠️ 请将 YOUR_PASSWORD 替换为实际密码
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'voice_mvp') THEN
-    CREATE ROLE voice_mvp WITH LOGIN PASSWORD 'YOUR_PASSWORD';
-  ELSE
-    ALTER ROLE voice_mvp WITH LOGIN PASSWORD 'YOUR_PASSWORD';
-  END IF;
-END
-$$;
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
 
--- 3. 授权
-GRANT ALL PRIVILEGES ON DATABASE voice_mvp TO voice_mvp;
+SET search_path TO "public";
 
--- 连接到 voice_mvp 数据库，创建表结构
-\c voice_mvp
+-- CreateEnum
+CREATE TYPE "EnrollmentStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
 
--- 确保 voice_mvp 用户对 public schema 有权限
-GRANT ALL ON SCHEMA public TO voice_mvp;
+-- CreateEnum
+CREATE TYPE "RecordingStatus" AS ENUM ('UPLOADED');
 
--- 4. 创建枚举类型
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'EnrollmentStatus') THEN
-    CREATE TYPE "EnrollmentStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
-  END IF;
+-- CreateEnum
+CREATE TYPE "VoiceProfileKind" AS ENUM ('PURE', 'SCENE');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'RecordingStatus') THEN
-    CREATE TYPE "RecordingStatus" AS ENUM ('UPLOADED');
-  END IF;
+-- CreateEnum
+CREATE TYPE "TtsJobStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'VoiceProfileKind') THEN
-    CREATE TYPE "VoiceProfileKind" AS ENUM ('PURE', 'SCENE');
-  END IF;
+-- CreateEnum
+CREATE TYPE "TtsAccessKind" AS ENUM ('FREE_TRIAL', 'GENERAL_USAGE_CODE', 'USAGE_CODE', 'POINTS');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TtsJobStatus') THEN
-    CREATE TYPE "TtsJobStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
-  END IF;
+-- CreateEnum
+CREATE TYPE "PointTransactionType" AS ENUM ('REGISTER_BONUS', 'USAGE_CODE_REDEEM', 'TTS_CONSUME');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TtsAccessKind') THEN
-    CREATE TYPE "TtsAccessKind" AS ENUM ('FREE_TRIAL', 'GENERAL_USAGE_CODE', 'USAGE_CODE', 'POINTS');
-  END IF;
+-- CreateEnum
+CREATE TYPE "UsageCodeModule" AS ENUM ('VOICE_TO_TEXT');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PointTransactionType') THEN
-    CREATE TYPE "PointTransactionType" AS ENUM ('REGISTER_BONUS', 'USAGE_CODE_REDEEM', 'TTS_CONSUME');
-  END IF;
+-- CreateEnum
+CREATE TYPE "VideoPlatform" AS ENUM ('BILIBILI');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UsageCodeModule') THEN
-    CREATE TYPE "UsageCodeModule" AS ENUM ('VOICE_TO_TEXT');
-  END IF;
+-- CreateEnum
+CREATE TYPE "VideoInputType" AS ENUM ('URL', 'BV');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SmsScene') THEN
-    CREATE TYPE "SmsScene" AS ENUM ('REGISTER', 'LOGIN', 'PASSWORD_CHANGE');
-  END IF;
+-- CreateEnum
+CREATE TYPE "VideoSubtitleStatus" AS ENUM ('PENDING', 'READY', 'UNAVAILABLE', 'FAILED');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SmsVerificationStatus') THEN
-    CREATE TYPE "SmsVerificationStatus" AS ENUM ('SENT', 'VERIFIED', 'FAILED');
-  END IF;
+-- CreateEnum
+CREATE TYPE "VideoTranscriptStatus" AS ENUM ('PENDING', 'READY', 'FAILED');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'AnalyticsEventName') THEN
-    CREATE TYPE "AnalyticsEventName" AS ENUM (
-      'PAGE_VIEW',
-      'REGISTER_SUCCESS',
-      'VOICEPRINT_CREATED',
-      'VOICE_GENERATED',
-      'INVITE_CODE_USED'
-    );
-  END IF;
+-- CreateEnum
+CREATE TYPE "VideoTranscriptSource" AS ENUM ('SUBTITLE', 'ASR');
 
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'AnalyticsChannel') THEN
-    CREATE TYPE "AnalyticsChannel" AS ENUM (
-      'DIRECT',
-      'REFERRAL',
-      'ORGANIC',
-      'SOCIAL',
-      'PAID',
-      'EMAIL',
-      'UNKNOWN'
-    );
-  END IF;
-END
-$$;
+-- CreateEnum
+CREATE TYPE "VideoAnalysisJobStatus" AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED');
 
-ALTER TYPE "TtsAccessKind" ADD VALUE IF NOT EXISTS 'GENERAL_USAGE_CODE';
-ALTER TYPE "TtsAccessKind" ADD VALUE IF NOT EXISTS 'POINTS';
+-- CreateEnum
+CREATE TYPE "VideoAnalysisStage" AS ENUM ('SOURCE_LOAD', 'SNAPSHOT_FETCH', 'METADATA_SYNC', 'TRANSCRIPT_RESOLVE', 'ANALYSIS_PARAGRAPH_SUMMARY', 'ANALYSIS_STRUCTURE', 'ANALYSIS_SEMANTIC_PACKAGING', 'ANALYSIS_FINAL_REPORT', 'RESULT_WRITEBACK', 'FAILED_WRITEBACK');
 
--- 5. 创建表（无外键约束，关联关系由应用层保证）
-CREATE TABLE IF NOT EXISTS "User" (
-  "id" TEXT NOT NULL,
-  "phoneNumber" TEXT NOT NULL,
-  "passwordHash" TEXT,
-  "phoneVerifiedAt" TIMESTAMP(3),
-  "pointsBalance" INTEGER NOT NULL DEFAULT 0,
-  "freeTtsUsedAt" TIMESTAMP(3),
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "activePureVoiceEnrollmentId" TEXT,
-  "activeSceneVoiceEnrollmentId" TEXT,
+-- CreateEnum
+CREATE TYPE "VideoAnalysisStageEventStatus" AS ENUM ('RUNNING', 'SUCCEEDED', 'FAILED');
 
-  CONSTRAINT "User_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "User_phoneNumber_key" UNIQUE ("phoneNumber"),
-  CONSTRAINT "User_activePureVoiceEnrollmentId_key" UNIQUE ("activePureVoiceEnrollmentId"),
-  CONSTRAINT "User_activeSceneVoiceEnrollmentId_key" UNIQUE ("activeSceneVoiceEnrollmentId")
+-- CreateEnum
+CREATE TYPE "SmsScene" AS ENUM ('REGISTER', 'LOGIN', 'PASSWORD_CHANGE');
+
+-- CreateEnum
+CREATE TYPE "SmsVerificationStatus" AS ENUM ('SENT', 'VERIFIED', 'FAILED');
+
+-- CreateEnum
+CREATE TYPE "AnalyticsEventName" AS ENUM ('PAGE_VIEW', 'REGISTER_SUCCESS', 'VOICEPRINT_CREATED', 'VOICE_GENERATED', 'INVITE_CODE_USED');
+
+-- CreateEnum
+CREATE TYPE "AnalyticsChannel" AS ENUM ('DIRECT', 'REFERRAL', 'ORGANIC', 'SOCIAL', 'PAID', 'EMAIL', 'UNKNOWN');
+
+-- CreateTable
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL,
+    "phoneNumber" TEXT NOT NULL,
+    "passwordHash" TEXT,
+    "phoneVerifiedAt" TIMESTAMP(3),
+    "pointsBalance" INTEGER NOT NULL DEFAULT 0,
+    "freeTtsUsedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "PointTransaction" (
-  "id" TEXT NOT NULL,
-  "userId" TEXT NOT NULL,
-  "type" "PointTransactionType" NOT NULL,
-  "delta" INTEGER NOT NULL,
-  "balanceAfter" INTEGER NOT NULL,
-  "usageCodeId" TEXT,
-  "ttsJobId" TEXT,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- CreateTable
+CREATE TABLE "PointTransaction" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" "PointTransactionType" NOT NULL,
+    "delta" INTEGER NOT NULL,
+    "balanceAfter" INTEGER NOT NULL,
+    "usageCodeId" TEXT,
+    "ttsJobId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-  CONSTRAINT "PointTransaction_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "PointTransaction_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "AnonymousUser" (
-  "id" TEXT NOT NULL,
-  "tokenHash" TEXT NOT NULL,
-  "expiresAt" TIMESTAMP(3) NOT NULL,
-  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "freeTtsUsedAt" TIMESTAMP(3),
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "activePureVoiceEnrollmentId" TEXT,
-  "activeSceneVoiceEnrollmentId" TEXT,
+-- CreateTable
+CREATE TABLE "VoiceProfile" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "anonymousUserId" TEXT,
+    "activePureVoiceEnrollmentId" TEXT,
+    "activeSceneVoiceEnrollmentId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "AnonymousUser_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "AnonymousUser_tokenHash_key" UNIQUE ("tokenHash"),
-  CONSTRAINT "AnonymousUser_activePureVoiceEnrollmentId_key" UNIQUE ("activePureVoiceEnrollmentId"),
-  CONSTRAINT "AnonymousUser_activeSceneVoiceEnrollmentId_key" UNIQUE ("activeSceneVoiceEnrollmentId")
+    CONSTRAINT "VoiceProfile_pkey" PRIMARY KEY ("id")
 );
 
-ALTER TABLE "User"
-  ADD COLUMN IF NOT EXISTS "pointsBalance" INTEGER NOT NULL DEFAULT 0;
+-- CreateTable
+CREATE TABLE "AnonymousUser" (
+    "id" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "freeTtsUsedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE IF NOT EXISTS "Session" (
-  "id" TEXT NOT NULL,
-  "userId" TEXT NOT NULL,
-  "tokenHash" TEXT NOT NULL,
-  "expiresAt" TIMESTAMP(3) NOT NULL,
-  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-  CONSTRAINT "Session_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "Session_tokenHash_key" UNIQUE ("tokenHash")
+    CONSTRAINT "AnonymousUser_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "SmsVerification" (
-  "id" TEXT NOT NULL,
-  "phoneNumber" TEXT NOT NULL,
-  "scene" "SmsScene" NOT NULL,
-  "provider" TEXT NOT NULL,
-  "providerBizId" TEXT,
-  "providerRequestId" TEXT,
-  "providerOutId" TEXT NOT NULL,
-  "codeHash" TEXT,
-  "status" "SmsVerificationStatus" NOT NULL DEFAULT 'SENT',
-  "verifyAttempts" INTEGER NOT NULL DEFAULT 0,
-  "expiresAt" TIMESTAMP(3) NOT NULL,
-  "verifiedAt" TIMESTAMP(3),
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- CreateTable
+CREATE TABLE "Session" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "SmsVerification_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "VoiceRecording" (
-  "id" TEXT NOT NULL,
-  "userId" TEXT,
-  "anonymousUserId" TEXT,
-  "status" "RecordingStatus" NOT NULL DEFAULT 'UPLOADED',
-  "durationSeconds" DOUBLE PRECISION NOT NULL,
-  "originalFilename" TEXT,
-  "inputContentType" TEXT NOT NULL,
-  "bucket" TEXT NOT NULL,
-  "objectKey" TEXT NOT NULL,
-  "minioUri" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- CreateTable
+CREATE TABLE "SmsVerification" (
+    "id" TEXT NOT NULL,
+    "phoneNumber" TEXT NOT NULL,
+    "scene" "SmsScene" NOT NULL,
+    "provider" TEXT NOT NULL,
+    "providerBizId" TEXT,
+    "providerRequestId" TEXT,
+    "providerOutId" TEXT NOT NULL,
+    "codeHash" TEXT,
+    "status" "SmsVerificationStatus" NOT NULL DEFAULT 'SENT',
+    "verifyAttempts" INTEGER NOT NULL DEFAULT 0,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "verifiedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "VoiceRecording_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "SmsVerification_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "VoiceEnrollment" (
-  "id" TEXT NOT NULL,
-  "recordingId" TEXT NOT NULL,
-  "userId" TEXT,
-  "anonymousUserId" TEXT,
-  "profileKind" "VoiceProfileKind" NOT NULL,
-  "status" "EnrollmentStatus" NOT NULL DEFAULT 'PENDING',
-  "durationSeconds" DOUBLE PRECISION NOT NULL,
-  "originalFilename" TEXT,
-  "inputContentType" TEXT NOT NULL,
-  "voiceId" TEXT,
-  "errorMessage" TEXT,
-  "isInvalidated" BOOLEAN NOT NULL DEFAULT false,
-  "bucket" TEXT NOT NULL,
-  "objectKey" TEXT NOT NULL,
-  "minioUri" TEXT NOT NULL,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- CreateTable
+CREATE TABLE "VoiceRecording" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "anonymousUserId" TEXT,
+    "status" "RecordingStatus" NOT NULL DEFAULT 'UPLOADED',
+    "durationSeconds" DOUBLE PRECISION NOT NULL,
+    "originalFilename" TEXT,
+    "inputContentType" TEXT NOT NULL,
+    "bucket" TEXT NOT NULL,
+    "objectKey" TEXT NOT NULL,
+    "minioUri" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "VoiceEnrollment_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "VoiceEnrollment_voiceId_key" UNIQUE ("voiceId")
+    CONSTRAINT "VoiceRecording_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "UsageCode" (
-  "id" TEXT NOT NULL,
-  "module" "UsageCodeModule" NOT NULL DEFAULT 'VOICE_TO_TEXT',
-  "code" TEXT NOT NULL,
-  "consumedAt" TIMESTAMP(3),
-  "consumedByUserId" TEXT,
-  "consumedTtsJobId" TEXT,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- CreateTable
+CREATE TABLE "VoiceEnrollment" (
+    "id" TEXT NOT NULL,
+    "recordingId" TEXT NOT NULL,
+    "userId" TEXT,
+    "anonymousUserId" TEXT,
+    "profileKind" "VoiceProfileKind" NOT NULL,
+    "status" "EnrollmentStatus" NOT NULL DEFAULT 'PENDING',
+    "durationSeconds" DOUBLE PRECISION NOT NULL,
+    "originalFilename" TEXT,
+    "inputContentType" TEXT NOT NULL,
+    "voiceId" TEXT,
+    "errorMessage" TEXT,
+    "isInvalidated" BOOLEAN NOT NULL DEFAULT false,
+    "bucket" TEXT NOT NULL,
+    "objectKey" TEXT NOT NULL,
+    "minioUri" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "UsageCode_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "UsageCode_code_key" UNIQUE ("code"),
-  CONSTRAINT "UsageCode_consumedTtsJobId_key" UNIQUE ("consumedTtsJobId")
+    CONSTRAINT "VoiceEnrollment_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "TtsJob" (
-  "id" TEXT NOT NULL,
-  "userId" TEXT,
-  "anonymousUserId" TEXT,
-  "voiceEnrollmentId" TEXT,
-  "profileKind" "VoiceProfileKind" NOT NULL,
-  "accessKind" "TtsAccessKind" NOT NULL DEFAULT 'FREE_TRIAL',
-  "usageCodeId" TEXT,
-  "usageCodeModule" "UsageCodeModule",
-  "usageCodeValue" TEXT,
-  "voiceIdSnapshot" TEXT NOT NULL,
-  "text" TEXT NOT NULL,
-  "sceneKey" TEXT,
-  "instruction" TEXT,
-  "status" "TtsJobStatus" NOT NULL DEFAULT 'PENDING',
-  "outputContentType" TEXT,
-  "errorMessage" TEXT,
-  "bucket" TEXT,
-  "objectKey" TEXT,
-  "minioUri" TEXT,
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- CreateTable
+CREATE TABLE "UsageCode" (
+    "id" TEXT NOT NULL,
+    "module" "UsageCodeModule" NOT NULL DEFAULT 'VOICE_TO_TEXT',
+    "code" TEXT NOT NULL,
+    "consumedAt" TIMESTAMP(3),
+    "consumedByUserId" TEXT,
+    "consumedTtsJobId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "TtsJob_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "TtsJob_usageCodeId_key" UNIQUE ("usageCodeId")
+    CONSTRAINT "UsageCode_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "AnalyticsVisitor" (
-  "id" TEXT NOT NULL,
-  "anonymousId" TEXT NOT NULL,
-  "userId" TEXT,
-  "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "firstReferrer" TEXT,
-  "firstUtmSource" TEXT,
-  "firstUtmMedium" TEXT,
-  "firstUtmCampaign" TEXT,
-  "firstLandingPage" TEXT,
+-- CreateTable
+CREATE TABLE "TtsJob" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "anonymousUserId" TEXT,
+    "voiceEnrollmentId" TEXT,
+    "profileKind" "VoiceProfileKind" NOT NULL,
+    "accessKind" "TtsAccessKind" NOT NULL DEFAULT 'FREE_TRIAL',
+    "usageCodeId" TEXT,
+    "usageCodeModule" "UsageCodeModule",
+    "usageCodeValue" TEXT,
+    "voiceIdSnapshot" TEXT NOT NULL,
+    "text" TEXT NOT NULL,
+    "sceneKey" TEXT,
+    "instruction" TEXT,
+    "status" "TtsJobStatus" NOT NULL DEFAULT 'PENDING',
+    "outputContentType" TEXT,
+    "errorMessage" TEXT,
+    "bucket" TEXT,
+    "objectKey" TEXT,
+    "minioUri" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-  CONSTRAINT "AnalyticsVisitor_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "AnalyticsVisitor_anonymousId_key" UNIQUE ("anonymousId")
+    CONSTRAINT "TtsJob_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "AnalyticsSession" (
-  "id" TEXT NOT NULL,
-  "anonymousId" TEXT NOT NULL,
-  "userId" TEXT,
-  "clientSessionId" TEXT,
-  "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "endedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "entryPage" TEXT NOT NULL,
-  "entryReferrer" TEXT,
-  "utmSource" TEXT,
-  "utmMedium" TEXT,
-  "utmCampaign" TEXT,
-  "channel" "AnalyticsChannel" NOT NULL DEFAULT 'UNKNOWN',
+-- CreateTable
+CREATE TABLE "AnalyticsVisitor" (
+    "id" TEXT NOT NULL,
+    "anonymousId" TEXT NOT NULL,
+    "userId" TEXT,
+    "firstSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastSeenAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "firstReferrer" TEXT,
+    "firstUtmSource" TEXT,
+    "firstUtmMedium" TEXT,
+    "firstUtmCampaign" TEXT,
+    "firstLandingPage" TEXT,
 
-  CONSTRAINT "AnalyticsSession_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AnalyticsVisitor_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "AnalyticsEvent" (
-  "id" TEXT NOT NULL,
-  "anonymousId" TEXT NOT NULL,
-  "userId" TEXT,
-  "analyticsSessionId" TEXT NOT NULL,
-  "eventName" "AnalyticsEventName" NOT NULL,
-  "url" TEXT NOT NULL,
-  "referrer" TEXT,
-  "utmSource" TEXT,
-  "utmMedium" TEXT,
-  "utmCampaign" TEXT,
-  "channel" "AnalyticsChannel" NOT NULL DEFAULT 'UNKNOWN',
-  "occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- CreateTable
+CREATE TABLE "AnalyticsSession" (
+    "id" TEXT NOT NULL,
+    "anonymousId" TEXT NOT NULL,
+    "userId" TEXT,
+    "clientSessionId" TEXT,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "endedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "entryPage" TEXT NOT NULL,
+    "entryReferrer" TEXT,
+    "utmSource" TEXT,
+    "utmMedium" TEXT,
+    "utmCampaign" TEXT,
+    "channel" "AnalyticsChannel" NOT NULL DEFAULT 'UNKNOWN',
 
-  CONSTRAINT "AnalyticsEvent_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AnalyticsSession_pkey" PRIMARY KEY ("id")
 );
 
--- 6. 创建索引
-CREATE INDEX IF NOT EXISTS "AnonymousUser_expiresAt_idx"
-  ON "AnonymousUser"("expiresAt");
+-- CreateTable
+CREATE TABLE "AnalyticsEvent" (
+    "id" TEXT NOT NULL,
+    "anonymousId" TEXT NOT NULL,
+    "userId" TEXT,
+    "analyticsSessionId" TEXT NOT NULL,
+    "eventName" "AnalyticsEventName" NOT NULL,
+    "url" TEXT NOT NULL,
+    "referrer" TEXT,
+    "utmSource" TEXT,
+    "utmMedium" TEXT,
+    "utmCampaign" TEXT,
+    "channel" "AnalyticsChannel" NOT NULL DEFAULT 'UNKNOWN',
+    "occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-CREATE INDEX IF NOT EXISTS "Session_userId_expiresAt_idx"
-  ON "Session"("userId", "expiresAt");
+    CONSTRAINT "AnalyticsEvent_pkey" PRIMARY KEY ("id")
+);
 
-CREATE INDEX IF NOT EXISTS "SmsVerification_phoneNumber_scene_createdAt_idx"
-  ON "SmsVerification"("phoneNumber", "scene", "createdAt");
+-- CreateTable
+CREATE TABLE "VideoSource" (
+    "id" TEXT NOT NULL,
+    "platform" "VideoPlatform" NOT NULL DEFAULT 'BILIBILI',
+    "inputType" "VideoInputType" NOT NULL,
+    "inputValue" TEXT NOT NULL,
+    "normalizedBvid" TEXT NOT NULL,
+    "normalizedUrl" TEXT,
+    "title" TEXT,
+    "authorName" TEXT,
+    "authorMid" TEXT,
+    "coverUrl" TEXT,
+    "durationSeconds" DOUBLE PRECISION,
+    "publishTime" TIMESTAMP(3),
+    "subtitleStatus" "VideoSubtitleStatus" NOT NULL DEFAULT 'PENDING',
+    "transcriptStatus" "VideoTranscriptStatus" NOT NULL DEFAULT 'PENDING',
+    "transcriptSource" "VideoTranscriptSource",
+    "subtitleText" TEXT,
+    "transcriptText" TEXT,
+    "fetchErrorMessage" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-CREATE INDEX IF NOT EXISTS "SmsVerification_status_expiresAt_idx"
-  ON "SmsVerification"("status", "expiresAt");
+    CONSTRAINT "VideoSource_pkey" PRIMARY KEY ("id")
+);
 
-CREATE INDEX IF NOT EXISTS "VoiceRecording_userId_createdAt_idx"
-  ON "VoiceRecording"("userId", "createdAt");
+-- CreateTable
+CREATE TABLE "VideoAnalysisJob" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "videoSourceId" TEXT NOT NULL,
+    "status" "VideoAnalysisJobStatus" NOT NULL DEFAULT 'PENDING',
+    "errorMessage" TEXT,
+    "currentStage" "VideoAnalysisStage",
+    "currentStageStatus" "VideoAnalysisStageEventStatus",
+    "currentStageMessage" TEXT,
+    "currentStageStartedAt" TIMESTAMP(3),
+    "summary" TEXT,
+    "structureSections" TEXT,
+    "highlights" TEXT,
+    "copySuggestions" TEXT,
+    "healthCard" TEXT,
+    "packagingAnalysis" TEXT,
+    "scriptAnalysis" TEXT,
+    "semanticAnalysis" TEXT,
+    "internalizationSummary" TEXT,
+    "metadataJson" TEXT,
+    "modelName" TEXT,
+    "promptVersion" TEXT,
+    "workerId" TEXT,
+    "lockedAt" TIMESTAMP(3),
+    "retryCount" INTEGER NOT NULL DEFAULT 0,
+    "nextRetryAt" TIMESTAMP(3),
+    "completedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-CREATE INDEX IF NOT EXISTS "VoiceRecording_anonymousUserId_createdAt_idx"
-  ON "VoiceRecording"("anonymousUserId", "createdAt");
+    CONSTRAINT "VideoAnalysisJob_pkey" PRIMARY KEY ("id")
+);
 
-CREATE INDEX IF NOT EXISTS "VoiceEnrollment_recordingId_idx"
-  ON "VoiceEnrollment"("recordingId");
+-- CreateTable
+CREATE TABLE "VideoAnalysisJobStageEvent" (
+    "id" TEXT NOT NULL,
+    "jobId" TEXT NOT NULL,
+    "stage" "VideoAnalysisStage" NOT NULL,
+    "status" "VideoAnalysisStageEventStatus" NOT NULL DEFAULT 'RUNNING',
+    "message" TEXT,
+    "detailsJson" TEXT,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "completedAt" TIMESTAMP(3),
+    "durationMs" INTEGER,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-CREATE INDEX IF NOT EXISTS "VoiceEnrollment_profileKind_createdAt_idx"
-  ON "VoiceEnrollment"("profileKind", "createdAt");
+    CONSTRAINT "VideoAnalysisJobStageEvent_pkey" PRIMARY KEY ("id")
+);
 
-CREATE INDEX IF NOT EXISTS "VoiceEnrollment_userId_createdAt_idx"
-  ON "VoiceEnrollment"("userId", "createdAt");
+-- CreateIndex
+CREATE UNIQUE INDEX "User_phoneNumber_key" ON "User"("phoneNumber");
 
-CREATE INDEX IF NOT EXISTS "VoiceEnrollment_anonymousUserId_createdAt_idx"
-  ON "VoiceEnrollment"("anonymousUserId", "createdAt");
+-- CreateIndex
+CREATE INDEX "PointTransaction_userId_createdAt_idx" ON "PointTransaction"("userId", "createdAt");
 
-CREATE INDEX IF NOT EXISTS "UsageCode_module_consumedAt_idx"
-  ON "UsageCode"("module", "consumedAt");
+-- CreateIndex
+CREATE INDEX "PointTransaction_usageCodeId_idx" ON "PointTransaction"("usageCodeId");
 
-CREATE INDEX IF NOT EXISTS "UsageCode_consumedAt_idx"
-  ON "UsageCode"("consumedAt");
+-- CreateIndex
+CREATE INDEX "PointTransaction_ttsJobId_idx" ON "PointTransaction"("ttsJobId");
 
-CREATE INDEX IF NOT EXISTS "UsageCode_consumedByUserId_consumedAt_idx"
-  ON "UsageCode"("consumedByUserId", "consumedAt");
+-- CreateIndex
+CREATE UNIQUE INDEX "VoiceProfile_userId_key" ON "VoiceProfile"("userId");
 
-CREATE INDEX IF NOT EXISTS "PointTransaction_userId_createdAt_idx"
-  ON "PointTransaction"("userId", "createdAt");
+-- CreateIndex
+CREATE UNIQUE INDEX "VoiceProfile_anonymousUserId_key" ON "VoiceProfile"("anonymousUserId");
 
-CREATE INDEX IF NOT EXISTS "PointTransaction_usageCodeId_idx"
-  ON "PointTransaction"("usageCodeId");
+-- CreateIndex
+CREATE INDEX "VoiceProfile_userId_idx" ON "VoiceProfile"("userId");
 
-CREATE INDEX IF NOT EXISTS "PointTransaction_ttsJobId_idx"
-  ON "PointTransaction"("ttsJobId");
+-- CreateIndex
+CREATE INDEX "VoiceProfile_anonymousUserId_idx" ON "VoiceProfile"("anonymousUserId");
 
-CREATE INDEX IF NOT EXISTS "TtsJob_userId_createdAt_idx"
-  ON "TtsJob"("userId", "createdAt");
+-- CreateIndex
+CREATE UNIQUE INDEX "AnonymousUser_tokenHash_key" ON "AnonymousUser"("tokenHash");
 
-CREATE INDEX IF NOT EXISTS "TtsJob_anonymousUserId_createdAt_idx"
-  ON "TtsJob"("anonymousUserId", "createdAt");
+-- CreateIndex
+CREATE INDEX "AnonymousUser_expiresAt_idx" ON "AnonymousUser"("expiresAt");
 
-CREATE INDEX IF NOT EXISTS "TtsJob_voiceEnrollmentId_idx"
-  ON "TtsJob"("voiceEnrollmentId");
+-- CreateIndex
+CREATE UNIQUE INDEX "Session_tokenHash_key" ON "Session"("tokenHash");
 
-CREATE INDEX IF NOT EXISTS "TtsJob_accessKind_createdAt_idx"
-  ON "TtsJob"("accessKind", "createdAt");
+-- CreateIndex
+CREATE INDEX "Session_userId_expiresAt_idx" ON "Session"("userId", "expiresAt");
 
-CREATE INDEX IF NOT EXISTS "TtsJob_usageCodeModule_createdAt_idx"
-  ON "TtsJob"("usageCodeModule", "createdAt");
+-- CreateIndex
+CREATE INDEX "SmsVerification_phoneNumber_scene_createdAt_idx" ON "SmsVerification"("phoneNumber", "scene", "createdAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsVisitor_userId_idx"
-  ON "AnalyticsVisitor"("userId");
+-- CreateIndex
+CREATE INDEX "SmsVerification_status_expiresAt_idx" ON "SmsVerification"("status", "expiresAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsVisitor_firstSeenAt_idx"
-  ON "AnalyticsVisitor"("firstSeenAt");
+-- CreateIndex
+CREATE INDEX "VoiceRecording_userId_createdAt_idx" ON "VoiceRecording"("userId", "createdAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsVisitor_lastSeenAt_idx"
-  ON "AnalyticsVisitor"("lastSeenAt");
+-- CreateIndex
+CREATE INDEX "VoiceRecording_anonymousUserId_createdAt_idx" ON "VoiceRecording"("anonymousUserId", "createdAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsSession_anonymousId_startedAt_idx"
-  ON "AnalyticsSession"("anonymousId", "startedAt");
+-- CreateIndex
+CREATE UNIQUE INDEX "VoiceEnrollment_voiceId_key" ON "VoiceEnrollment"("voiceId");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsSession_userId_startedAt_idx"
-  ON "AnalyticsSession"("userId", "startedAt");
+-- CreateIndex
+CREATE INDEX "VoiceEnrollment_recordingId_idx" ON "VoiceEnrollment"("recordingId");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsSession_channel_startedAt_idx"
-  ON "AnalyticsSession"("channel", "startedAt");
+-- CreateIndex
+CREATE INDEX "VoiceEnrollment_profileKind_createdAt_idx" ON "VoiceEnrollment"("profileKind", "createdAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsSession_clientSessionId_idx"
-  ON "AnalyticsSession"("clientSessionId");
+-- CreateIndex
+CREATE INDEX "VoiceEnrollment_userId_createdAt_idx" ON "VoiceEnrollment"("userId", "createdAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsEvent_occurredAt_idx"
-  ON "AnalyticsEvent"("occurredAt");
+-- CreateIndex
+CREATE INDEX "VoiceEnrollment_anonymousUserId_createdAt_idx" ON "VoiceEnrollment"("anonymousUserId", "createdAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsEvent_eventName_occurredAt_idx"
-  ON "AnalyticsEvent"("eventName", "occurredAt");
+-- CreateIndex
+CREATE UNIQUE INDEX "UsageCode_code_key" ON "UsageCode"("code");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsEvent_channel_occurredAt_idx"
-  ON "AnalyticsEvent"("channel", "occurredAt");
+-- CreateIndex
+CREATE UNIQUE INDEX "UsageCode_consumedTtsJobId_key" ON "UsageCode"("consumedTtsJobId");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsEvent_userId_occurredAt_idx"
-  ON "AnalyticsEvent"("userId", "occurredAt");
+-- CreateIndex
+CREATE INDEX "UsageCode_module_consumedAt_idx" ON "UsageCode"("module", "consumedAt");
 
-CREATE INDEX IF NOT EXISTS "AnalyticsEvent_anonymousId_occurredAt_idx"
-  ON "AnalyticsEvent"("anonymousId", "occurredAt");
+-- CreateIndex
+CREATE INDEX "UsageCode_consumedAt_idx" ON "UsageCode"("consumedAt");
 
--- 7. 表和类型所有权授予 voice_mvp 用户
-ALTER TABLE "User" OWNER TO voice_mvp;
-ALTER TABLE "PointTransaction" OWNER TO voice_mvp;
-ALTER TABLE "AnonymousUser" OWNER TO voice_mvp;
-ALTER TABLE "Session" OWNER TO voice_mvp;
-ALTER TABLE "SmsVerification" OWNER TO voice_mvp;
-ALTER TABLE "VoiceRecording" OWNER TO voice_mvp;
-ALTER TABLE "VoiceEnrollment" OWNER TO voice_mvp;
-ALTER TABLE "UsageCode" OWNER TO voice_mvp;
-ALTER TABLE "TtsJob" OWNER TO voice_mvp;
-ALTER TABLE "AnalyticsVisitor" OWNER TO voice_mvp;
-ALTER TABLE "AnalyticsSession" OWNER TO voice_mvp;
-ALTER TABLE "AnalyticsEvent" OWNER TO voice_mvp;
-ALTER TYPE "EnrollmentStatus" OWNER TO voice_mvp;
-ALTER TYPE "RecordingStatus" OWNER TO voice_mvp;
-ALTER TYPE "VoiceProfileKind" OWNER TO voice_mvp;
-ALTER TYPE "TtsJobStatus" OWNER TO voice_mvp;
-ALTER TYPE "TtsAccessKind" OWNER TO voice_mvp;
-ALTER TYPE "PointTransactionType" OWNER TO voice_mvp;
-ALTER TYPE "UsageCodeModule" OWNER TO voice_mvp;
-ALTER TYPE "SmsScene" OWNER TO voice_mvp;
-ALTER TYPE "SmsVerificationStatus" OWNER TO voice_mvp;
-ALTER TYPE "AnalyticsEventName" OWNER TO voice_mvp;
-ALTER TYPE "AnalyticsChannel" OWNER TO voice_mvp;
+-- CreateIndex
+CREATE INDEX "UsageCode_consumedByUserId_consumedAt_idx" ON "UsageCode"("consumedByUserId", "consumedAt");
 
--- 完成
-SELECT '✅ 数据库初始化完成' AS result;
+-- CreateIndex
+CREATE UNIQUE INDEX "TtsJob_usageCodeId_key" ON "TtsJob"("usageCodeId");
+
+-- CreateIndex
+CREATE INDEX "TtsJob_userId_createdAt_idx" ON "TtsJob"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "TtsJob_anonymousUserId_createdAt_idx" ON "TtsJob"("anonymousUserId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "TtsJob_voiceEnrollmentId_idx" ON "TtsJob"("voiceEnrollmentId");
+
+-- CreateIndex
+CREATE INDEX "TtsJob_accessKind_createdAt_idx" ON "TtsJob"("accessKind", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "TtsJob_usageCodeModule_createdAt_idx" ON "TtsJob"("usageCodeModule", "createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AnalyticsVisitor_anonymousId_key" ON "AnalyticsVisitor"("anonymousId");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsVisitor_userId_idx" ON "AnalyticsVisitor"("userId");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsVisitor_firstSeenAt_idx" ON "AnalyticsVisitor"("firstSeenAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsVisitor_lastSeenAt_idx" ON "AnalyticsVisitor"("lastSeenAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsSession_anonymousId_startedAt_idx" ON "AnalyticsSession"("anonymousId", "startedAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsSession_userId_startedAt_idx" ON "AnalyticsSession"("userId", "startedAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsSession_channel_startedAt_idx" ON "AnalyticsSession"("channel", "startedAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsSession_clientSessionId_idx" ON "AnalyticsSession"("clientSessionId");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsEvent_occurredAt_idx" ON "AnalyticsEvent"("occurredAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsEvent_eventName_occurredAt_idx" ON "AnalyticsEvent"("eventName", "occurredAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsEvent_channel_occurredAt_idx" ON "AnalyticsEvent"("channel", "occurredAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsEvent_userId_occurredAt_idx" ON "AnalyticsEvent"("userId", "occurredAt");
+
+-- CreateIndex
+CREATE INDEX "AnalyticsEvent_anonymousId_occurredAt_idx" ON "AnalyticsEvent"("anonymousId", "occurredAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VideoSource_normalizedBvid_key" ON "VideoSource"("normalizedBvid");
+
+-- CreateIndex
+CREATE INDEX "VideoAnalysisJob_userId_createdAt_idx" ON "VideoAnalysisJob"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "VideoAnalysisJob_videoSourceId_createdAt_idx" ON "VideoAnalysisJob"("videoSourceId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "VideoAnalysisJob_status_createdAt_idx" ON "VideoAnalysisJob"("status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "VideoAnalysisJob_currentStage_currentStageStatus_idx" ON "VideoAnalysisJob"("currentStage", "currentStageStatus");
+
+-- CreateIndex
+CREATE INDEX "VideoAnalysisJobStageEvent_jobId_createdAt_idx" ON "VideoAnalysisJobStageEvent"("jobId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "VideoAnalysisJobStageEvent_jobId_status_createdAt_idx" ON "VideoAnalysisJobStageEvent"("jobId", "status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "VideoAnalysisJobStageEvent_stage_status_createdAt_idx" ON "VideoAnalysisJobStageEvent"("stage", "status", "createdAt");
+
+COMMIT;

@@ -207,11 +207,12 @@ Authorization: Basic base64(ADMIN_USERNAME:ADMIN_PASSWORD)
 }
 ```
 
-### 4. 生成 Prisma Client 并同步数据库
+### 4. 生成 Prisma Client 并初始化本地数据库
 
 ```bash
 bunx prisma generate
-bunx prisma db push
+sudo -u postgres env DB_PASS='<强密码>' bash scripts/init-postgres.sh
+PGPASSWORD='<强密码>' psql -h 127.0.0.1 -U voice_mvp -d voice_mvp -v ON_ERROR_STOP=1 -f api-server/init-db.sql
 ```
 
 ### 5. 启动开发环境
@@ -315,7 +316,7 @@ python3 -m compileall video-analysis-worker
 
 ```bash
 docker compose up -d
-bunx prisma db push
+PGPASSWORD='postgres' psql -h 127.0.0.1 -U postgres -d voice_mvp -v ON_ERROR_STOP=1 -f api-server/init-db.sql
 bun run dev
 ```
 
