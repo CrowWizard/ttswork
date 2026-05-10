@@ -84,6 +84,23 @@ class AnalyzerSchemaTest(unittest.TestCase):
         with self.assertRaises(AnalysisResultFormatError):
             service._call_json_model("prompt", StructureExtract, 0.2, step="test")
 
+    def test_stage_specific_model_overrides_default_model(self) -> None:
+        payload = _valid_structure_payload()
+        service = _service_with_payload(payload)
+        service._config.video_analysis_structure_model = "structure-model"
+        captured: dict[str, Any] = {}
+
+        def post(*_args: Any, **kwargs: Any) -> SimpleNamespace:
+            captured.update(kwargs)
+            return _json_response(payload)
+
+        service._session = SimpleNamespace(post=post)
+
+        service._call_json_model("prompt", StructureExtract, 0.2, step="ANALYSIS_STRUCTURE")
+
+        self.assertEqual(captured["json"]["model"], "structure-model")
+        self.assertEqual(service.last_used_models["ANALYSIS_STRUCTURE"], "structure-model")
+
 
 class StructuralBlocksNormalizationTest(unittest.TestCase):
     def test_legacy_string_block_is_converted(self) -> None:
@@ -140,6 +157,10 @@ class StructuralBlocksNormalizationTest(unittest.TestCase):
 def _service_with_payload(payload: dict[str, Any]) -> AnalyzerService:
     cfg = SimpleNamespace(
         video_analysis_llm_model="model",
+        video_analysis_paragraph_model="",
+        video_analysis_structure_model="",
+        video_analysis_semantic_model="",
+        video_analysis_report_model="",
         video_analysis_llm_url="https://example.invalid/v1/chat/completions",
         qwen_api_key="key",
         qwen_mock_mode=False,

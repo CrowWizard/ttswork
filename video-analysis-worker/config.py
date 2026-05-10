@@ -43,6 +43,10 @@ class WorkerConfig:
     dashscope_asr_timeout: int
     video_analysis_llm_url: str
     video_analysis_llm_model: str
+    video_analysis_paragraph_model: str
+    video_analysis_structure_model: str
+    video_analysis_semantic_model: str
+    video_analysis_report_model: str
     loaded_env_paths: list[str]
     config_file_path: str | None
 
@@ -142,6 +146,10 @@ def load_config() -> WorkerConfig:
             "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
         ),
         video_analysis_llm_model=_env_string("VIDEO_ANALYSIS_LLM_MODEL", env_values, "deepseek-v4-flash"),
+        video_analysis_paragraph_model=_env_string("VIDEO_ANALYSIS_PARAGRAPH_MODEL", env_values, "deepseek-v4-pro"),
+        video_analysis_structure_model=_env_string("VIDEO_ANALYSIS_STRUCTURE_MODEL", env_values, "deepseek-v4-flash"),
+        video_analysis_semantic_model=_env_string("VIDEO_ANALYSIS_SEMANTIC_MODEL", env_values, "deepseek-v4-flash"),
+        video_analysis_report_model=_env_string("VIDEO_ANALYSIS_REPORT_MODEL", env_values, "deepseek-v4-flash"),
         loaded_env_paths=loaded_env_paths,
         config_file_path=config_file_path,
     )

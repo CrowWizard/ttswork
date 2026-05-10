@@ -422,10 +422,15 @@ class AnalyzerService:
         self._session = requests.Session()
         self._prompt_template = prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else ""
         self._last_normalization_warnings: list[dict[str, Any]] = []
+        self._last_used_models: dict[str, str] = {}
 
     @property
     def last_normalization_warnings(self) -> list[dict[str, Any]]:
         return list(self._last_normalization_warnings)
+
+    @property
+    def last_used_models(self) -> dict[str, str]:
+        return dict(self._last_used_models)
 
     def analyze(
         self,
@@ -438,6 +443,7 @@ class AnalyzerService:
         run_step: Any | None = None,
     ) -> AnalysisOutput:
         self._last_normalization_warnings = []
+        self._last_used_models = {}
         if self._config.qwen_mock_mode:
             report, paragraphs = self._build_mock_report(title, transcript_text, duration_seconds)
             return self._to_output(report, paragraphs, "mock-video-analysis")
@@ -481,11 +487,13 @@ class AnalyzerService:
             title=title,
             hasCover=bool(cover_url),
         )
-        return self._to_output(report, paragraphs, self._config.video_analysis_llm_model)
+        return self._to_output(report, paragraphs, self._format_used_model_name())
 
     def _call_json_model(self, prompt: str, schema: type[T], temperature: float, *, step: str) -> T:
+        model = self._model_for_step(step)
+        self._last_used_models[step] = model
         payload = {
-            "model": self._config.video_analysis_llm_model,
+            "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
             "response_format": {"type": "json_object"},
@@ -513,6 +521,40 @@ class AnalyzerService:
                 response_length=len(normalized_text),
                 validation_errors=validation_errors[:10],
             ) from exc
+
+    def _model_for_step(self, step: str) -> str:
+        fallback = self._config.video_analysis_llm_model
+        step_models = {
+            "ANALYSIS_PARAGRAPH_SUMMARY": getattr(self._config, "video_analysis_paragraph_model", ""),
+            "ANALYSIS_STRUCTURE": getattr(self._config, "video_analysis_structure_model", ""),
+            "ANALYSIS_SEMANTIC_PACKAGING": getattr(self._config, "video_analysis_semantic_model", ""),
+            "ANALYSIS_FINAL_REPORT": getattr(self._config, "video_analysis_report_model", ""),
+        }
+        configured = str(step_models.get(step) or "").strip()
+        return configured or fallback
+
+    def _format_used_model_name(self) -> str:
+        if not self._last_used_models:
+            return self._config.video_analysis_llm_model
+
+        labels = {
+            "ANALYSIS_PARAGRAPH_SUMMARY": "paragraph",
+            "ANALYSIS_STRUCTURE": "structure",
+            "ANALYSIS_SEMANTIC_PACKAGING": "semantic",
+            "ANALYSIS_FINAL_REPORT": "report",
+        }
+        ordered_steps = [
+            "ANALYSIS_PARAGRAPH_SUMMARY",
+            "ANALYSIS_STRUCTURE",
+            "ANALYSIS_SEMANTIC_PACKAGING",
+            "ANALYSIS_FINAL_REPORT",
+        ]
+        parts = [
+            f"{labels[step]}={self._last_used_models[step]}"
+            for step in ordered_steps
+            if step in self._last_used_models
+        ]
+        return ";".join(parts)
 
     def _normalize_payload_for_schema(self, schema: type[T], raw_payload: Any) -> Any:
         if not isinstance(raw_payload, dict):

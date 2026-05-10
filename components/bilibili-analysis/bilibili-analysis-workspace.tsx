@@ -742,7 +742,9 @@ function formatDateTime(value: string | null) {
   }
 
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "未记录" : date.toLocaleString("zh-CN", { hour12: false });
+  return Number.isNaN(date.getTime())
+    ? "未记录"
+    : date.toLocaleString("zh-CN", { hour12: false, timeZone: "UTC" });
 }
 
 function formatDurationMs(value: number | null) {
