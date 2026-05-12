@@ -43,11 +43,13 @@ class FakeDb:
 class FakeSubtitleService:
     def __init__(self, result: str | Exception) -> None:
         self._result = result
+        self.called = False
 
     def fetch_text(self, tracks: list[Any]) -> str:
         return self.fetch_payload(tracks).text
 
     def fetch_payload(self, tracks: list[Any]) -> TranscriptPayload:
+        self.called = True
         if isinstance(self._result, Exception):
             raise self._result
 
@@ -173,6 +175,29 @@ class TranscriptStrategyTest(unittest.TestCase):
         self.assertFalse(asr.called)
         self.assertEqual(db.updates[-1]["subtitleStatus"], "READY")
         self.assertEqual(db.updates[-1]["transcriptSource"], "SUBTITLE")
+
+    def test_reuses_cached_subtitle_without_fetching_bilibili_subtitle(self) -> None:
+        db = FakeDb()
+        bilibili = FakeBilibiliService()
+        asr = FakeAsrService()
+        subtitle = FakeSubtitleService("不应重新下载")
+
+        payload = resolve_transcript(
+            db,
+            _source(subtitle_text="已缓存字幕", subtitle_status="READY"),
+            _snapshot(),
+            bilibili,
+            subtitle,
+            asr,
+        )
+
+        self.assertEqual(payload.text, "已缓存字幕")
+        self.assertFalse(subtitle.called)
+        self.assertFalse(bilibili.audio_called)
+        self.assertFalse(asr.called)
+        self.assertEqual(db.updates[-1]["transcriptStatus"], "READY")
+        self.assertEqual(db.updates[-1]["transcriptSource"], "SUBTITLE")
+        self.assertEqual(db.updates[-1]["transcriptText"], "已缓存字幕")
 
     def test_uses_asr_only_when_subtitle_is_unavailable(self) -> None:
         db = FakeDb()
@@ -621,7 +646,11 @@ class AnalyzerNormalizationTest(unittest.TestCase):
         self.assertEqual(semantic.semantic.cognitive_load, "中高")
 
 
-def _source(transcript_text: str | None = None) -> SimpleNamespace:
+def _source(
+    transcript_text: str | None = None,
+    subtitle_text: str | None = None,
+    subtitle_status: str = "PENDING",
+) -> SimpleNamespace:
     return SimpleNamespace(
         id="source-1",
         normalized_bvid="BV1test",
@@ -632,10 +661,10 @@ def _source(transcript_text: str | None = None) -> SimpleNamespace:
         cover_url=None,
         duration_seconds=None,
         publish_time=None,
-        subtitle_status="PENDING",
+        subtitle_status=subtitle_status,
         transcript_status="PENDING",
         transcript_source=None,
-        subtitle_text=None,
+        subtitle_text=subtitle_text,
         transcript_text=transcript_text,
         fetch_error_message=None,
     )

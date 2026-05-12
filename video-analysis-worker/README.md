@@ -139,7 +139,9 @@ Worker 会优先使用 B 站字幕：
 4. 短字幕视频会使用 `_step1_extract_structure` 返回的 `narrative_arc` 派生语义分段。
 5. 不论来源是哪一个，worker 最后都会做确定性后处理：过多时合并到最多 8 段，长视频过少时拆分到至少 5 段。
 
-`_generate_paragraph_summary.summary` 与 `_step1_extract_structure` 的 `narrative_arc.event` 使用同一类摘要约束：必须包含本段主题或情节、核心观点/结论/冲突，以及本段在整条视频中的作用，不能只写“冲突引入”“历史根源”这类短标签。
+同一 BV 号已经存在可用文本时会直接复用缓存：优先复用 `transcriptText`；如果历史数据只有 `subtitleText` 且 `subtitleStatus=READY`，会把字幕同步回 `transcriptText` 后继续分析，不再重复下载 B 站字幕正文。
+
+`_generate_paragraph_summary.summary` 与 `_step1_extract_structure` 的 `narrative_arc.event` 使用同一类摘要约束：必须包含本段主题或情节、核心观点/结论/冲突，不能只写“冲突引入”“历史根源”这类短标签。
 
 ### 3. 结构化分析阶段
 

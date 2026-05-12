@@ -304,7 +304,7 @@ class ParagraphSummaryPromptTest(unittest.TestCase):
         self.assertIn("summary 内容约束", prompt)
         self.assertIn("本段主要讲什么主题或情节", prompt)
         self.assertIn("核心观点、结论或冲突", prompt)
-        self.assertIn("本段在整条视频中的作用", prompt)
+        self.assertNotIn("作用是", prompt)
 
     def test_step1_prompt_defines_narrative_arc_event_as_summary(self) -> None:
         service = AnalyzerService(
@@ -331,6 +331,7 @@ class ParagraphSummaryPromptTest(unittest.TestCase):
         self.assertIn("narrative_arc.event 内容约束", prompt)
         self.assertIn("本段主要讲什么主题或情节", prompt)
         self.assertIn("不要只写‘冲突引入’‘历史根源’这类事件名", prompt)
+        self.assertNotIn("作用是", prompt)
 
 
 def _service_with_payload(payload: dict[str, Any]) -> AnalyzerService:

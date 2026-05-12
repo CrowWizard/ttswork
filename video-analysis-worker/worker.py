@@ -488,6 +488,31 @@ def resolve_transcript(
             )
         return TranscriptPayload(text=cached_transcript, timeline_text=cached_transcript, duration_seconds=source.duration_seconds)
 
+    cached_subtitle = (source.subtitle_text or "").strip()
+    if cached_subtitle and source.subtitle_status == "READY":
+        # 兼容旧数据：已有字幕文本但 transcriptText 为空时，直接复用字幕，避免重复下载 B 站字幕正文。
+        db.update_video_source(
+            source.id,
+            transcriptStatus="READY",
+            transcriptSource="SUBTITLE",
+            transcriptText=cached_subtitle,
+            fetchErrorMessage=None,
+        )
+        if logger:
+            log_event(
+                logger,
+                "debug",
+                "subtitle.cache.hit",
+                sourceId=source.id,
+                bvid=snapshot.bvid,
+                subtitleLength=len(cached_subtitle),
+            )
+        return TranscriptPayload(
+            text=cached_subtitle,
+            timeline_text=cached_subtitle,
+            duration_seconds=source.duration_seconds or snapshot.duration_seconds,
+        )
+
     try:
         if logger:
             log_event(
