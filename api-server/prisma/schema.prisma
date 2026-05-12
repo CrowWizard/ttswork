@@ -99,6 +99,60 @@ enum VideoAnalysisStageEventStatus {
   FAILED
 }
 
+enum ContentGenerationType {
+  VIDEO_SCRIPT
+}
+
+enum ContentGenerationTone {
+  PERSONAL
+  COMPANY
+  PROFESSIONAL_CASUAL
+}
+
+enum ContentGenerationVerbosity {
+  CONCISE
+  DETAILED
+}
+
+enum ContentGenerationLanguage {
+  ZH_CN
+  EN_US
+}
+
+enum ContentGenerationPlatform {
+  BILIBILI
+  YOUTUBE
+  XIAOHONGSHU
+  DOUYIN
+  WEIXIN_CHANNELS
+  TWITTER
+}
+
+enum ContentGenerationDuration {
+  SHORT
+  MEDIUM
+  LONG
+}
+
+enum ContentGenerationJobStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum ContentGenerationStage {
+  PREFERENCES
+  DIRECTION_RESEARCH
+  CATEGORY_MATCH
+  STRUCTURE_DESIGN
+  HOOK_GENERATION
+  CONTENT_GENERATION
+  FORMAT_VALIDATE
+  RESULT_WRITEBACK
+  FAILED_WRITEBACK
+}
+
 enum SmsScene {
   REGISTER
   LOGIN
@@ -422,6 +476,69 @@ model VideoAnalysisJobStageEvent {
   jobId       String
   stage       VideoAnalysisStage
   status      VideoAnalysisStageEventStatus @default(RUNNING)
+  message     String?
+  detailsJson String?
+  startedAt   DateTime                      @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+
+  @@index([jobId, createdAt])
+  @@index([jobId, status, createdAt])
+  @@index([stage, status, createdAt])
+}
+
+model ContentGenerationJob {
+  id                    String                     @id @default(cuid())
+  userId                String
+  status                ContentGenerationJobStatus @default(PENDING)
+  errorMessage          String?
+  topicInput            String
+  type                  ContentGenerationType      @default(VIDEO_SCRIPT)
+  platform              ContentGenerationPlatform  @default(BILIBILI)
+  language              ContentGenerationLanguage  @default(ZH_CN)
+  tone                  ContentGenerationTone      @default(PERSONAL)
+  verbosity             ContentGenerationVerbosity @default(CONCISE)
+  duration              ContentGenerationDuration  @default(SHORT)
+  generateShots         Boolean                    @default(true)
+  heroOpening           String?
+  outroClosing          String?
+  category              String?
+  matchedTopic          String?
+  hook                  String?
+  researchSummary       String?
+  directionJson         String?
+  structureJson         String?
+  contentJson           String?
+  finalJson             String?
+  metadataJson          String?
+  progressLogJson       String?
+  modelName             String?
+  promptVersion         String?
+  workerId              String?
+  lockedAt              DateTime?
+  retryCount            Int                        @default(0)
+  nextRetryAt           DateTime?
+  currentStage          ContentGenerationStage?
+  currentStageStatus    VideoAnalysisStageEventStatus?
+  currentStageMessage   String?
+  currentStageStartedAt DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([currentStage, currentStageStatus])
+}
+
+model ContentGenerationStageEvent {
+  id          String                        @id @default(cuid())
+  jobId       String
+  stage       ContentGenerationStage
+  status      VideoAnalysisStageEventStatus @default(RUNNING)
+  label       String?
   message     String?
   detailsJson String?
   startedAt   DateTime                      @default(now())

@@ -30,10 +30,19 @@ export type AppConfig = {
   qwen: {
     mockMode: boolean;
     apiKey: string;
+    chatCompletionUrl: string;
     pureEnrollUrl: string;
     sceneEnrollUrl: string;
     pureTtsUrl: string;
     sceneTtsUrl: string;
+  };
+  contentGeneration: {
+    llmModel: string;
+    searchProvider: "bocha" | "aliyun" | "duckduckgo" | "mock" | "disabled";
+    searchTimeoutSeconds: number;
+    bochaApiKey: string;
+    aliyunIqsApiKey: string;
+    aliyunIqsEngineType: "Generic" | "GenericAdvanced" | "LiteAdvanced" | "Deep";
   };
   cookie: {
     secure: boolean;
@@ -173,6 +182,29 @@ function envSameSite(key: string, fallback: AppConfig["cookie"]["sameSite"]): Ap
   return fallback;
 }
 
+function envAliyunIqsEngineType(key: string, fallback: AppConfig["contentGeneration"]["aliyunIqsEngineType"]) {
+  const raw = process.env[key];
+
+  if (raw === "Generic" || raw === "GenericAdvanced" || raw === "LiteAdvanced" || raw === "Deep") {
+    return raw;
+  }
+
+  return fallback;
+}
+
+function envSearchProvider(
+  key: string,
+  fallback: string,
+): AppConfig["contentGeneration"]["searchProvider"] {
+  const raw = process.env[key] ?? fallback;
+
+  if (raw === "bocha" || raw === "aliyun" || raw === "duckduckgo" || raw === "mock" || raw === "disabled") {
+    return raw;
+  }
+
+  return "mock";
+}
+
 export function loadConfig(): AppConfig {
   const file = readConfigFile();
 
@@ -188,6 +220,8 @@ export function loadConfig(): AppConfig {
   const admin: Partial<AppConfig["admin"]> = file?.admin ?? {};
   const sms: Partial<AppConfig["sms"]> = file?.sms ?? {};
   const usageCode: Partial<AppConfig["usageCode"]> = file?.usageCode ?? {};
+  const contentGeneration = (file?.contentGeneration ?? {}) as Partial<AppConfig["contentGeneration"]>;
+  const search = (file as { search?: Partial<AppConfig["contentGeneration"]> & { provider?: string; timeoutSeconds?: number } } | null)?.search ?? {};
   const configuredGeneralUsageCode = envString("USAGE_CODE_GENERAL_CODE", usageCode.generalCode ?? "123456").trim();
   const generalUsageCode = /^[0-9A-Za-z]{6}$/.test(configuredGeneralUsageCode)
     ? configuredGeneralUsageCode
@@ -219,6 +253,10 @@ export function loadConfig(): AppConfig {
     qwen: {
       mockMode: envBool("QWEN_MOCK_MODE", qwen.mockMode ?? true),
       apiKey: envString("QWEN_API_KEY", qwen.apiKey ?? ""),
+      chatCompletionUrl: envString(
+        "CONTENT_GENERATION_LLM_URL",
+        qwen.chatCompletionUrl ?? "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      ),
       pureEnrollUrl: envString(
         "QWEN_PURE_ENROLL_URL",
         process.env.QWEN_ENROLL_URL ??
@@ -246,6 +284,23 @@ export function loadConfig(): AppConfig {
         qwen.sceneTtsUrl ??
         qwen.ttsUrl ??
         "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer",
+      ),
+    },
+    contentGeneration: {
+      llmModel: envString("CONTENT_GENERATION_LLM_MODEL", contentGeneration.llmModel ?? "qwen-plus"),
+      searchProvider: envSearchProvider(
+        "SEARCH_PROVIDER",
+        contentGeneration.searchProvider ?? search.searchProvider ?? search.provider ?? "mock",
+      ),
+      searchTimeoutSeconds: envInt(
+        "SEARCH_TIMEOUT_SECONDS",
+        contentGeneration.searchTimeoutSeconds ?? search.searchTimeoutSeconds ?? search.timeoutSeconds ?? 20,
+      ),
+      bochaApiKey: envString("BOCHA_API_KEY", contentGeneration.bochaApiKey ?? ""),
+      aliyunIqsApiKey: envString("ALIYUN_IQS_API_KEY", contentGeneration.aliyunIqsApiKey ?? ""),
+      aliyunIqsEngineType: envAliyunIqsEngineType(
+        "ALIYUN_IQS_ENGINE_TYPE",
+        contentGeneration.aliyunIqsEngineType ?? "LiteAdvanced",
       ),
     },
     cookie: {

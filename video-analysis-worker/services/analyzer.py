@@ -4,7 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Optional, TypeVar
+from typing import Any, Optional, TypeVar
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -171,7 +171,7 @@ class HookDetail(BaseModel):
 
     text: str
     time: TimeStr
-    type: Literal["直给结论", "痛点提问", "反常理", "展示后果", "展示高光片段", "昂贵设备", "数据冲击", "身份认同"]
+    type: str = Field(min_length=1)
     mechanism: str
     hook_score: int = Field(ge=1, le=10)
 
@@ -181,7 +181,7 @@ class SegmentHook(BaseModel):
 
     time: TimeStr
     text: str
-    function: Literal["悬念预告", "认知冲突", "利益强化", "情绪转折", "互动引导"]
+    function: str = Field(min_length=1)
     next_segment_hint: Optional[str] = None
     hook_score: int = Field(ge=1, le=10)
 
@@ -191,9 +191,9 @@ class ViralQuote(BaseModel):
 
     text: str = Field(max_length=20)
     time: TimeStr
-    viral_reason: Literal["结论颠覆", "情绪共鸣", "金句格式", "圈层黑话", "实用干货", "反常识"]
+    viral_reason: str = Field(min_length=1)
     screenshot_friendly: bool
-    share_scenario: Literal["评论区引用", "朋友圈截图", "弹幕刷屏", "收藏备用"]
+    share_scenario: str = Field(min_length=1)
 
 
 class CTADetail(BaseModel):
@@ -569,6 +569,9 @@ class AnalyzerService:
         if schema is Step2Output:
             return self._normalize_step2_payload(raw_payload)
 
+        if schema is FinalReport:
+            return self._normalize_final_report_payload(raw_payload)
+
         return raw_payload
 
     def _normalize_paragraph_summary_payload(self, raw_payload: dict[str, Any]) -> dict[str, Any]:
@@ -641,6 +644,31 @@ class AnalyzerService:
         semantic = normalized_payload.get("semantic")
         if isinstance(semantic, dict):
             normalized_payload["semantic"] = self._normalize_semantic_payload(semantic)
+
+        return normalized_payload
+
+    def _normalize_final_report_payload(self, raw_payload: dict[str, Any]) -> dict[str, Any]:
+        normalized_payload = dict(raw_payload)
+
+        packaging = normalized_payload.get("packaging")
+        if isinstance(packaging, dict):
+            normalized_payload["packaging"] = self._normalize_packaging_payload(packaging)
+
+        script_layer = normalized_payload.get("script_layer")
+        if isinstance(script_layer, dict):
+            normalized_payload["script_layer"] = self._normalize_structure_payload(script_layer)
+
+        semantic_layer = normalized_payload.get("semantic_layer")
+        if isinstance(semantic_layer, dict):
+            normalized_payload["semantic_layer"] = self._normalize_semantic_payload(semantic_layer)
+
+        metadata_json = normalized_payload.get("metadata_json")
+        if isinstance(metadata_json, dict):
+            normalized_metadata = dict(metadata_json)
+            structural_blocks = normalized_metadata.get("structural_blocks")
+            if isinstance(structural_blocks, dict):
+                normalized_metadata["structural_blocks"] = self._normalize_structural_blocks_payload(structural_blocks)
+            normalized_payload["metadata_json"] = normalized_metadata
 
         return normalized_payload
 
@@ -834,6 +862,8 @@ class AnalyzerService:
                 })
             elif isinstance(value, dict):
                 normalized_blocks[key] = self._normalize_structural_block_detail(value, f"structural_blocks.{key}")
+            elif isinstance(value, list):
+                normalized_blocks[key] = self._merge_structural_block_details(value, f"structural_blocks.{key}")
 
         meat = normalized_blocks.get("meat")
         if isinstance(meat, list):
@@ -853,8 +883,58 @@ class AnalyzerService:
                 else:
                     normalized_meat.append(item)
             normalized_blocks["meat"] = normalized_meat
+        elif isinstance(meat, dict):
+            normalized_blocks["meat"] = [self._normalize_structural_block_detail(meat, "structural_blocks.meat[0]")]
+            self._last_normalization_warnings.append({
+                "step": "ANALYSIS_STRUCTURE",
+                "field": "structural_blocks.meat",
+                "normalizedValue": "converted_object_to_array",
+                "strategy": "coerce_single_block_array",
+            })
+        elif isinstance(meat, str):
+            normalized_blocks["meat"] = [_convert_string_range_to_block_detail(meat, "主体内容 1")]
+            self._last_normalization_warnings.append({
+                "step": "ANALYSIS_STRUCTURE",
+                "field": "structural_blocks.meat",
+                "originalValue": meat,
+                "normalizedValue": "converted_legacy_string_to_array",
+                "strategy": "legacy_string_block",
+            })
+        elif meat is None:
+            normalized_blocks["meat"] = []
 
         return normalized_blocks
+
+    def _merge_structural_block_details(self, items: list[Any], field_path: str) -> dict[str, Any] | list[Any]:
+        normalized_items: list[dict[str, Any]] = []
+        for index, item in enumerate(items):
+            if isinstance(item, dict):
+                normalized_items.append(self._normalize_structural_block_detail(item, f"{field_path}[{index}]"))
+            elif isinstance(item, str):
+                normalized_items.append(_convert_string_range_to_block_detail(item, f"{field_path}[{index + 1}]"))
+
+        if not normalized_items:
+            return items
+
+        if len(normalized_items) == 1:
+            merged = normalized_items[0]
+        else:
+            merged = {
+                "name": normalized_items[0].get("name") or field_path.rsplit(".", 1)[-1],
+                "summary": "；".join(_string_list(item.get("summary")) for item in normalized_items if item.get("summary")),
+                "strengths": _flatten_limited(normalized_items, "strengths", 3),
+                "weaknesses": _flatten_limited(normalized_items, "weaknesses", 3),
+                "suggestions": _flatten_limited(normalized_items, "suggestions", 3),
+            }
+
+        self._last_normalization_warnings.append({
+            "step": "ANALYSIS_STRUCTURE",
+            "field": field_path,
+            "originalLength": len(items),
+            "normalizedValue": "merged_array_to_object",
+            "strategy": "coerce_block_array",
+        })
+        return merged
 
     def _normalize_structural_block_detail(self, block: dict[str, Any], field_path: str) -> dict[str, Any]:
         normalized = dict(block)
@@ -863,12 +943,32 @@ class AnalyzerService:
             if removed_field in normalized:
                 normalized.pop(removed_field)
 
+        for list_field in ["strengths", "weaknesses"]:
+            values = normalized.get(list_field)
+            if isinstance(values, list) and len(values) > 3:
+                normalized[list_field] = values[:3]
+                self._last_normalization_warnings.append({
+                    "step": "ANALYSIS_STRUCTURE",
+                    "field": f"{field_path}.{list_field}",
+                    "originalLength": len(values),
+                    "trimmedLength": 3,
+                    "strategy": "keep_first_3",
+                })
+
         suggestions = normalized.get("suggestions")
         if isinstance(suggestions, list):
             trimmed = []
             for suggestion in suggestions:
                 if isinstance(suggestion, dict):
                     trimmed_suggestion = dict(suggestion)
+                    if not str(trimmed_suggestion.get("target_time") or "").strip():
+                        trimmed_suggestion["target_time"] = "00:00"
+                        self._last_normalization_warnings.append({
+                            "step": "ANALYSIS_STRUCTURE",
+                            "field": f"{field_path}.suggestions[].target_time",
+                            "normalizedValue": "00:00",
+                            "strategy": "default_missing_time",
+                        })
                     suggestion_type = trimmed_suggestion.get("type")
                     if isinstance(suggestion_type, str) and suggestion_type not in ("script", "editing", "subtitle", "pacing", "cta"):
                         normalized_type = _SUGGESTION_TYPE_ALIASES.get(suggestion_type)
@@ -933,14 +1033,15 @@ class AnalyzerService:
             "你是资深视频结构分析师。从字幕提取结构化信息。\n"
             "仅输出合法JSON对象, 必须严格仿照下方结构示例的字段名和格式。\n\n"
             f"=== 结构示例 ===\n{STEP1_EXAMPLE}\n\n"
-            "字段约束: 所有时间戳格式 MM:SS; structural_blocks 的 hook/promise/re_hook/cta 是对象或 null, meat 是对象数组;\n"
+            "字段约束: 所有时间戳格式 MM:SS; structural_blocks 的 hook/promise/re_hook/cta 是单个对象或 null, meat 是对象数组;\n"
+            "如果存在多个二次留存点, 请合并概括到 re_hook 这一个对象里, 不要把 re_hook 输出成数组;\n"
             "每个结构块对象必须包含: name(中文名称), summary(一句话总结), strengths(1到3条优点), weaknesses(1到3条不足), suggestions(0到3条建议);\n"
             "每条 suggestions 对象必须包含: type(从 script/editing/subtitle/pacing/cta 中选择), target_time(MM:SS), content(具体改法);\n"
             "quotes.text 最多 20 字;\n"
-            "hook.type 只能从 [直给结论, 痛点提问, 反常理, 展示后果, 展示高光片段, 昂贵设备, 数据冲击, 身份认同] 中选择;\n"
-            "segment_hooks.function 只能从 [悬念预告, 认知冲突, 利益强化, 情绪转折, 互动引导] 中选择;\n"
-            "quotes.viral_reason 只能从 [结论颠覆, 情绪共鸣, 金句格式, 圈层黑话, 实用干货, 反常识] 中选择;\n"
-            "quotes.share_scenario 只能从 [评论区引用, 朋友圈截图, 弹幕刷屏, 收藏备用] 中选择;\n"
+            "hook.type 建议优先使用 [直给结论, 痛点提问, 反常理, 展示后果, 展示高光片段, 昂贵设备, 数据冲击, 身份认同], 但可按内容语义自由表达;\n"
+            "segment_hooks.function 建议优先使用 [悬念预告, 认知冲突, 利益强化, 情绪转折, 互动引导], 但可按内容语义自由表达;\n"
+            "quotes.viral_reason 建议优先使用 [结论颠覆, 情绪共鸣, 金句格式, 圈层黑话, 实用干货, 反常识], 但可按内容语义自由表达;\n"
+            "quotes.share_scenario 建议优先使用 [评论区引用, 朋友圈截图, 弹幕刷屏, 收藏备用], 但可按内容语义自由表达;\n"
             "cta.cta_type 与 logic_flow 优先参考示例风格，但允许按内容语义自由表达; 禁止输出Markdown。\n\n"
             f"视频时长: {_format_seconds_to_time(total_duration)}\n【字幕】{text_for_structure}"
         )
@@ -1188,6 +1289,22 @@ def _convert_string_range_to_block_detail(time_range_str: str, name: str) -> dic
         "weaknesses": [],
         "suggestions": [],
     }
+
+
+def _string_list(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _flatten_limited(items: list[dict[str, Any]], key: str, limit: int) -> list[Any]:
+    flattened: list[Any] = []
+    for item in items:
+        value = item.get(key)
+        if isinstance(value, list):
+            flattened.extend(value)
+        elif value:
+            flattened.append(value)
+
+    return flattened[:limit]
 
 
 def _postprocess_structure_blocks(blocks: StructuralBlocksOutput, total_duration: float) -> StructuralBlocksOutput:

@@ -8,6 +8,7 @@ import { useAuth } from "./auth-context";
 const MODULE_LINKS = [
   { href: "/", label: "语音工作台" },
   { href: "/video-analysis", label: "视频分析" },
+  { href: "/content-generation", label: "B站文案" },
 ] as const;
 
 const BRAND_NAME = "UP创作台";
@@ -33,7 +34,7 @@ export function AppHeader() {
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
                 className={[
-                  "flex h-full w-24 items-center justify-center text-sm font-semibold transition sm:w-28",
+                    "flex h-full w-20 items-center justify-center text-sm font-semibold transition sm:w-28",
                   isActive
                     ? "text-action-primary border-b-[2.5px] border-action-primary"
                     : "text-text-muted border-b-[2.5px] border-transparent hover:text-text-primary hover:border-border-strong",

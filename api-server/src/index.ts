@@ -20,6 +20,7 @@ import { createAdminUsersRoutes } from "./routes/admin-users";
 import { createAdminInviteCodesRoutes } from "./routes/admin-invite-codes";
 import { createAdminVoiceGenerationsRoutes } from "./routes/admin-voice-generations";
 import { createVideoAnalysisRoutes } from "./routes/video-analysis";
+import { createContentGenerationRoutes } from "./routes/content-generation";
 
 function setRequestId(context: Context, requestId: string) {
   (context as Context & { set: (key: string, value: unknown) => void }).set("requestId", requestId);
@@ -147,6 +148,7 @@ app.route("/api/admin/users", createAdminUsersRoutes(cfg));
 app.route("/api/admin/invite-codes", createAdminInviteCodesRoutes(cfg));
 app.route("/api/admin/voice-generations", createAdminVoiceGenerationsRoutes(cfg));
 app.route("/api/video-analysis", createVideoAnalysisRoutes(cfg));
+app.route("/api/content-generation", createContentGenerationRoutes(cfg));
 
 loggerInfo("server.start", {
   port: cfg.server.port,

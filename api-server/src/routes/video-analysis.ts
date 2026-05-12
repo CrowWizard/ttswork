@@ -1,14 +1,13 @@
 import { Hono } from "hono";
-import { Prisma, VideoAnalysisJobStatus, VideoPlatform, VideoSubtitleStatus, VideoTranscriptStatus, type VideoInputType } from "@prisma/client";
+import { Prisma, VideoAnalysisJobStatus, VideoPlatform, VideoSubtitleStatus, VideoTranscriptStatus } from "@prisma/client";
 import type { AppConfig } from "../lib/config";
 import { requireCurrentUser, unauthorizedResponse } from "../lib/auth";
 import { errorResponse } from "../lib/http";
 import { buildErrorLogContext, loggerDebug, loggerError } from "../lib/logger";
 import { prisma } from "../lib/prisma";
 import { videoAnalysisJobCreateSchema } from "../lib/validation";
+import { resolveVideoAnalysisInput } from "../lib/video-analysis-input";
 
-const BV_PATTERN = /^BV[0-9A-Za-z]{10}$/;
-const BILIBILI_HOSTS = new Set(["www.bilibili.com", "m.bilibili.com", "bilibili.com"]);
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 20;
@@ -83,13 +82,6 @@ type SelectedVideoSource = Prisma.VideoSourceGetPayload<{ select: typeof videoSo
 type SelectedVideoAnalysisJob = Prisma.VideoAnalysisJobGetPayload<{ select: typeof videoAnalysisJobSelect }>;
 type SelectedVideoAnalysisStageEvent = Prisma.VideoAnalysisJobStageEventGetPayload<{ select: typeof videoAnalysisStageEventSelect }>;
 
-type ParsedVideoAnalysisInput = {
-  inputType: VideoInputType;
-  inputValue: string;
-  normalizedBvid: string;
-  normalizedUrl: string | null;
-};
-
 type VideoAnalysisEstimateDto = {
   totalSeconds: number | null;
   remainingSeconds: number | null;
@@ -104,50 +96,12 @@ type StageEventDto = {
   status: string;
   message: string | null;
   details: Record<string, unknown> | null;
-  startedAt: string;
-  completedAt: string | null;
+  startedAt: Date;
+  completedAt: Date | null;
   durationMs: number | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 };
-
-function parseVideoAnalysisInput(rawInput: string): ParsedVideoAnalysisInput | null {
-  const inputValue = rawInput.trim();
-
-  if (BV_PATTERN.test(inputValue)) {
-    return {
-      inputType: "BV",
-      inputValue,
-      normalizedBvid: inputValue,
-      normalizedUrl: `https://www.bilibili.com/video/${inputValue}`,
-    };
-  }
-
-  try {
-    const url = new URL(inputValue);
-
-    if (!BILIBILI_HOSTS.has(url.hostname.toLowerCase())) {
-      return null;
-    }
-
-    const match = url.pathname.match(/\/video\/(BV[0-9A-Za-z]{10})(?:\/|$)/);
-
-    if (!match) {
-      return null;
-    }
-
-    const normalizedBvid = match[1];
-
-    return {
-      inputType: "URL",
-      inputValue,
-      normalizedBvid,
-      normalizedUrl: `https://www.bilibili.com/video/${normalizedBvid}`,
-    };
-  } catch {
-    return null;
-  }
-}
 
 function parsePage(value: string | null) {
   const parsed = Number(value ?? DEFAULT_PAGE);
@@ -460,7 +414,7 @@ export function createVideoAnalysisRoutes(cfg: AppConfig) {
         return errorResponse(c, parsedBody.error.issues[0]?.message ?? "请求参数无效");
       }
 
-      const parsedInput = parseVideoAnalysisInput(parsedBody.data.input);
+      const parsedInput = await resolveVideoAnalysisInput(parsedBody.data.input);
 
       if (!parsedInput) {
         loggerDebug("video_analysis.job.create.invalid_input", {

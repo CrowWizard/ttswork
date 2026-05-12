@@ -8,14 +8,20 @@
     "start": "./voice-mvp-api",
     "prisma:generate": "bunx prisma generate",
     "prisma:push": "bunx prisma db push",
-    "usage-codes:generate": "bun run src/scripts/generate-usage-codes.ts"
+    "usage-codes:generate": "bun run src/scripts/generate-usage-codes.ts",
+    "content-generation:worker": "bun run src/workers/content-generation-worker.ts",
+    "content-generation:worker:debug": "bun --inspect-brk=6500 src/workers/content-generation-worker.ts",
+    "content-generation:once": "bun run src/scripts/run-content-generation-once.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.63",
     "@alicloud/dypnsapi20170525": "^2.0.0",
     "@alicloud/openapi-client": "^0.4.15",
     "@alicloud/tea-util": "^1.4.11",
+    "@mastra/core": "^1.32.1",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "ai": "^6.0.177",
     "dotenv": "^16.6.1",
     "hono": "^4.7.9",
     "minio": "^8.0.6",

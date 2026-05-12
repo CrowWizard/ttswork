@@ -62,3 +62,12 @@ export const voiceEnrollmentCreateSchema = z.object({
 export const videoAnalysisJobCreateSchema = z.object({
   input: z.string().trim().min(1, "请输入视频链接或 BV 号").max(500, "输入内容过长"),
 });
+
+export const contentGenerationJobCreateSchema = z.object({
+  topic: z.string().trim().min(1, "话题不能为空").max(200, "话题不能超过 200 字"),
+  type: z.literal("video_script").default("video_script"),
+  tone: z.enum(["personal", "company", "professional-casual"]).default("personal"),
+  verbosity: z.enum(["concise", "detailed"]).default("concise"),
+  duration: z.enum(["short", "medium", "long"]).default("short"),
+  generateShots: z.boolean().default(true),
+}).strict("暂不支持 video_script 以外的内容生成参数");
