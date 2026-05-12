@@ -14,8 +14,6 @@ from config import WorkerConfig
 PROMPT_VERSION = "video-analysis-v3"
 MAX_SUBTITLE_CHARS = 6000
 TRANSCRIPT_PROMPT_LIMIT = 8000
-MIN_SEMANTIC_SECTION_COUNT = 5
-MAX_SEMANTIC_SECTION_COUNT = 8
 
 HOOK_TYPE_ALIASES = {
     "数据对比": "数据冲击",
@@ -1003,7 +1001,7 @@ class AnalyzerService:
                 "paragraphs": [
                     {
                         "time_range": {"start": "00:00", "end": "00:58"},
-                        "summary": "本段围绕洗头误区展开，核心结论是过度清洁会加重头皮问题，并指出日常错误会放大头皮焦虑。",
+                        "summary": "提出洗头误区并制造焦虑",
                         "key_sentences": ["90%的人都做错了"],
                         "hook_candidate": True,
                     }
@@ -1015,12 +1013,7 @@ class AnalyzerService:
         prompt = (
             "你是视频内容分析师。将带时间轴的字幕按语义划分段落, 每段必须围绕同一个话题、观点、案例或行动建议; "
             "遇到主题切换、观点转折、案例切换、步骤切换时另起一段, 不要为了凑固定时长而截断语义。\n"
-            "稳定性约束: 常规 5 分钟以上视频固定输出 5 到 8 段, 优先 6 段; 少于 3 分钟的视频输出 3 到 5 段; "
-            "不要同一次分析拆到十几段, 也不要把长视频压成 1 到 2 段。\n"
-            "summary 内容约束: 每段 summary 必须是一句完整中文, 不能只写短标签或事件名; "
-            "必须同时包含两类信息: 1) 本段主要讲什么主题或情节; 2) 本段给出的核心观点、结论或冲突。\n"
-            "summary 写法约束: 优先使用“本段围绕...展开，核心结论/冲突是...”这类句式; "
-            "长度控制在 40 到 90 个中文字符, 不要复述整段字幕, 不要写成多个项目符号。\n"
+            "summary 内容约束: 每段 summary不能是短标签或事件名, 而是语义分段摘要, 必须是一句完整中文;\n"
             "硬性约束: `key_sentences` 每段最多 3 条, 超过 3 条时只保留最重要的 3 条。\n"
             f"仅输出合法JSON对象, 严格仿照此结构示例:\n\n{example}\n\n"
             f"【字幕内容】{_truncate_for_prompt(full_text, TRANSCRIPT_PROMPT_LIMIT)}"
@@ -1047,10 +1040,7 @@ class AnalyzerService:
             "weaknesses 与 suggestions 必须按顺序一一对应: weaknesses[0] 对应 suggestions[0], weaknesses[1] 对应 suggestions[1]; "
             "每条具体改法都必须直接解决同序号不足, 不要给泛泛建议;\n"
             "每条 suggestions 对象必须包含: type(从 script/editing/subtitle/pacing/cta 中选择), target_time(MM:SS), content(具体改法);\n"
-            "narrative_arc.event 内容约束: 每个 event 不是短标签, 而是语义分段摘要; 必须是一句完整中文, "
-            "同时包含两类信息: 1) 本段主要讲什么主题或情节; 2) 本段给出的核心观点、结论或冲突;\n"
-            "narrative_arc.event 写法约束: 优先使用“本段围绕...展开，核心结论/冲突是...”这类句式; "
-            "长度控制在 40 到 90 个中文字符, 不要只写‘冲突引入’‘历史根源’这类事件名;\n"
+            "narrative_arc.event 内容约束: 每个 event 不是短标签, 而是语义分段摘要, 必须是一句完整中文;\n"
             "quotes.text 最多 20 字;\n"
             "hook.type 建议优先使用 [直给结论, 痛点提问, 反常理, 展示后果, 展示高光片段, 昂贵设备, 数据冲击, 身份认同], 但可按内容语义自由表达;\n"
             "segment_hooks.function 建议优先使用 [悬念预告, 认知冲突, 利益强化, 情绪转折, 互动引导], 但可按内容语义自由表达;\n"
@@ -1339,7 +1329,7 @@ def _ensure_block_detail(block: StructureBlockDetail) -> None:
 
 def _derive_structure_sections(paragraphs: list[Paragraph], structure: StructureExtract) -> list[dict[str, Any]]:
     if paragraphs:
-        return _stabilize_structure_sections([
+        return [
             StructureSection(
                 title=f"语义段 {index + 1}",
                 startSeconds=_parse_time_to_seconds(item.time_range.start),
@@ -1350,7 +1340,7 @@ def _derive_structure_sections(paragraphs: list[Paragraph], structure: Structure
                 summary=item.summary,
             ).model_dump()
             for index, item in enumerate(paragraphs)
-        ])
+        ]
 
     sections: list[dict[str, Any]] = []
     arc = structure.narrative_arc or []
@@ -1358,93 +1348,10 @@ def _derive_structure_sections(paragraphs: list[Paragraph], structure: Structure
         start = _parse_time_to_seconds(str(item.get("time") or "00:00"))
         next_time = arc[index + 1].get("time") if index + 1 < len(arc) else None
         end = _parse_time_to_seconds(str(next_time)) if next_time else start
-        summary = item.get("event") or f"第 {index + 1} 段"
-        sections.append(
-            StructureSection(
-                title=f"语义段 {index + 1}",
-                startSeconds=start,
-                endSeconds=max(end, start),
-                summary=summary,
-            ).model_dump()
-        )
-
-    return _stabilize_structure_sections(sections)
-
-
-def _stabilize_structure_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if len(sections) > MAX_SEMANTIC_SECTION_COUNT:
-        return _merge_sections_to_limit(sections, MAX_SEMANTIC_SECTION_COUNT)
-
-    if _should_split_sections(sections):
-        return _split_sections_to_minimum(sections, MIN_SEMANTIC_SECTION_COUNT)
+        title = item.get("event") or f"第 {index + 1} 段"
+        sections.append(StructureSection(title=title, startSeconds=start, endSeconds=max(end, start), summary=title).model_dump())
 
     return sections
-
-
-def _merge_sections_to_limit(sections: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-    merged_sections = [dict(section) for section in sections]
-    while len(merged_sections) > limit:
-        best_index = 0
-        best_duration = None
-        for index in range(len(merged_sections) - 1):
-            duration = int(merged_sections[index + 1].get("endSeconds") or 0) - int(merged_sections[index].get("startSeconds") or 0)
-            if best_duration is None or duration < best_duration:
-                best_index = index
-                best_duration = duration
-
-        current = merged_sections[best_index]
-        next_section = merged_sections.pop(best_index + 1)
-        current["endSeconds"] = max(int(current.get("endSeconds") or 0), int(next_section.get("endSeconds") or 0))
-        current["title"] = _join_section_text(current.get("title"), next_section.get("title"), " / ")
-        current["summary"] = _join_section_text(current.get("summary"), next_section.get("summary"), "；")
-
-    return _renumber_semantic_sections(merged_sections)
-
-
-def _should_split_sections(sections: list[dict[str, Any]]) -> bool:
-    if len(sections) >= MIN_SEMANTIC_SECTION_COUNT or not sections:
-        return False
-
-    total_start = min(int(section.get("startSeconds") or 0) for section in sections)
-    total_end = max(int(section.get("endSeconds") or 0) for section in sections)
-    return total_end - total_start >= 300
-
-
-def _split_sections_to_minimum(sections: list[dict[str, Any]], minimum: int) -> list[dict[str, Any]]:
-    split_sections = [dict(section) for section in sections]
-    while len(split_sections) < minimum:
-        index = _longest_section_index(split_sections)
-        section = split_sections[index]
-        start = int(section.get("startSeconds") or 0)
-        end = int(section.get("endSeconds") or start)
-        if end - start < 90:
-            break
-
-        midpoint = start + (end - start) // 2
-        title = str(section.get("title") or f"语义段 {index + 1}")
-        summary = str(section.get("summary") or title)
-        first = {**section, "title": f"{title} 上", "endSeconds": midpoint, "summary": summary}
-        second = {**section, "title": f"{title} 下", "startSeconds": midpoint, "summary": f"继续展开：{summary}"}
-        split_sections[index:index + 1] = [first, second]
-
-    return _renumber_semantic_sections(split_sections)
-
-
-def _longest_section_index(sections: list[dict[str, Any]]) -> int:
-    durations = [int(section.get("endSeconds") or 0) - int(section.get("startSeconds") or 0) for section in sections]
-    return max(range(len(durations)), key=lambda index: durations[index])
-
-
-def _renumber_semantic_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {**section, "title": section.get("title") or f"语义段 {index + 1}"}
-        for index, section in enumerate(sections)
-    ]
-
-
-def _join_section_text(first: Any, second: Any, separator: str) -> str:
-    values = [str(value).strip() for value in [first, second] if str(value or "").strip()]
-    return separator.join(values)
 
 
 def _derive_copy_suggestions(packaging: PackagingAnalysis, summary: Internalization) -> list[dict[str, Any]]:
