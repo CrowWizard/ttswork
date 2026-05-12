@@ -10,6 +10,8 @@ const proc = Bun.spawn([
   "--minify",
   "--sourcemap=external",
   "--target=bun",
+  "--external=playwright",
+  "--external=playwright-core",
   "--outfile=./voice-mvp-api",
   "./src/index.ts",
 ], {

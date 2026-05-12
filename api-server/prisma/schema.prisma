@@ -457,6 +457,12 @@ model VideoAnalysisJob {
   metadataJson       String?
   modelName          String?
   promptVersion      String?
+  reportBucket       String?
+  reportObjectKey    String?
+  reportMinioUri     String?
+  reportContentType  String?
+  reportTemplateVersion String?
+  reportGeneratedAt  DateTime?
   workerId           String?
   lockedAt           DateTime?
   retryCount         Int                           @default(0)

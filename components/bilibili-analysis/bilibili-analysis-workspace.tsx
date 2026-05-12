@@ -137,6 +137,23 @@ type InternalizationSummary = {
   optimization?: string;
 };
 
+type CreatorFix = {
+  priority?: string | number;
+  problem?: string;
+  reason?: string;
+  rewrite?: string;
+};
+
+type CreatorActionPlan = {
+  keep_points?: string[];
+  priority_fixes?: CreatorFix[];
+  title_rewrites?: string[];
+  opening_rewrites?: string[];
+  cta_rewrites?: string[];
+  overload_rewrites?: string[];
+  reuse_template?: string[];
+};
+
 type MetadataJson = {
   video_duration?: string | null;
   hook_score?: number | null;
@@ -146,6 +163,7 @@ type MetadataJson = {
   cognitive_load_distribution?: Record<string, number>;
   narrative_curve_text?: string | null;
   structural_blocks?: ScriptAnalysisStructuralBlocks;
+  creator_action_plan?: CreatorActionPlan;
 };
 
 type VideoAnalysisResult = {
@@ -205,6 +223,12 @@ type AuditRow = {
   benefit: string;
 };
 
+type DerivedCreatorAction = {
+  issue: string;
+  rewrite: string;
+  example: string;
+};
+
 type VideoAnalysisStageEvent = {
   eventId: string;
   stage: VideoAnalysisStage;
@@ -223,6 +247,29 @@ type CreateJobResponse = {
   status?: VideoAnalysisJobStatus;
   error?: string;
   message?: string;
+};
+
+type VideoAnalysisHistoryItem = {
+  jobId: string;
+  status: VideoAnalysisJobStatus;
+  errorMessage: string | null;
+  currentStage: VideoAnalysisStage | null;
+  currentStageStatus: VideoAnalysisStageEventStatus | null;
+  currentStageMessage: string | null;
+  currentStageStartedAt: string | null;
+  normalizedBvid: string | null;
+  title: string | null;
+  coverUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+};
+
+type VideoAnalysisHistoryResponse = {
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  items?: VideoAnalysisHistoryItem[];
 };
 
 const STATUS_TEXT: Record<VideoAnalysisJobStatus, string> = {
@@ -258,10 +305,14 @@ export function BilibiliAnalysisWorkspace() {
   const [creating, setCreating] = useState(false);
   const [polling, setPolling] = useState(false);
   const [jobDetail, setJobDetail] = useState<VideoAnalysisJobDetail | null>(null);
+  const [historyItems, setHistoryItems] = useState<VideoAnalysisHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "error" | "success" | "info" | "warning"; title: string; text: string } | null>(null);
   const pollTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    void loadHistory();
+
     const cachedJob = readCachedJob();
     if (cachedJob) {
       setInput(cachedJob.input);
@@ -300,6 +351,28 @@ export function BilibiliAnalysisWorkspace() {
     return data as VideoAnalysisJobDetail;
   };
 
+  const loadHistory = async () => {
+    setHistoryLoading(true);
+
+    try {
+      const response = await fetch("/api/video-analysis/jobs?page=1&pageSize=10", {
+        cache: "no-store",
+        credentials: "include",
+      });
+      const data = (await readJsonSafely(response)) as VideoAnalysisHistoryResponse;
+
+      if (!response.ok) {
+        throw new Error(_extractErrorMessage(data, "读取历史记录失败"));
+      }
+
+      setHistoryItems(data.items ?? []);
+    } catch (error) {
+      setMessage({ type: "error", title: "历史记录读取失败", text: toUserFacingErrorMessage(error, "读取历史记录失败") });
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const schedulePoll = (jobId: string) => {
     pollTimerRef.current = window.setTimeout(() => {
       void pollJob(jobId);
@@ -314,6 +387,7 @@ export function BilibiliAnalysisWorkspace() {
 
       if (detail.status === "READY") {
         stopPolling();
+        void loadHistory();
         setMessage({ type: "success", title: "分析完成", text: "分析结果已更新，可查看摘要、语义分段、标题封面分析、脚本结构和语义机制。" });
         return;
       }
@@ -321,6 +395,7 @@ export function BilibiliAnalysisWorkspace() {
       if (detail.status === "FAILED") {
         stopPolling();
         clearCachedJob();
+        void loadHistory();
         setMessage({ type: "error", title: "分析失败", text: detail.errorMessage ?? "视频分析任务失败" });
         return;
       }
@@ -335,6 +410,31 @@ export function BilibiliAnalysisWorkspace() {
     } catch (error) {
       stopPolling();
       setMessage({ type: "error", title: "状态读取失败", text: toUserFacingErrorMessage(error, "读取分析状态失败") });
+    }
+  };
+
+  const handleSelectHistory = async (jobId: string) => {
+    stopPolling();
+    setMessage({ type: "info", title: "正在读取历史任务", text: `正在读取任务 ${jobId} 的分析结果。` });
+
+    try {
+      const detail = await loadJobDetail(jobId);
+      setJobDetail(detail);
+      setInput(detail.source.inputValue ?? detail.source.normalizedBvid);
+      writeCachedJob({ jobId: detail.jobId, input: detail.source.inputValue ?? detail.source.normalizedBvid });
+
+      if (detail.status === "PENDING" || detail.status === "PROCESSING") {
+        setPolling(true);
+        schedulePoll(detail.jobId);
+      }
+
+      setMessage({
+        type: detail.status === "FAILED" ? "error" : "success",
+        title: detail.status === "READY" ? "已加载历史结果" : STATUS_TEXT[detail.status],
+        text: detail.status === "FAILED" ? detail.errorMessage ?? "视频分析任务失败" : "历史任务已加载到结果区。",
+      });
+    } catch (error) {
+      setMessage({ type: "error", title: "历史任务读取失败", text: toUserFacingErrorMessage(error, "读取历史任务失败") });
     }
   };
 
@@ -364,6 +464,7 @@ export function BilibiliAnalysisWorkspace() {
       }
 
       writeCachedJob({ jobId: data.jobId, input: trimmedInput });
+      void loadHistory();
       setMessage({ type: "info", title: "任务已创建", text: `任务 ${data.jobId} 已进入队列，正在等待 worker 处理。` });
       setPolling(true);
       await pollJob(data.jobId);
@@ -445,6 +546,13 @@ export function BilibiliAnalysisWorkspace() {
               {jobDetail ? <JobResult detail={jobDetail} /> : <ResultPlaceholder />}
             </div>
           </section>
+
+          <HistoryPanel
+            items={historyItems}
+            loading={historyLoading}
+            activeJobId={jobDetail?.jobId ?? null}
+            onSelect={handleSelectHistory}
+          />
         </div>
     </main>
   );
@@ -457,6 +565,70 @@ function StatusBadge({ status }: { status: VideoAnalysisJobStatus }) {
     <span className={`rounded-xl border border-border-subtle bg-surface-muted px-3 py-1 text-xs font-semibold ${className}`}>
       {STATUS_TEXT[status]}
     </span>
+  );
+}
+
+function HistoryPanel({
+  items,
+  loading,
+  activeJobId,
+  onSelect,
+}: {
+  items: VideoAnalysisHistoryItem[];
+  loading: boolean;
+  activeJobId: string | null;
+  onSelect: (jobId: string) => void;
+}) {
+  return (
+    <section className="app-card p-6 sm:p-8" aria-labelledby="video-analysis-history-title">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="video-analysis-history-title" className="text-lg font-semibold text-text-primary">历史分析</h2>
+          <p className="mt-2 text-sm leading-6 text-text-muted">最近 10 条视频分析任务，点击后可回看结果并下载报告。</p>
+        </div>
+        <span className="text-xs font-semibold text-text-muted">{loading ? "读取中" : `${items.length} 条`}</span>
+      </div>
+
+      <div className="mt-5 space-y-3">
+        {items.length ? items.map((item) => {
+          const isActive = item.jobId === activeJobId;
+
+          return (
+            <button
+              key={item.jobId}
+              type="button"
+              className={`w-full rounded-2xl border px-4 py-3 text-left transition hover:border-border-strong ${
+                isActive ? "border-info-border bg-info-surface" : "border-border-subtle bg-surface-selected"
+              }`}
+              onClick={() => onSelect(item.jobId)}
+              aria-current={isActive ? "true" : undefined}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-text-primary">
+                    {item.title ?? item.normalizedBvid ?? "未命名视频"}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-text-muted">
+                    {item.normalizedBvid ?? "暂无 BV 号"} · 创建于 {formatDateTime(item.createdAt)}
+                  </div>
+                  {item.currentStageMessage ? (
+                    <div className="mt-1 line-clamp-2 text-xs leading-5 text-text-muted">{item.currentStageMessage}</div>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <StatusBadge status={item.status} />
+                  {item.status === "READY" ? <span className="text-xs font-semibold text-info">可下载报告</span> : null}
+                </div>
+              </div>
+            </button>
+          );
+        }) : (
+          <div className="rounded-2xl border border-border-subtle bg-surface-selected p-4 text-sm leading-6 text-text-muted">
+            暂无历史记录。提交第一个视频后，这里会自动显示历史任务。
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -492,9 +664,28 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
   const packaging = result.packagingAnalysis;
   const script = result.scriptAnalysis;
   const semantic = result.semanticAnalysis;
+  const metadata = result.metadataJson;
+  const creatorPlan = metadata?.creator_action_plan ?? buildCreatorActionPlan(result);
+  const reportUrl = `/api/video-analysis/jobs/${detail.jobId}/report`;
 
   return (
     <div className="space-y-8">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface-selected p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-sm font-semibold text-text-primary">PDF 报告已可下载</div>
+          <p className="mt-1 text-sm leading-6 text-text-muted">包含摘要、行动建议、分段、脚本结构和传播机制，适合归档或发给团队复盘。</p>
+        </div>
+        <a
+          className="app-button-primary inline-flex shrink-0 items-center justify-center text-sm"
+          href={reportUrl}
+          download
+        >
+          下载 PDF 报告
+        </a>
+      </div>
+
+      <CreatorActionPlanPanel plan={creatorPlan} />
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <ResultSection title="内容摘要">
           <p className="max-w-3xl text-sm leading-6 text-text-muted">{result.summary ?? "暂无摘要"}</p>
@@ -1407,6 +1598,58 @@ function formatInteractionSummary(items: SemanticAnalysis["interaction_designs"]
   return values.length ? values.join("、") : null;
 }
 
+function CreatorActionPlanPanel({ plan }: { plan: CreatorActionPlan }) {
+  const priorityFixes = (plan.priority_fixes ?? []).filter((fix) => fix.problem?.trim() || fix.reason?.trim() || fix.rewrite?.trim());
+
+  return (
+    <div className="space-y-6 rounded-2xl border border-warning-border bg-warning-surface p-5">
+      <div>
+        <div className="text-sm font-semibold text-text-primary">需要修改</div>
+        <p className="mt-2 text-sm leading-6 text-warning">
+          先处理会影响点击、停留和互动的关键问题。每条建议都包含问题、原因和直接改法。
+        </p>
+        {priorityFixes.length ? (
+          <ol className="mt-4 divide-y divide-warning-border rounded-2xl border border-warning-border bg-surface-elevated px-4">
+            {priorityFixes.map((fix, index) => (
+              <li key={`${fix.problem}-${index}`} className="py-4">
+                <div className="text-xs font-semibold tracking-wide text-text-muted">优先级 {fix.priority ?? index + 1}</div>
+                <div className="mt-2 space-y-2 text-sm leading-6">
+                  <div>
+                    <span className="font-semibold text-text-primary">问题：</span>
+                    <span className="text-text-muted">{fix.problem ?? "暂无"}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-text-primary">原因：</span>
+                    <span className="text-text-muted">{fix.reason ?? "暂无"}</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-text-primary">直接改法：</span>
+                    <span className="text-text-muted">{fix.rewrite ?? "暂无"}</span>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : <div className="mt-2"><EmptyLine text="暂无优先修改建议" /></div>}
+      </div>
+
+      <div className="border-t border-warning-border pt-5">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div>
+            <div className="text-sm font-semibold text-text-primary">下次继续保留</div>
+            <TextList items={plan.keep_points} empty="暂无可复用优点" />
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold text-text-primary">下一条视频复用模板</div>
+            <TextList items={plan.reuse_template} empty="暂无可复用结构" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function joinList(items: Array<string | null | undefined> | undefined | null) {
   const values = (items ?? []).filter((item): item is string => Boolean(item));
   return values.length ? values.join("、") : null;
@@ -1434,6 +1677,196 @@ function formatKeywordDensity(value: string | null | undefined) {
 
 function formatPsychology(packaging: PackagingAnalysis | null) {
   return [packaging?.primary_psychology, packaging?.secondary_psychology].filter(Boolean).join(" / ") || "暂无";
+}
+
+function buildCopyAdvantages(result: VideoAnalysisResult) {
+  const packaging = result.packagingAnalysis;
+  const script = result.scriptAnalysis;
+  const semantic = result.semanticAnalysis;
+  const internalization = result.internalizationSummary;
+  const advantages: Array<{ title: string; content: string }> = [];
+
+  result.copySuggestions.forEach((suggestion) => {
+    if (!suggestion.content.trim()) {
+      return;
+    }
+
+    advantages.push({
+      title: suggestion.type || "文案复用建议",
+      content: formatCopySuggestionAsKeepPoint(suggestion),
+    });
+  });
+
+  if (packaging?.title_formulas?.length || packaging?.primary_psychology) {
+    advantages.push({
+      title: "标题封面复用建议",
+      content: `下次同类选题可以继续使用“${joinList(packaging?.title_formulas) ?? "明确看点"}”的标题方式，围绕${packaging?.primary_psychology ?? "观众兴趣"}把点击理由讲清楚。`,
+    });
+  }
+
+  if (script?.visual_hook?.text || script?.promise_hook?.text) {
+    advantages.push({
+      title: "开头复用建议",
+      content: `下次开头继续把“${script?.visual_hook?.text ?? script?.promise_hook?.text}”这类强钩子前置，再补一句观看收益，帮助观众在前 15 秒判断要不要留下。`,
+    });
+  }
+
+  if (script?.logic_flow || script?.structural_blocks?.meat?.length) {
+    advantages.push({
+      title: "结构复用建议",
+      content: `下次继续沿用${script?.logic_flow ?? "分段推进"}结构，把主体内容拆成几个明确问题逐段解决，让观众更容易跟住论点推进。`,
+    });
+  }
+
+  if (semantic?.interaction_designs?.length || result.highlights.length) {
+    advantages.push({
+      title: "传播复用建议",
+      content: "下次继续预留金句和互动点，当前这类“可引用 + 可回应”的设计适合引导评论、弹幕或二次传播。",
+    });
+  }
+
+  if (internalization?.clever_design) {
+    advantages.push({
+      title: "巧妙设计复用建议",
+      content: `下次同类内容可以继续复用这个设计思路：${internalization.clever_design}`,
+    });
+  }
+
+  return dedupeByContent(advantages);
+}
+
+function formatCopySuggestionAsKeepPoint(suggestion: CopySuggestion) {
+  const type = suggestion.type.trim();
+  const content = suggestion.content.trim();
+
+  if (type.includes("标题")) {
+    return `下次同类选题继续沿用这类标题表达：${trimTrailingPunctuation(content)}，并明确写出人群、冲突或收益。`;
+  }
+
+  if (type.includes("结构")) {
+    return `下次继续复用这个结构设计：${trimTrailingPunctuation(content)}，把亮点放在观众最容易感知的位置。`;
+  }
+
+  if (type.includes("复用")) {
+    return `下次同类视频继续复用：${trimTrailingPunctuation(content)}。`;
+  }
+
+  return `下次继续复用这条文案经验：${trimTrailingPunctuation(content)}。`;
+}
+
+function trimTrailingPunctuation(text: string) {
+  return text.replace(/[。.!！?？]+$/u, "");
+}
+
+function dedupeByContent<T extends { content: string }>(items: T[]) {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const key = item.content.trim();
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildCreatorActionPlan(result: VideoAnalysisResult): CreatorActionPlan {
+  const script = result.scriptAnalysis;
+  const semantic = result.semanticAnalysis;
+  const metadata = result.metadataJson;
+  const actions: DerivedCreatorAction[] = [];
+
+  if (!script?.visual_hook?.text) {
+    actions.push({
+      issue: "开头缺少足够明确的抓注意力句子，观众可能还没理解看点就离开。",
+      rewrite: "把最强冲突、结果或反常识结论提前到前 3 秒，先给观众一个必须继续看的理由。",
+      example: "开头改成：先别急着照做，这个步骤错了会直接让结果反过来。",
+    });
+  }
+
+  if (!script?.promise_hook?.text) {
+    actions.push({
+      issue: "内容承诺不明显，观众不容易判断看完能获得什么。",
+      rewrite: "在开头 15 秒内补一句观看收益，把主题从“我要讲什么”改成“你能拿走什么”。",
+      example: "补一句：看完你可以直接套用这 3 步，把同类问题先排查一遍。",
+    });
+  }
+
+  if (semantic?.overload_warnings?.length || formatCognitiveLoad(semantic?.cognitive_load)?.includes("高")) {
+    actions.push({
+      issue: "部分段落信息密度偏高，普通观众可能需要暂停或回看。",
+      rewrite: "把高密度段落拆成短句，每讲完一个概念就补一个例子或使用场景。",
+      example: "改成：先记一个判断标准。只要出现 A，就先检查 B；如果没有 B，再看 C。",
+    });
+  }
+
+  const reHookBlock = script?.structural_blocks?.re_hook;
+  const hasReHook = reHookBlock && isStructureBlockDetail(reHookBlock);
+
+  if (!hasReHook) {
+    actions.push({
+      issue: "中后段二次留存设计不明显，信息变密后容易掉观看。",
+      rewrite: "在正文中段加入反转、阶段性结论或下一段预告，把观众重新拉回主线。",
+      example: "补一句：但真正容易踩坑的不是这里，而是接下来这个细节。",
+    });
+  }
+
+  if (!script?.cta?.text) {
+    actions.push({
+      issue: "结尾缺少明确行动引导，观看后的互动和转化会变弱。",
+      rewrite: "用一个低门槛动作收尾，让观众知道评论、收藏或下一步该做什么。",
+      example: "结尾加：如果你也遇到过这个问题，把你的场景发在评论区，我按类型继续拆。",
+    });
+  }
+
+  if (!actions.length && metadata?.retention_risk_points?.length) {
+    actions.push({
+      issue: metadata.retention_risk_points[0],
+      rewrite: "优先检查这个风险点前后的 10 到 20 秒，把长解释拆短，并补一句承接。",
+      example: "承接句可用：这里先不用记全部，你只要先抓住一个判断标准。",
+    });
+  }
+
+  const titleSubject = result.packagingAnalysis?.primary_psychology ?? result.healthCard?.core_keywords?.[0] ?? "核心看点";
+
+  return {
+    priority_fixes: actions.slice(0, 3).map((action, index) => ({
+      priority: `P${index + 1}`,
+      problem: action.issue,
+      reason: action.rewrite,
+      rewrite: action.example,
+    })),
+    keep_points: buildCreatorKeepPoints(result),
+    title_rewrites: [
+      `别再忽略${titleSubject}：这 3 个细节最容易被低估`,
+      "真正影响结果的不是努力，而是这 3 个判断标准",
+    ],
+    opening_rewrites: ["前 15 秒：先给一个反常识结论，再告诉观众看完能拿走 3 个判断标准或操作步骤。"],
+    cta_rewrites: ["结尾改成：如果你也遇到类似情况，把你的具体场景发在评论区，我按类型继续拆。"],
+    overload_rewrites: ["把信息最密的段落拆成三句：先给判断标准，再举一个例子，最后告诉观众下一步怎么做。"],
+    reuse_template: buildReuseTemplate(result),
+  };
+}
+
+function buildCreatorKeepPoints(result: VideoAnalysisResult) {
+  return buildCopyAdvantages(result).map((advantage) => `${advantage.title}：${advantage.content}`);
+}
+
+function buildReuseTemplate(result: VideoAnalysisResult) {
+  const script = result.scriptAnalysis;
+  const packaging = result.packagingAnalysis;
+  const semantic = result.semanticAnalysis;
+
+  return [
+    `标题：套用${joinList(packaging?.title_formulas) ?? "明确人群 + 明确收益 + 情绪触发"}，优先突出${packaging?.primary_psychology ?? "观众最关心的结果"}。`,
+    `开头：前 3 秒先给${script?.visual_hook?.type ?? "冲突或结果"}，再用一句话说明看完能得到什么。`,
+    `正文：按${script?.logic_flow ?? "问题提出 -> 原因解释 -> 方法拆解 -> 总结行动"}推进，每段结尾加一句过渡钩子。`,
+    `传播：保留${joinList(semantic?.tone_tags) ?? "清晰直接"}语气，至少设计 1 个评论触发点和 1 句可摘出来的金句。`,
+    "结尾：用具体行动收口，引导观众评论场景、收藏步骤或关注下一条延展内容。",
+  ];
 }
 
 function formatCognitiveLoad(value: string | null | undefined) {
