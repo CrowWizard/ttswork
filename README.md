@@ -239,6 +239,18 @@ python video-analysis-worker/worker.py
 - 优先抓取 B 站字幕；无字幕时再走 ASR
 - 将结构化分析结果回写到现有 `summary`、`structureSections`、`highlights`、`copySuggestions`
 
+视频分析模型按阶段配置：
+
+| 环境变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `VIDEO_ANALYSIS_LLM_MODEL` | `deepseek-v4-flash` | 未配置阶段模型时的兜底模型 |
+| `VIDEO_ANALYSIS_PARAGRAPH_MODEL` | `deepseek-v4-pro` | 长字幕 `_generate_paragraph_summary`，生成前端语义分段并压缩字幕 |
+| `VIDEO_ANALYSIS_STRUCTURE_MODEL` | `deepseek-v4-pro` | `_step1_extract_structure`，生成脚本结构；短字幕语义分段来自 `narrative_arc` |
+| `VIDEO_ANALYSIS_SEMANTIC_MODEL` | `deepseek-v4-flash` | `_step2_analyze_semantic_packaging`，分析标题封面和传播机制 |
+| `VIDEO_ANALYSIS_REPORT_MODEL` | `deepseek-v4-flash` | `_step3_generate_report`，生成最终报告和元数据 |
+
+语义分段规则：字幕时间轴文本长度超过 `6000` 字符时走 `_generate_paragraph_summary`；不超过 `6000` 字符时走 `_step1_extract_structure` 的 `narrative_arc`。详细流程见 `video-analysis-worker/README.md`。
+
 默认可通过 `QWEN_MOCK_MODE=true` 跑通不依赖外部模型服务的本地验证：
 
 - 有字幕视频仍会访问 B 站接口并走真实字幕链路

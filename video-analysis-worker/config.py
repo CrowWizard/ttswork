@@ -147,7 +147,7 @@ def load_config() -> WorkerConfig:
         ),
         video_analysis_llm_model=_env_string("VIDEO_ANALYSIS_LLM_MODEL", env_values, "deepseek-v4-flash"),
         video_analysis_paragraph_model=_env_string("VIDEO_ANALYSIS_PARAGRAPH_MODEL", env_values, "deepseek-v4-pro"),
-        video_analysis_structure_model=_env_string("VIDEO_ANALYSIS_STRUCTURE_MODEL", env_values, "deepseek-v4-flash"),
+        video_analysis_structure_model=_env_string("VIDEO_ANALYSIS_STRUCTURE_MODEL", env_values, "deepseek-v4-pro),
         video_analysis_semantic_model=_env_string("VIDEO_ANALYSIS_SEMANTIC_MODEL", env_values, "deepseek-v4-flash"),
         video_analysis_report_model=_env_string("VIDEO_ANALYSIS_REPORT_MODEL", env_values, "deepseek-v4-flash"),
         loaded_env_paths=loaded_env_paths,

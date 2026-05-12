@@ -137,23 +137,6 @@ type InternalizationSummary = {
   optimization?: string;
 };
 
-type CreatorFix = {
-  priority?: string | number;
-  problem?: string;
-  reason?: string;
-  rewrite?: string;
-};
-
-type CreatorActionPlan = {
-  keep_points?: string[];
-  priority_fixes?: CreatorFix[];
-  title_rewrites?: string[];
-  opening_rewrites?: string[];
-  cta_rewrites?: string[];
-  overload_rewrites?: string[];
-  reuse_template?: string[];
-};
-
 type MetadataJson = {
   video_duration?: string | null;
   hook_score?: number | null;
@@ -163,7 +146,6 @@ type MetadataJson = {
   cognitive_load_distribution?: Record<string, number>;
   narrative_curve_text?: string | null;
   structural_blocks?: ScriptAnalysisStructuralBlocks;
-  creator_action_plan?: CreatorActionPlan;
 };
 
 type VideoAnalysisResult = {
@@ -221,12 +203,6 @@ type AuditRow = {
   subject: string;
   result: string | null | undefined;
   benefit: string;
-};
-
-type DerivedCreatorAction = {
-  issue: string;
-  rewrite: string;
-  example: string;
 };
 
 type VideoAnalysisStageEvent = {
@@ -516,13 +492,9 @@ function JobResult({ detail }: { detail: VideoAnalysisJobDetail }) {
   const packaging = result.packagingAnalysis;
   const script = result.scriptAnalysis;
   const semantic = result.semanticAnalysis;
-  const metadata = result.metadataJson;
-  const creatorPlan = metadata?.creator_action_plan ?? buildCreatorActionPlan(result);
 
   return (
     <div className="space-y-8">
-      <CreatorActionPlanPanel plan={creatorPlan} />
-
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <ResultSection title="内容摘要">
           <p className="max-w-3xl text-sm leading-6 text-text-muted">{result.summary ?? "暂无摘要"}</p>
@@ -660,7 +632,7 @@ function FirstAnalysisEmptyState() {
           <div className="text-xs font-semibold tracking-wide text-text-muted">首次分析</div>
           <h3 className="mt-2 text-lg font-semibold text-text-primary">先提交一个视频，结果会直接变成改稿清单</h3>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted">
-            支持 B 站视频链接或 BV 号。完成后会优先展示需要修改的建议，再展开摘要、脚本结构、语义机制和分析结果。
+            支持 B 站视频链接或 BV 号。完成后会展示摘要、语义分段、脚本结构、语义机制和分析结果。
           </p>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -678,7 +650,7 @@ function FirstAnalysisEmptyState() {
           <ul className="mt-3 space-y-2 text-sm leading-6 text-info">
             <li>输入框在上方，粘贴链接后点击“开始分析”。</li>
             <li>长视频会先获取字幕并分段，页面会自动刷新进度。</li>
-            <li>结果完成后，先看“需要修改”即可开始改稿。</li>
+            <li>结果完成后，先看脚本结构里的“不足与对应改法”。</li>
           </ul>
         </aside>
       </div>
@@ -954,22 +926,20 @@ function ScriptBlocksTable({ blocks }: { blocks: ScriptAnalysis["structural_bloc
                 ? [
                     { label: "摘要", value: row.block.summary },
                     { label: "优点", value: row.block.strengths?.join("；") },
-                    { label: "不足", value: row.block.weaknesses?.join("；") },
-                    { label: "具体改法", value: formatSuggestions(row.block.suggestions) },
+                    { label: "不足与对应改法", value: formatWeaknessFixPairs(row.block) },
                   ]
                 : [{ label: "LLM 返回位置", value: row.legacyValue }],
             }))}
           />
           <div className="mt-3 hidden overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated md:block">
             <table className="min-w-[760px] w-full border-collapse text-left text-sm leading-6">
-              <caption className="sr-only">脚本结构块，包含结构块、摘要、优点、不足和具体改法</caption>
+              <caption className="sr-only">脚本结构块，包含结构块、摘要、优点、不足与对应改法</caption>
               <thead className="bg-surface-muted text-xs font-semibold text-text-primary">
                 <tr>
                   <th scope="col" className="w-24 px-3 py-2">结构块</th>
                   <th scope="col" className="px-3 py-2">摘要</th>
                   <th scope="col" className="px-3 py-2">优点</th>
-                  <th scope="col" className="px-3 py-2">不足</th>
-                  <th scope="col" className="px-3 py-2">具体改法</th>
+                  <th scope="col" className="px-3 py-2">不足与对应改法</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
@@ -978,8 +948,7 @@ function ScriptBlocksTable({ blocks }: { blocks: ScriptAnalysis["structural_bloc
                     <th scope="row" className="px-3 py-3 text-left font-semibold text-text-primary">{row.label}</th>
                     <td className="px-3 py-3 text-text-muted">{row.block?.summary || "暂无"}</td>
                     <td className="px-3 py-3 text-text-muted">{row.block?.strengths?.join("；") || "暂无"}</td>
-                    <td className="px-3 py-3 text-text-muted">{row.block?.weaknesses?.join("；") || "暂无"}</td>
-                    <td className="px-3 py-3 text-text-muted">{formatSuggestions(row.block?.suggestions)}</td>
+                    <td className="whitespace-pre-line px-3 py-3 text-text-muted">{formatWeaknessFixPairs(row.block)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1027,13 +996,23 @@ function ScriptBlocksTable({ blocks }: { blocks: ScriptAnalysis["structural_bloc
   );
 }
 
-function formatSuggestions(suggestions: StructureBlockSuggestion[] | undefined): string {
-  if (!suggestions || suggestions.length === 0) return "暂无";
+function formatWeaknessFixPairs(block: StructureBlockDetail | null | undefined): string {
+  if (!block) return "暂无";
 
-  return suggestions.map((s) => {
-    const target = s.target_time || "未指定";
-    return `[${s.type || "修改"} @ ${target}] ${s.content || ""}`;
-  }).join("；");
+  const weaknesses = block.weaknesses?.filter((item) => item.trim()) ?? [];
+  const suggestions = block.suggestions ?? [];
+  const size = Math.max(weaknesses.length, suggestions.length);
+
+  if (!size) return "暂无";
+
+  return Array.from({ length: size }).map((_, index) => {
+    const weakness = weaknesses[index] ?? "未明确不足";
+    const suggestion = suggestions[index];
+    const target = suggestion?.target_time ? ` @ ${suggestion.target_time}` : "";
+    const fix = suggestion?.content?.trim() || "暂无具体改法";
+
+    return `${index + 1}. 不足：${weakness}；改法${target}：${fix}`;
+  }).join("\n");
 }
 
 function formatStructureBlockAuditValue(value: StructureBlockDetail | string | null | undefined): string | null {
@@ -1428,61 +1407,6 @@ function formatInteractionSummary(items: SemanticAnalysis["interaction_designs"]
   return values.length ? values.join("、") : null;
 }
 
-function CreatorActionPlanPanel({ plan }: { plan: CreatorActionPlan }) {
-  const priorityFixes = (plan.priority_fixes ?? []).filter((fix) => fix.problem?.trim() || fix.reason?.trim() || fix.rewrite?.trim());
-
-  return (
-    <div className="space-y-6 rounded-2xl border border-warning-border bg-warning-surface p-5">
-      <div>
-        <div className="text-sm font-semibold text-text-primary">需要修改</div>
-        <p className="mt-2 text-sm leading-6 text-warning">
-          先处理会影响点击、停留和互动的关键问题。每条建议都包含问题、原因和直接改法。
-        </p>
-        {priorityFixes.length ? (
-          <ol className="mt-4 divide-y divide-warning-border rounded-2xl border border-warning-border bg-surface-elevated px-4">
-            {priorityFixes.map((fix, index) => (
-              <li
-                key={`${fix.problem}-${index}`}
-                className="py-4"
-              >
-                <div className="text-xs font-semibold tracking-wide text-text-muted">优先级 {fix.priority ?? index + 1}</div>
-                <div className="mt-2 space-y-2 text-sm leading-6">
-                  <div>
-                    <span className="font-semibold text-text-primary">问题：</span>
-                    <span className="text-text-muted">{fix.problem ?? "暂无"}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-text-primary">原因：</span>
-                    <span className="text-text-muted">{fix.reason ?? "暂无"}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-text-primary">直接改法：</span>
-                    <span className="text-text-muted">{fix.rewrite ?? "暂无"}</span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
-        ) : <div className="mt-2"><EmptyLine text="暂无优先修改建议" /></div>}
-      </div>
-
-      <div className="border-t border-warning-border pt-5">
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div>
-            <div className="text-sm font-semibold text-text-primary">下次继续保留</div>
-            <TextList items={plan.keep_points} empty="暂无可复用优点" />
-          </div>
-
-          <div>
-            <div className="text-sm font-semibold text-text-primary">下一条视频复用模板</div>
-            <TextList items={plan.reuse_template} empty="暂无可复用结构" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function joinList(items: Array<string | null | undefined> | undefined | null) {
   const values = (items ?? []).filter((item): item is string => Boolean(item));
   return values.length ? values.join("、") : null;
@@ -1552,7 +1476,7 @@ function MobileStackedRows({ rows, empty = "暂无", className = "" }: { rows: M
             {row.fields.map((field) => (
               <div key={field.label}>
                 <dt className="text-xs font-semibold tracking-wide text-text-muted">{field.label}</dt>
-                <dd className="mt-1 break-words text-text-primary">{field.value && field.value.trim() ? field.value : "暂无"}</dd>
+                <dd className="mt-1 whitespace-pre-line break-words text-text-primary">{field.value && field.value.trim() ? field.value : "暂无"}</dd>
               </div>
             ))}
           </dl>
@@ -1668,7 +1592,7 @@ function SemanticFlowConnector({ align }: { align: "start" | "end" }) {
 }
 
 function AuditResultsTables({ rows }: { rows: AuditRow[] }) {
-  const layerNames = ["包装层", "脚本层", "互动层", "总结层"];
+  const layerNames = ["包装层", "脚本层", "互动层"];
 
   return (
     <div className="mt-3 grid gap-4">
@@ -1719,201 +1643,10 @@ function AuditLayerTable({ title, rows }: { title: string; rows: AuditRow[] }) {
   );
 }
 
-function buildCopyAdvantages(result: VideoAnalysisResult) {
-  const packaging = result.packagingAnalysis;
-  const script = result.scriptAnalysis;
-  const semantic = result.semanticAnalysis;
-  const internalization = result.internalizationSummary;
-  const advantages: Array<{ title: string; content: string }> = [];
-
-  result.copySuggestions.forEach((suggestion) => {
-    if (!suggestion.content.trim()) {
-      return;
-    }
-
-    advantages.push({
-      title: suggestion.type || "文案复用建议",
-      content: formatCopySuggestionAsKeepPoint(suggestion),
-    });
-  });
-
-  if (packaging?.title_formulas?.length || packaging?.primary_psychology) {
-    advantages.push({
-      title: "标题封面复用建议",
-      content: `下次同类选题可以继续使用“${joinList(packaging?.title_formulas) ?? "明确看点"}”的标题方式，围绕${packaging?.primary_psychology ?? "观众兴趣"}把点击理由讲清楚。`,
-    });
-  }
-
-  if (script?.visual_hook?.text || script?.promise_hook?.text) {
-    advantages.push({
-      title: "开头复用建议",
-      content: `下次开头继续把“${script?.visual_hook?.text ?? script?.promise_hook?.text}”这类强钩子前置，再补一句观看收益，帮助观众在前 15 秒判断要不要留下。`,
-    });
-  }
-
-  if (script?.logic_flow || script?.structural_blocks?.meat?.length) {
-    advantages.push({
-      title: "结构复用建议",
-      content: `下次继续沿用${script?.logic_flow ?? "分段推进"}结构，把主体内容拆成几个明确问题逐段解决，让观众更容易跟住论点推进。`,
-    });
-  }
-
-  if (semantic?.interaction_designs?.length || result.highlights.length) {
-    advantages.push({
-      title: "传播复用建议",
-      content: `下次继续预留金句和互动点，当前这类“可引用 + 可回应”的设计适合引导评论、弹幕或二次传播。`,
-    });
-  }
-
-  if (internalization?.clever_design) {
-    advantages.push({
-      title: "巧妙设计复用建议",
-      content: `下次同类内容可以继续复用这个设计思路：${internalization.clever_design}`,
-    });
-  }
-
-  return dedupeByContent(advantages);
-}
-
-function formatCopySuggestionAsKeepPoint(suggestion: CopySuggestion) {
-  const type = suggestion.type.trim();
-  const content = suggestion.content.trim();
-
-  if (type.includes("标题")) {
-    return `下次同类选题继续沿用这类标题表达：${trimTrailingPunctuation(content)}，并明确写出人群、冲突或收益。`;
-  }
-
-  if (type.includes("结构")) {
-    return `下次继续复用这个结构设计：${trimTrailingPunctuation(content)}，把亮点放在观众最容易感知的位置。`;
-  }
-
-  if (type.includes("复用")) {
-    return `下次同类视频继续复用：${trimTrailingPunctuation(content)}。`;
-  }
-
-  return `下次继续复用这条文案经验：${trimTrailingPunctuation(content)}。`;
-}
-
-function trimTrailingPunctuation(text: string) {
-  return text.replace(/[。.!！?？]+$/u, "");
-}
-
-function dedupeByContent<T extends { content: string }>(items: T[]) {
-  const seen = new Set<string>();
-
-  return items.filter((item) => {
-    const key = item.content.trim();
-
-    if (!key || seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
-}
-
-function buildCreatorActionPlan(result: VideoAnalysisResult): CreatorActionPlan {
-  const script = result.scriptAnalysis;
-  const semantic = result.semanticAnalysis;
-  const metadata = result.metadataJson;
-  const actions: DerivedCreatorAction[] = [];
-
-  if (!script?.visual_hook?.text) {
-    actions.push({
-      issue: "开头缺少足够明确的抓注意力句子，观众可能还没理解看点就离开。",
-      rewrite: "把最强冲突、结果或反常识结论提前到前 3 秒，先给观众一个必须继续看的理由。",
-      example: "开头改成：先别急着照做，这个步骤错了会直接让结果反过来。",
-    });
-  }
-
-  if (!script?.promise_hook?.text) {
-    actions.push({
-      issue: "内容承诺不明显，观众不容易判断看完能获得什么。",
-      rewrite: "在开头 15 秒内补一句观看收益，把主题从“我要讲什么”改成“你能拿走什么”。",
-      example: "补一句：看完你可以直接套用这 3 步，把同类问题先排查一遍。",
-    });
-  }
-
-  if (semantic?.overload_warnings?.length || formatCognitiveLoad(semantic?.cognitive_load)?.includes("高")) {
-    actions.push({
-      issue: "部分段落信息密度偏高，普通观众可能需要暂停或回看。",
-      rewrite: "把高密度段落拆成短句，每讲完一个概念就补一个例子或使用场景。",
-      example: "改成：先记一个判断标准。只要出现 A，就先检查 B；如果没有 B，再看 C。",
-    });
-  }
-
-  const reHookBlock = script?.structural_blocks?.re_hook;
-  const hasReHook = reHookBlock && isStructureBlockDetail(reHookBlock);
-
-  if (!hasReHook) {
-    actions.push({
-      issue: "中后段二次留存设计不明显，信息变密后容易掉观看。",
-      rewrite: "在正文中段加入反转、阶段性结论或下一段预告，把观众重新拉回主线。",
-      example: "补一句：但真正容易踩坑的不是这里，而是接下来这个细节。",
-    });
-  }
-
-  if (!script?.cta?.text) {
-    actions.push({
-      issue: "结尾缺少明确行动引导，观看后的互动和转化会变弱。",
-      rewrite: "用一个低门槛动作收尾，让观众知道评论、收藏或下一步该做什么。",
-      example: "结尾加：如果你也遇到过这个问题，把你的场景发在评论区，我按类型继续拆。",
-    });
-  }
-
-  if (!actions.length && metadata?.retention_risk_points?.length) {
-    actions.push({
-      issue: metadata.retention_risk_points[0],
-      rewrite: "优先检查这个风险点前后的 10 到 20 秒，把长解释拆短，并补一句承接。",
-      example: "承接句可用：这里先不用记全部，你只要先抓住一个判断标准。",
-    });
-  }
-
-  const titleSubject = result.packagingAnalysis?.primary_psychology ?? result.healthCard?.core_keywords?.[0] ?? "核心看点";
-
-  return {
-    priority_fixes: actions.slice(0, 3).map((action, index) => ({
-      priority: `P${index + 1}`,
-      problem: action.issue,
-      reason: action.rewrite,
-      rewrite: action.example,
-    })),
-    keep_points: buildCreatorKeepPoints(result),
-    title_rewrites: [
-      `别再忽略${titleSubject}：这 3 个细节最容易被低估`,
-      `真正影响结果的不是努力，而是这 3 个判断标准`,
-    ],
-    opening_rewrites: ["前 15 秒：先给一个反常识结论，再告诉观众看完能拿走 3 个判断标准或操作步骤。"],
-    cta_rewrites: ["结尾改成：如果你也遇到类似情况，把你的具体场景发在评论区，我按类型继续拆。"],
-    overload_rewrites: ["把信息最密的段落拆成三句：先给判断标准，再举一个例子，最后告诉观众下一步怎么做。"],
-    reuse_template: buildReuseTemplate(result),
-  };
-}
-
-function buildCreatorKeepPoints(result: VideoAnalysisResult) {
-  return buildCopyAdvantages(result).map((advantage) => `${advantage.title}：${advantage.content}`);
-}
-
-function buildReuseTemplate(result: VideoAnalysisResult) {
-  const script = result.scriptAnalysis;
-  const packaging = result.packagingAnalysis;
-  const semantic = result.semanticAnalysis;
-
-  return [
-    `标题：套用${joinList(packaging?.title_formulas) ?? "明确人群 + 明确收益 + 情绪触发"}，优先突出${packaging?.primary_psychology ?? "观众最关心的结果"}。`,
-    `开头：前 3 秒先给${script?.visual_hook?.type ?? "冲突或结果"}，再用一句话说明看完能得到什么。`,
-    `正文：按${script?.logic_flow ?? "问题提出 -> 原因解释 -> 方法拆解 -> 总结行动"}推进，每段结尾加一句过渡钩子。`,
-    `传播：保留${joinList(semantic?.tone_tags) ?? "清晰直接"}语气，至少设计 1 个评论触发点和 1 句可摘出来的金句。`,
-    `结尾：用具体行动收口，引导观众评论场景、收藏步骤或关注下一条延展内容。`,
-  ];
-}
-
 function buildAuditRows(result: VideoAnalysisResult): AuditRow[] {
   const packaging = result.packagingAnalysis;
   const script = result.scriptAnalysis;
   const semantic = result.semanticAnalysis;
-  const internalization = result.internalizationSummary;
 
   return [
     {
@@ -1987,24 +1720,6 @@ function buildAuditRows(result: VideoAnalysisResult): AuditRow[] {
       subject: "网感词",
       result: joinList(semantic?.net_slang),
       benefit: "语境贴近能降低距离感，让目标观众更愿意互动。",
-    },
-    {
-      layer: "总结层",
-      subject: "唯一核心信息",
-      result: internalization?.core_message,
-      benefit: "核心信息越清楚，越容易被观众记住、转述和复用。",
-    },
-    {
-      layer: "总结层",
-      subject: "最巧妙设计",
-      result: internalization?.clever_design,
-      benefit: "明确可借鉴点，能把一次分析转成后续创作方法。",
-    },
-    {
-      layer: "总结层",
-      subject: "优化方向",
-      result: internalization?.optimization,
-      benefit: "聚焦单个优化方向，能避免改稿时平均用力。",
     },
   ];
 }

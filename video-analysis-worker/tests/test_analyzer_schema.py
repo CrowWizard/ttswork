@@ -24,6 +24,7 @@ from services.analyzer import (
     StructuralBlocksOutput,
     StructureExtract,
     _convert_string_range_to_block_detail,
+    _derive_structure_sections,
     _ensure_block_detail,
 )
 
@@ -233,6 +234,103 @@ class StructuralBlocksNormalizationTest(unittest.TestCase):
         _ensure_block_detail(block)
 
         self.assertTrue(block.summary.strip())
+
+
+class SemanticSectionsStabilityTest(unittest.TestCase):
+    def test_many_narrative_arc_items_are_merged_to_stable_limit(self) -> None:
+        structure = StructureExtract.model_validate({
+            "visual_hook": None,
+            "promise_hook": None,
+            "segment_hooks": [],
+            "narrative_arc": [
+                {"time": f"{index:02d}:00", "event": f"节点 {index}"}
+                for index in range(10)
+            ],
+            "narrative_curve_text": "",
+            "structural_blocks": {"meat": []},
+            "quotes": [],
+            "cta": None,
+            "logic_flow": "递进式",
+        })
+
+        sections = _derive_structure_sections([], structure)
+
+        self.assertLessEqual(len(sections), 8)
+
+    def test_sparse_long_narrative_arc_is_split_to_minimum_sections(self) -> None:
+        structure = StructureExtract.model_validate({
+            "visual_hook": None,
+            "promise_hook": None,
+            "segment_hooks": [],
+            "narrative_arc": [
+                {"time": "00:00", "event": "冲突引入"},
+                {"time": "10:00", "event": "总结收束"},
+            ],
+            "narrative_curve_text": "",
+            "structural_blocks": {"meat": []},
+            "quotes": [],
+            "cta": None,
+            "logic_flow": "递进式",
+        })
+
+        sections = _derive_structure_sections([], structure)
+
+        self.assertGreaterEqual(len(sections), 5)
+
+
+class ParagraphSummaryPromptTest(unittest.TestCase):
+    def test_paragraph_summary_prompt_defines_summary_content(self) -> None:
+        service = AnalyzerService(
+            SimpleNamespace(
+                qwen_mock_mode=False,
+                qwen_api_key="test-key",
+                video_analysis_llm_model="test-model",
+                video_analysis_llm_url="https://example.invalid",
+                http_timeout_seconds=3,
+            ),
+            Path("/tmp/not-used-prompt.txt"),
+        )
+        captured: dict[str, str] = {}
+
+        def call_json_model(prompt: str, *_args: Any, **_kwargs: Any) -> SimpleNamespace:
+            captured["prompt"] = prompt
+            return SimpleNamespace(paragraphs=[])
+
+        service._call_json_model = call_json_model  # type: ignore[method-assign]
+
+        service._generate_paragraph_summary("[00:00] 测试字幕")
+
+        prompt = captured["prompt"]
+        self.assertIn("summary 内容约束", prompt)
+        self.assertIn("本段主要讲什么主题或情节", prompt)
+        self.assertIn("核心观点、结论或冲突", prompt)
+        self.assertIn("本段在整条视频中的作用", prompt)
+
+    def test_step1_prompt_defines_narrative_arc_event_as_summary(self) -> None:
+        service = AnalyzerService(
+            SimpleNamespace(
+                qwen_mock_mode=False,
+                qwen_api_key="test-key",
+                video_analysis_llm_model="test-model",
+                video_analysis_llm_url="https://example.invalid",
+                http_timeout_seconds=3,
+            ),
+            Path("/tmp/not-used-prompt.txt"),
+        )
+        captured: dict[str, str] = {}
+
+        def call_json_model(prompt: str, *_args: Any, **_kwargs: Any) -> StructureExtract:
+            captured["prompt"] = prompt
+            return StructureExtract.model_validate(_valid_structure_payload())
+
+        service._call_json_model = call_json_model  # type: ignore[method-assign]
+
+        service._step1_extract_structure("[00:00] 测试字幕", 120)
+
+        prompt = captured["prompt"]
+        self.assertIn("narrative_arc.event 内容约束", prompt)
+        self.assertIn("本段主要讲什么主题或情节", prompt)
+        self.assertIn("不要只写‘冲突引入’‘历史根源’这类事件名", prompt)
 
 
 def _service_with_payload(payload: dict[str, Any]) -> AnalyzerService:
