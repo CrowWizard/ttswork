@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频分析报告</title>
+    <style>
+        /* 基础样式 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        
+        /* 页面容器 */
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 40px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 标题样式 */
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #234a42;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #234a42;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #234a42;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            border-left: 4px solid #f0c66b;
+            padding-left: 10px;
+        }
+        
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        /* 卡片样式 */
+        .card {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+        
+        /* 标签样式 */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .badge-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .badge-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        
+        .badge-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .badge-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 8px 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #2d3748;
+            width: 150px;
+        }
+        
+        /* 宽表格 th 样式重置 */
+        table.wide-table th {
+            width: auto;
+        }
+        
+        /* 提示框样式 */
+        .alert {
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        .alert-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .alert-info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        /* 列表样式 */
+        ul, ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        li {
+            margin-bottom: 5px;
+        }
+        
+        /* 打印样式 */
+        @media print {
+            body {
+                padding: 0;
+                background-color: #ffffff;
+            }
+            
+            .container {
+                box-shadow: none;
+                padding: 20px;
+            }
+            
+            .card {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 报告标题 -->
+        <h1>视频分析报告</h1>
+        
+        <!-- 视频基础信息 -->
+        <div class="card">
+            <h2>视频基础信息</h2>
+            <table>
+                <tr>
+                    <th>标题</th>
+                    <td>7万亿大放水，说要起飞了？重新分配与产业洗牌后，普通人的位置在哪里？</td>
+                </tr>
+                <tr>
+                    <th>UP 主</th>
+                    <td>数据库kira</td>
+                </tr>
+                <tr>
+                    <th>时长</th>
+                    <td>992 秒</td>
+                </tr>
+                <tr>
+                    <th>BV 号</th>
+                    <td>BV1oi98BmEBQ</td>
+                </tr>
+                <tr>
+                    <th>发布时间</th>
+                    <td>2026/5/1</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- 内容摘要 -->
+        <div class="card">
+            <h2>内容摘要</h2>
+            <p>7万亿大放水，普通人如何自处。核心信息：7万亿流向实体，普通人需转型。巧妙设计：00:00用68万亿vs7万亿数据冲击制造焦虑</p>
+            <div>
+                <span class="badge badge-info">大放水</span>
+                <span class="badge badge-info">产业洗牌</span>
+                <span class="badge badge-info">普通人</span>
+            </div>
+        </div>
+        
+        <!-- 需要修改的部分 -->
+        <div class="card">
+            <h2>需要修改</h2>
+            <div class="alert alert-warning">
+                <p>先处理会影响点击、停留和互动的关键问题。每条建议都包含问题、原因和直接改法。</p>
+            </div>
+            
+            <h3>优先级 P1</h3>
+            <table>
+                <tr>
+                    <th>问题</th>
+                    <td>开头只抛出数字对比，未明确观众看完收益，前15秒停留动力不足。</td>
+                </tr>
+                <tr>
+                    <th>原因</th>
+                    <td>观众不知道看完能获得什么具体判断，容易划走。</td>
+                </tr>
+                <tr>
+                    <th>直接改法</th>
+                    <td><strong>原句:</strong> 68万亿化债还没结束，7万亿新基建又要开始了。<br>
+                    <strong>新句:</strong> 68万亿的债还没还完，7万亿的新计划又来了——这轮放水到底和2008年有什么不同？看完你就知道普通人还有没有机会。</td>
+                </tr>
+            </table>
+            
+            <h3>优先级 P2</h3>
+            <table>
+                <tr>
+                    <th>问题</th>
+                    <td>中段02:11-03:25宏观背景数据密集，GDP、CPI、失业率连续罗列，理解负担重。</td>
+                </tr>
+                <tr>
+                    <th>原因</th>
+                    <td>观众需要同时消化三个数据及其含义，容易产生认知疲劳导致退出。</td>
+                </tr>
+                <tr>
+                    <th>直接改法</th>
+                    <td><strong>原句:</strong> GDP增速下调、CPI持续低位、青年失业率居高不下。<br>
+                    <strong>新句:</strong> 简单说，就是经济增速换挡、物价起不来、年轻人找工作难——这三件事同时压过来。先记住这三个信号，后面你就知道为什么这轮放水不一样。</td>
+                </tr>
+            </table>
+            
+            <h3>优先级 P3</h3>
+            <table>
+                <tr>
+                    <th>问题</th>
+                    <td>07:21-10:50四个投资领域连续讲解，信息密度过高，观众容易疲劳。</td>
+                </tr>
+                <tr>
+                    <th>原因</th>
+                    <td>能源、算力、通讯、低空经济四个概念连续输出，没有阶段性总结和预告，观众难以消化。</td>
+                </tr>
+                <tr>
+                    <th>直接改法</th>
+                    <td><strong>原句:</strong> 直接依次讲能源、算力、通讯、低空经济。<br>
+                    <strong>新句:</strong> 先讲两个底座：能源和算力，这是国家在搭台。再讲两个应用：通讯升级和低空经济，这是未来会落地到你身边的场景。这样分组讲，观众更容易跟住。</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- 下次继续保留 -->
+        <div class="card">
+            <h2>下次继续保留</h2>
+            <ul>
+                <li>保留开头数据冲击对比，继续用焦虑感吸引点击</li>
+                <li>保留历史教训与本次对比的核心逻辑，强化说服力</li>
+                <li>保留三种局面推演，增加客观性和讨论空间</li>
+            </ul>
+        </div>
+        
+        <!-- 下一批视频复用模板 -->
+        <div class="card">
+            <h2>下一批视频复用模板</h2>
+            <ul>
+                <li><strong>标题：</strong>悬念式/警示式标题 + 明确对比（如：和2008年不同）</li>
+                <li><strong>开头：</strong>数据冲击 + 看完收益预告（如：看完你就知道普通人还有没有机会）</li>
+                <li><strong>正文：</strong>分组讲解（底座/应用，内部/外部），每组后跟小结和预告</li>
+                <li><strong>结尾：</strong>收藏引导 + 具体互动问题（如：你所在城市有相关项目吗？）</li>
+            </ul>
+        </div>
+        
+        <!-- 语义分段 -->
+        <div class="card">
+            <h2>语义分段</h2>
+            <table>
+                <tr>
+                    <th>0 秒 至 58 秒</th>
+                    <td>引出7万亿新基建计划，并将其与68万亿化债对比，点明防守与进攻的双重逻辑。</td>
+                </tr>
+                <tr>
+                    <th>59 秒 至 130 秒</th>
+                    <td>解释7万亿资金的来源并非印钞而是筹集，并强调中央信用介入带来的管理级别提升和严格审查。</td>
+                </tr>
+                <tr>
+                    <th>131 秒 至 205 秒</th>
+                    <td>阐述推出7万亿计划的宏观背景，包括GDP增速下调、通胀压力、房地产调整和青年就业难题。</td>
+                </tr>
+                <tr>
+                    <th>441 秒 至 530 秒</th>
+                    <td>介绍主要投资领域中的能源与算力，包括新能源装机、特高压、储能以及国家牵头建设算力中心以降低AI研发门槛。</td>
+                </tr>
+                <tr>
+                    <th>531 秒 至 595 秒</th>
+                    <td>阐述通讯领域（5GA/6G）作为数字经济底座的重要性，以及城市升级重点转向地下管网翻新和老旧小区改造。</td>
+                </tr>
+                <tr>
+                    <th>596 秒 至 650 秒</th>
+                    <td>介绍低空经济作为全新立体交通网络，需要建设起降坪、雷达系统和空管大脑，孕育巨大产业规模。</td>
+                </tr>
+                <tr>
+                    <th>651 秒 至 750 秒</th>
+                    <td>分析计划面临的四大风险：技术成熟度错位与民间投资意愿不足、结构性过剩导致太阳能工程、外部关税战与科技封锁、长期债务压力。</td>
+                </tr>
+                <tr>
+                    <th>751 秒 至 860 秒</th>
+                    <td>推演未来可能出现的乐观、中性、悲观三种局面，并指出由于中国足够大，三种情况可能在不同地区同时发生。</td>
+                </tr>
+                <tr>
+                    <th>861 秒 至 910 秒</th>
+                    <td>总结宏观分析并引出下期微观层面的个体机会探讨，同时进行账号推广。</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- 标题封面分析 -->
+        <div class="card">
+            <h2>标题封面分析</h2>
+            <table>
+                <tr>
+                    <th>标题公式</th>
+                    <td>悬念式、警示式</td>
+                </tr>
+                <tr>
+                    <th>心理触发</th>
+                    <td>焦虑 / 好奇</td>
+                </tr>
+                <tr>
+                    <th>关键词密度</th>
+                    <td>高：关键词出现很集中，用户更容易记住主题，但重复过多会显得刻意。</td>
+                </tr>
+            </table>
+            <div>
+                <span class="badge badge-info">大放水</span>
+                <span class="badge badge-info">起飞</span>
+                <span class="badge badge-info">洗牌</span>
+                <span class="badge badge-info">位置在哪里</span>
+                <span class="badge badge-info">7万亿</span>
+                <span class="badge badge-info">重新分配</span>
+                <span class="badge badge-info">产业洗牌</span>
+                <span class="badge badge-info">普通人</span>
+                <span class="badge badge-info">位置</span>
+            </div>
+        </div>
+        
+        <!-- 脚本结构分析 -->
+        <div class="card">
+            <h2>脚本结构分析</h2>
+            
+            <h3>脚本主线</h3>
+            <table>
+                <tr>
+                    <th>逻辑流</th>
+                    <td>宏观叙事-历史对比-领域拆解-风险推演-个体预告</td>
+                </tr>
+                <tr>
+                    <th>开头吸引点</th>
+                    <td>00:00 68万亿化债还没结束，7万亿新基建又要开始了，吸引力评分 9 分，满分 10 分</td>
+                </tr>
+                <tr>
+                    <th>内容承诺</th>
+                    <td>00:45 防守与进攻必须同时进行，缺一不可，吸引力评分 7 分，满分 10 分</td>
+                </tr>
+                <tr>
+                    <th>引导行动</th>
+                    <td>15:00 下期聊个体机会，建议先收藏对照着看，类型：预告+收藏引导，优化提示：建议加入具体互动问题，如：你所在城市有相关项目落地吗？</td>
+                </tr>
+            </table>
+            
+            <h3>结构块</h3>
+            <table>
+                <tr>
+                    <th>开头抓注意力</th>
+                    <td>用68万亿与7万亿两个巨大数字的对比制造认知冲击，快速建立观看动机。</td>
+                </tr>
+                <tr>
+                    <th>内容承诺</th>
+                    <td>给出防守与进攻双重逻辑的分析框架承诺，让观众预期获得系统性宏观解读。</td>
+                </tr>
+                <tr>
+                    <th>二次留存</th>
+                    <td>在历史教训回顾后和风险分析前分别设置认知冲突点，维持观众持续观看的动力。</td>
+                </tr>
+                <tr>
+                    <th>引导行动</th>
+                    <td>结尾引出下期个体机会探讨并推广会员频道，但缺少明确的即时互动引导。</td>
+                </tr>
+                <tr>
+                    <th>主体内容 1：资金来源与宏观背景</th>
+                    <td>解释7万亿资金来源为中央信用筹集而非印钞，并阐述GDP下调、通胀、房地产调整和青年就业等宏观背景。</td>
+                </tr>
+                <tr>
+                    <th>主体内容 2：历史教训与方向对比</th>
+                    <td>回顾2008年4万亿导致资金流向房地产和金融资产催生泡沫，对比本次将钱往实体经济驱赶，房地产不再是蓄水池。</td>
+                </tr>
+                <tr>
+                    <th>主体内容 3：投资领域详解</th>
+                    <td>介绍能源与算力、通讯、城市升级、低空经济四大投资领域，强调国家牵头和实体导向。</td>
+                </tr>
+                <tr>
+                    <th>主体内容 4：风险分析与局面推演</th>
+                    <td>分析技术错位、结构性过剩、外部封锁、债务压力四大风险，并推演乐观、中性、悲观三种未来局面。</td>
+                </tr>
+            </table>
+            
+            <h3>段落转折吸引点</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>位置</th>
+                    <th>当前转折句</th>
+                    <th>当前作用</th>
+                    <th>适合用法</th>
+                </tr>
+                <tr>
+                    <td>04:31</td>
+                    <td>今天我们正在化解的68万亿，相当一部分账就是从那一轮埋下的</td>
+                    <td>悬念预告</td>
+                    <td>放在开头承诺之后，用来把观众从好奇心带入正文第一段。</td>
+                </tr>
+                <tr>
+                    <td>06:16</td>
+                    <td>这次的钱不会再让普通人通过躺着持有资产就能躺赚</td>
+                    <td>认知冲突</td>
+                    <td>放在一个观点讲完后，用反差或新问题打开下一段，避免平铺直叙。</td>
+                </tr>
+                <tr>
+                    <td>10:51</td>
+                    <td>但计划也面临四大风险</td>
+                    <td>悬念预告</td>
+                    <td>放在信息变故前，提前告诉观众接下来更关键，降低中段流失。</td>
+                </tr>
+                <tr>
+                    <td>12:31</td>
+                    <td>三种局面可能在不同地区同时发生</td>
+                    <td>认知冲突</td>
+                    <td>放在结论或 CTA 前，把前面的内容收束成行动理由。</td>
+                </tr>
+            </table>
+            
+            <h3>金句 / 爆点</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>节点 / 时间</th>
+                    <th>内容</th>
+                    <th>作用</th>
+                </tr>
+                <tr>
+                    <td>376 秒</td>
+                    <td>这次的钱不会再让普通人躺着持有资产就能躺</td>
+                    <td>结论颠覆</td>
+                </tr>
+                <tr>
+                    <td>400 秒</td>
+                    <td>房地产不再是放水的主要承接池</td>
+                    <td>反常识</td>
+                </tr>
+                <tr>
+                    <td>730 秒</td>
+                    <td>今天发的债要由未来一代来还</td>
+                    <td>情绪共鸣</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- 语义与传播机制 -->
+        <div class="card">
+            <h2>语义与传播机制</h2>
+            
+            <div class="alert alert-warning">
+                <p><strong>信息过载风险</strong></p>
+                <p>这些片段信息密度较高，观众可能跟不上节奏，适合优先检查是否需要拆句、补解释或放慢节奏。</p>
+                <p>07:21-10:50 术语密集（能源、算力、通讯、低空经济）</p>
+            </div>
+            
+            <table>
+                <tr>
+                    <th>理解难度</th>
+                    <td>中，信息量适中，需要集中注意力但不明显吃力。</td>
+                </tr>
+            </table>
+            
+            <table>
+                <tr>
+                    <th>语言风格</th>
+                    <td>理性分析、犀利</td>
+                </tr>
+                <tr>
+                    <th>网感词</th>
+                    <td>大放水、起飞、躺赚</td>
+                </tr>
+            </table>
+            
+            <h3>传播心理</h3>
+            <p>先看这条视频主要调用了哪些心理，再对照具体修辞证据，判断点击、停留和转发靠什么成立。</p>
+            <div>
+                <span class="badge badge-danger">恐惧诉求</span>
+                <span class="badge badge-warning">损失厌恶</span>
+            </div>
+            
+            <h3>修辞证据</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>修辞类型</th>
+                    <th>出现位置</th>
+                    <th>原句</th>
+                    <th>传播作用</th>
+                </tr>
+                <tr>
+                    <td>恐惧诉求</td>
+                    <td>00:00 至 00:58</td>
+                    <td>68万亿的化债还没结束，7万亿的新基建计划就要开始了</td>
+                    <td>通过巨额债务数字引发对经济前景的担忧</td>
+                </tr>
+                <tr>
+                    <td>对比</td>
+                    <td>04:31 至 06:15</td>
+                    <td>2008年那一轮，钱大量流向了金融资产和房地产这些虚的领域</td>
+                    <td>通过历史教训对比，强化本次政策的不同，引发对个人财富路径的焦虑</td>
+                </tr>
+                <tr>
+                    <td>警示</td>
+                    <td>06:16 至 07:20</td>
+                    <td>这次的钱不会再让普通人通过躺着持有资产就能躺赚</td>
+                    <td>直接否定过去成功的投资模式，制造损失厌恶心理</td>
+                </tr>
+            </table>
+            
+            <h3>互动设计</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>互动类型</th>
+                    <th>出现时间</th>
+                    <th>触发文案</th>
+                    <th>预期反应</th>
+                    <th>放置策略</th>
+                </tr>
+                <tr>
+                    <td>弹幕提问</td>
+                    <td>00:00</td>
+                    <td>普通人的位置在哪里？</td>
+                    <td>刷位置</td>
+                    <td>开头留存</td>
+                </tr>
+            </table>
+            
+            <h3>怎么使用这些机制</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>机制</th>
+                    <th>当前结果</th>
+                    <th>适合放在哪里</th>
+                    <th>加强方式</th>
+                    <th>主要提升</th>
+                </tr>
+                <tr>
+                    <td>心理触发器</td>
+                    <td>恐惧诉求、损失厌恶</td>
+                    <td>标题、封面、开头 3 秒</td>
+                    <td>把触发点写成具体人群、痛点、收益或反差，不只停留在情绪词。</td>
+                    <td>提升点击率</td>
+                </tr>
+                <tr>
+                    <td>修辞装置</td>
+                    <td>恐惧诉求、对比、警示</td>
+                    <td>金句、转折、结论</td>
+                    <td>保留最容易被复述的对比、排比、比喻或反问，并压成短句。</td>
+                    <td>提升记忆点和传播</td>
+                </tr>
+                <tr>
+                    <td>语气标签</td>
+                    <td>理性分析、犀利</td>
+                    <td>整条视频表达风格</td>
+                    <td>统一标题、口播和结尾语气，避免一会儿权威、一会儿玩梗导致信任感断裂。</td>
+                    <td>提升信任感和稳定观看</td>
+                </tr>
+                <tr>
+                    <td>网感词</td>
+                    <td>大放水、起飞、躺赚</td>
+                    <td>标题、弹幕互动、评论引导</td>
+                    <td>只保留目标观众熟悉的表达，放在互动句里，不要堆满正文。</td>
+                    <td>提升亲近感和互动</td>
+                </tr>
+                <tr>
+                    <td>互动设计</td>
+                    <td>弹幕提问</td>
+                    <td>中段、结尾或争议观点后</td>
+                    <td>把互动问题改成容易回答的二选一、经历分享或立场表达。</td>
+                    <td>提升评论、弹幕和转发</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- 分析结果 -->
+        <div class="card">
+            <h2>分析结果</h2>
+            
+            <h3>包装层</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>结果项</th>
+                    <th>当前结果</th>
+                    <th>分析原因</th>
+                </tr>
+                <tr>
+                    <td>标题公式</td>
+                    <td>悬念式、警示式</td>
+                    <td>这些元素能让观众更快判断看懂，有利于增加点击率。</td>
+                </tr>
+                <tr>
+                    <td>心理触发</td>
+                    <td>焦虑 / 好奇</td>
+                    <td>明确心理触发后，更容易判断内容靠什么驱动用户点开。</td>
+                </tr>
+                <tr>
+                    <td>关键词密度</td>
+                    <td>高：关键词出现很集中，用户更容易记住主题，但重复过多会显得刻意。</td>
+                    <td>关键词清楚能降低理解成本，也更利于搜索、推荐和记忆。</td>
+                </tr>
+            </table>
+            
+            <h3>脚本层</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>结果项</th>
+                    <th>当前结果</th>
+                    <th>分析原因</th>
+                </tr>
+                <tr>
+                    <td>前 3 秒</td>
+                    <td>68万亿化债还没结束，7万亿新基建又要开始了</td>
+                    <td>前 3 秒抓住注意力，能减少刚进来就划走的流失。</td>
+                </tr>
+                <tr>
+                    <td>3 到 15 秒</td>
+                    <td>防守与进攻必须同时进行，缺一不可</td>
+                    <td>明确收益能把好奇心转成继续观看的理由。</td>
+                </tr>
+                <tr>
+                    <td>正文骨架</td>
+                    <td>宏观叙事-历史对比-领域拆解-风险推演-个体预告</td>
+                    <td>结构清楚能让观众跟住信息推进，降低中途退出概率。</td>
+                </tr>
+                <tr>
+                    <td>二次留存</td>
+                    <td>在历史教训回顾后和风险分析前分别设置认知冲突点，维持观众持续观看的动力。</td>
+                    <td>二次拉回能对抗信息疲劳，提升完播和有效观看时长。</td>
+                </tr>
+                <tr>
+                    <td>段落转折</td>
+                    <td>4 个</td>
+                    <td>段落间有牵引力，观众更容易从一个观点进入下一个观点。</td>
+                </tr>
+            </table>
+            
+            <h3>互动层</h3>
+            <table class="wide-table">
+                <tr>
+                    <th>结果项</th>
+                    <th>当前结果</th>
+                    <th>分析原因</th>
+                </tr>
+                <tr>
+                    <td>互动设计</td>
+                    <td>1 个</td>
+                    <td>互动点能把观看行为转成反馈信号，帮助内容继续分发。</td>
+                </tr>
+                <tr>
+                    <td>引导行动</td>
+                    <td>下期聊个体机会，建议先收藏对照着看</td>
+                    <td>明确行动能减少观众犹豫，让内容获得更多后续动作。</td>
+                </tr>
+                <tr>
+                    <td>金句数量</td>
+                    <td>3 个</td>
+                    <td>金句越容易被摘出，越利于评论区复述和二次传播。</td>
+                </tr>
+                <tr>
+                    <td>网感词</td>
+                    <td>大放水、起飞、躺赚</td>
+                    <td>语感贴进能降低距离感，让目标观众更愿意互动。</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

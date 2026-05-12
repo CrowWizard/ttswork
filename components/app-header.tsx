@@ -8,7 +8,6 @@ import { useAuth } from "./auth-context";
 const MODULE_LINKS = [
   { href: "/", label: "语音工作台" },
   { href: "/video-analysis", label: "视频分析" },
-  { href: "/content-generation", label: "B站文案" },
 ] as const;
 
 const BRAND_NAME = "UP创作台";
